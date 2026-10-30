@@ -1,0 +1,101 @@
+{
+  "$comment": "Storyboard looks. `prompt` opens every frame's prompt; `plan` tells the shot planner how this look shoots; `preview` is the sample scene drawn for the hover preview (node scripts/assets/looks.mjs).",
+  "looks": [
+    {
+      "id": "cinematic",
+      "label": "Cinematic",
+      "caption": "Movie light, real lenses, a graded film look.",
+      "prompt": "Cinematic film still, shallow depth of field, natural film grain, rich color grade",
+      "plan": "Shoot it like a feature film: varied shot sizes, motivated camera moves.",
+      "preview": "A young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "documentary",
+      "label": "Documentary",
+      "caption": "Handheld, candid, true-to-life.",
+      "prompt": "Handheld documentary photograph, available light, true-to-life color, candid and slightly imperfect framing",
+      "plan": "Shoot it like a documentary: handheld, observational, natural moments.",
+      "preview": "A young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "pov",
+      "label": "POV",
+      "caption": "Through the main character's own eyes.",
+      "prompt": "First-person point-of-view shot through the main character's own eyes: only their hands and forearms are visible at the bottom edge of the frame, natural head-height perspective, slightly wide lens, photorealistic",
+      "plan": "Every shot is first person, through the main character's eyes: we never see their face, only their hands, arms and what they look at.",
+      "preview": "First-person view walking through a rainy neon night market, the character's own hands holding a paper bag of oranges at the bottom of the frame, stalls and crowds ahead."
+    },
+    {
+      "id": "third-person",
+      "label": "Third-person game",
+      "caption": "Over the shoulder, like playing them in a game.",
+      "prompt": "Third-person video game screenshot: the camera follows just behind and above the main character's shoulder, the character seen from behind in the lower part of the frame, realistic modern open-world game graphics, no HUD, no interface, no text",
+      "plan": "Every shot is a third-person game camera: it follows behind the main character's shoulder, as if the viewer is playing them.",
+      "preview": "Seen from behind and just above her shoulder, a young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges."
+    },
+    {
+      "id": "animation",
+      "label": "3D animation",
+      "caption": "A stylized animated feature.",
+      "prompt": "Stylized 3D animated feature film still, soft global illumination, expressive characters, rich detailed sets",
+      "plan": "Shoot it like an animated feature: clear staging, expressive poses.",
+      "preview": "A young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "anime",
+      "label": "Anime",
+      "caption": "Clean line art, painted backgrounds.",
+      "prompt": "Anime film still, clean line art, painted backgrounds, cel shading, cinematic composition",
+      "plan": "Shoot it like an anime film: dramatic angles, held moments.",
+      "preview": "A young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "claymation",
+      "label": "Claymation",
+      "caption": "Handmade clay and miniature sets.",
+      "prompt": "Stop-motion claymation film still, handmade clay characters with visible fingerprints, miniature sets, warm practical light",
+      "plan": "Shoot it like a stop-motion film: simple, readable actions on miniature sets.",
+      "preview": "A young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "comic",
+      "label": "Comic book",
+      "caption": "Bold ink and halftone color.",
+      "prompt": "Comic book panel art, bold ink outlines, halftone shading, vivid flat colors, no speech bubbles, no captions, no text",
+      "plan": "Shoot it like comic panels: strong silhouettes, dynamic angles.",
+      "preview": "A young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "noir",
+      "label": "Film noir",
+      "caption": "Black and white, hard shadows.",
+      "prompt": "Black-and-white film noir still, hard shadows, high contrast, venetian-blind light, film grain",
+      "plan": "Shoot it like film noir: low key light, dramatic shadows, tilted angles.",
+      "preview": "A young woman in a raincoat walks through a rainy night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "super8",
+      "label": "Vintage film",
+      "caption": "Super 8: warm, grainy, nostalgic.",
+      "prompt": "Vintage Super 8 home-movie frame, warm faded colors, heavy film grain, soft focus, light leaks",
+      "plan": "Shoot it like old home movies: handheld, casual, a little imperfect.",
+      "preview": "A young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "watercolor",
+      "label": "Watercolor",
+      "caption": "Soft washes and ink lines.",
+      "prompt": "Loose watercolor illustration, soft bleeding washes, fine ink linework, visible paper texture",
+      "plan": "Shoot it like an illustrated book: clear, gentle compositions.",
+      "preview": "A young woman in a yellow raincoat walks through a rainy neon night market carrying a paper bag of oranges, medium shot."
+    },
+    {
+      "id": "sketch",
+      "label": "Storyboard sketch",
+      "caption": "Classic pencil storyboard panels.",
+      "prompt": "Hand-drawn storyboard panel, loose pencil lines with grey marker shading on white paper",
+      "plan": "Draw it like a director's storyboard: clear staging and readable action.",
+      "preview": "A young woman in a raincoat walks through a rainy night market carrying a paper bag of oranges, medium shot."
+    }
+  ]
+}

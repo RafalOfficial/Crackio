@@ -1,0 +1,151 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux3-image-klein-int8-convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_4b_int8_convrot.safetensors",
+      "type": "flux3",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "Image 1 is a frame from a video. The young man in an orange hoodie and red cap becomes the pumpkin-headed scarecrow shown in image 2 and image 3, with that one's own face, head, hair, skin, hands and build: A tall pumpkin-headed scarecrow with a carved jack-o'-lantern head, a frayed straw hat, a patched brown flannel shirt, burlap gloves with straw poking out of the cuffs, and worn denim overalls, dressed head to toe in the outfit from those pictures (top, trousers or skirt, legs and shoes). Nothing of the original person's face, hair, hands, wig, headwear or clothes stays, not a skirt, legging or shoe. It takes exactly the pose, size and place of the one it replaces: the same turn of the body and head, the same arms, hands and legs, holding and touching what they touched. Its hands stay in plain view wherever the original's are, never hidden by sleeves, cuffs, straw or fur. It looks exactly as in image 4, the same character a moment earlier in this clip: the same face, colours, clothes and details. Their exact position, kept as it is: The young man stands facing right toward the woman, head turned right to look at her, left arm hanging down at his side, right arm bent at elbow with hand near waist, legs straight with feet planted apart on the ground. Keep everything else in image 1 exactly as it is: the place, the light, the other people and things, the framing and any text over the picture.",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/ref-mvu08tqj-cmvv.png"
+    }
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/ref-mvtql8sc-hcpe.png"
+    }
+  },
+  "7": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/ref-mvtql8sc-hcpe.png"
+    }
+  },
+  "8": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/ref-mvu08wny-68br.png"
+    }
+  },
+  "9": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "4",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "ReferenceMultiLatent",
+    "inputs": {
+      "resolution": "resize",
+      "resolution.megapixels": 1,
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "9",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "images.image0": [
+        "5",
+        0
+      ],
+      "images.image1": [
+        "6",
+        0
+      ],
+      "images.image2": [
+        "7",
+        0
+      ],
+      "images.image3": [
+        "8",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 27974307246905,
+      "steps": 16,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "10",
+        1
+      ],
+      "latent_image": [
+        "10",
+        2
+      ]
+    }
+  },
+  "12": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "11",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "13": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "12",
+        0
+      ],
+      "filename_prefix": "crackio/flux3-klein"
+    }
+  }
+}

@@ -1,0 +1,1054 @@
+/*
+ * Classes are only ever written in src/, so that's all Tailwind scans. Left to find them on its own, it
+ * registers the whole project folder (your data, art and scratch files included) as something this
+ * stylesheet depends on.
+ */
+@import "tailwindcss" source("..");
+
+/*
+ * Crackio design tokens.
+ * Calm, violet-tinted charcoal surfaces and hairline panels (ComfyUI's restraint), colored
+ * tool marks and media-first cards, and Crackio's own film-set accent:
+ * fluorescent spike-tape orange, the tape actors stand on.
+ */
+@theme {
+  --color-stage: #16131b;
+  --color-flat: #1b1820;
+  --color-apple: #211d27;
+  --color-apple-2: #2a2531;
+  --color-gaffer: #363040;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.14);
+
+  --color-paper: #f0efed;
+  --color-fog: #bdb9b3;
+  --color-haze: #85817b;
+
+  --color-spike: #ff5b2e;
+  --color-spike-hi: #ff7650;
+  --color-spike-lip: #b3381a;
+  --color-spike-ink: #1b0a04;
+
+  --color-tungsten: #f2b54b;
+  --color-daylight: #8ec5ff;
+  --color-chroma: #5ad78f;
+  --color-tally: #ff5c74;
+
+  /* One hue per tool, spaced around the wheel; used only on tool marks. */
+  --color-tool-director: #ff5b2e;
+  --color-tool-relight: #f2b54b;
+  --color-tool-storyboard: #e8d35a;
+  --color-tool-product: #5ad78f;
+  --color-tool-upscale: #3fd0c0;
+  --color-tool-angles: #5cc8f2;
+  --color-tool-motion: #6f95ff;
+  --color-tool-retouch: #ad94ff;
+  --color-tool-recast: #d784ff;
+  --color-tool-cast: #ff79b8;
+
+  --font-sans: var(--font-funnel-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-funnel-display), var(--font-funnel-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* Every radius token draws a squircle where the browser can (see "Squircles" below). */
+  --radius-chip: 12px;
+  --radius-btn: 14px;
+  --radius-card: 16px;
+  --radius-panel: 22px;
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.1, 1);
+
+  --animate-shimmer: shimmer 0.9s linear infinite;
+  --animate-rec: rec 1.4s steps(2, jump-none) infinite;
+
+  /* One wave of the skeleton's light (see .skeleton): its layer slides by half, which loops seamlessly. */
+  @keyframes shimmer {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes rec {
+    50% {
+      opacity: 0.25;
+    }
+  }
+}
+
+:root {
+  color-scheme: dark;
+  --sidebar-w: 240px;
+}
+
+html,
+body {
+  background: var(--color-stage);
+  color: var(--color-paper);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgb(255 91 46 / 0.35);
+}
+
+/*
+ * Component classes live in the components layer so Tailwind utilities on the same element win
+ * (`label text-fog`, `font-display leading-none`, `lip disabled:shadow-none`). Unlayered, they
+ * silently beat every utility. Keep new component classes inside this layer too.
+ */
+@layer components {
+  /* Titles: sentence case, tight, confident. */
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+
+  /* Small uppercase labels for panel sections and readouts. */
+  .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-haze);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Primary action: a subtle lip so the one orange button reads as pressable. Set --lip-glow to
+     let it light the surface under it. */
+  .lip {
+    box-shadow:
+      inset 0 -2px 0 0 var(--lip, rgb(0 0 0 / 0.25)),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.22),
+      var(--lip-glow, 0 0 #0000);
+  }
+  .lip:active:not(:disabled) {
+    box-shadow:
+      inset 0 -1px 0 0 var(--lip, rgb(0 0 0 / 0.25)),
+      inset 0 1px 0 0 rgb(255 255 255 / 0),
+      var(--lip-glow, 0 0 #0000);
+    transform: translateY(1px) scale(0.985);
+  }
+  .lip:disabled {
+    box-shadow: none;
+  }
+
+  /* Panel surface: hairline border on a barely lifted fill. */
+  .surface {
+    background: rgb(255 255 255 / 0.025);
+    box-shadow: inset 0 0 0 1px var(--color-line);
+  }
+
+  /* Tool mark: the tool's hue as a quiet tint with a colored glyph. */
+  .tile {
+    background: color-mix(in oklab, var(--hue) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--hue) 28%, transparent);
+    color: var(--hue);
+  }
+}
+
+/*
+ * App icon: a glossy squircle in the tool's hue with a solid white glyph. The glyphs are images
+ * (public/icons/*.png, 4K masters in assets-src/icons, made by scripts/assets/icons.mjs) used as
+ * masks, so they stay crisp at any size. Navigation icons use the graphite tone.
+ * Use <AppIcon>/<ToolTile>/<NavTile> from components/ui/ToolTile rather than these classes.
+ */
+.app-icon {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  corner-shape: squircle;
+  background: var(--hue);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.38),
+    inset 0 -1px 0 rgb(0 0 0 / 0.22),
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.14),
+    0 1px 2px rgb(0 0 0 / 0.45);
+}
+@supports (color: oklch(from red l c h)) {
+  .app-icon {
+    /* Lightness is capped so every hue sits at the same weight and white reads on all of them. */
+    background:
+      radial-gradient(120% 80% at 50% 0%, rgb(255 255 255 / 0.3), transparent 62%),
+      linear-gradient(
+        180deg,
+        oklch(from var(--hue) min(l, 0.79) calc(c * 1.15) h),
+        oklch(from var(--hue) calc(min(l, 0.79) - 0.12) calc(c * 1.1) calc(h - 6))
+      );
+  }
+}
+.app-icon[data-tone="neutral"] {
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgb(255 255 255 / 0.22), transparent 62%),
+    linear-gradient(180deg, #5d5667, #2e2935);
+}
+/* The drop shadow sits on a wrapper: on the masked element itself it would be masked away. */
+.app-icon-glyph {
+  display: grid;
+  filter: drop-shadow(0 0.5px 0.5px rgb(0 0 0 / 0.35)) drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.18));
+}
+.app-icon-glyph > span {
+  background: linear-gradient(180deg, #fff, rgb(255 255 255 / 0.86));
+  mask: var(--glyph) center / contain no-repeat;
+}
+
+/* Company logo tile (components/brand/BrandMark): graphite glass. */
+.brand-tile {
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgb(255 255 255 / 0.1), transparent 60%),
+    linear-gradient(180deg, #3a3442, #26222c);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+/*
+ * The logo (components/brand/Logo): pointing at it takes a shot. The O flashes and the film feeds
+ * out of it like a print leaving a camera, then slides back in when the pointer leaves.
+ */
+@layer components {
+  .wordmark-film {
+    transition: transform 0.7s cubic-bezier(0.22, 1.2, 0.36, 1);
+  }
+  .wordmark-flash {
+    opacity: 0;
+  }
+  :hover > .wordmark .wordmark-film {
+    transform: translateX(var(--feed));
+  }
+  :hover > .wordmark .wordmark-flash {
+    animation: wordmark-flash 0.55s ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :hover > .wordmark .wordmark-film {
+      transform: none;
+    }
+    :hover > .wordmark .wordmark-flash {
+      animation: none;
+    }
+  }
+}
+@keyframes wordmark-flash {
+  8% {
+    opacity: 0.9;
+  }
+}
+
+/*
+ * Squircles: continuous-curvature corners (Chrome 139+). Elsewhere they fall back to the same
+ * rounded corners. The radius tokens (rounded-chip/btn/card/panel) get it automatically; add
+ * `squircle` next to any other rounded-* class. `press` gives a control a quick, physical
+ * press-in so a click never feels dead; use it instead of transition-colors.
+ */
+@utility squircle {
+  corner-shape: squircle;
+}
+@layer utilities {
+  .rounded-chip,
+  .rounded-btn,
+  .rounded-card,
+  .rounded-panel {
+    corner-shape: squircle;
+  }
+}
+@utility press {
+  transition-property: transform, background-color, color, box-shadow, opacity, filter;
+  transition-duration: 180ms;
+  transition-timing-function: var(--ease-out-quint);
+  &:active:not(:disabled, [aria-disabled="true"]) {
+    transform: scale(0.965);
+    transition-duration: 60ms;
+  }
+}
+
+/* Text fields keep `outline-none`; this draws a soft spike ring on the field (or its wrapper) while focused. */
+@utility field-focus {
+  transition: box-shadow 150ms var(--ease-out-quint);
+  &:focus-within {
+    box-shadow:
+      inset 0 0 0 1px rgb(255 91 46 / 0.6),
+      0 0 0 3px rgb(255 91 46 / 0.13);
+  }
+}
+
+/* Horizontal thumbnail strips: the edge fades so a cut-off item reads as "more this way". Pair with pr-9. */
+@utility strip-fade {
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
+
+/*
+ * A row of controls that scrolls sideways when they don't fit (components/ui/ScrollRow). At each
+ * edge with more past it the controls dissolve, a dark shade deepens toward the edge, and an arrow
+ * sits in it. The fades ease in and out as the row leaves and reaches its ends (the stops are
+ * registered so the gradient can animate).
+ */
+@property --scroll-row-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --scroll-row-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@layer components {
+  .scroll-row {
+    container-type: inline-size;
+  }
+  /* How far a fade reaches in: further in a wider row. */
+  .scroll-row > * {
+    --scroll-row-fade: clamp(64px, 20cqi, 88px);
+  }
+  .scroll-row-view {
+    /* Tabbing to a control under a fade scrolls it clear of the fade. */
+    scroll-padding-inline: var(--scroll-row-fade);
+    transition:
+      --scroll-row-start 0.3s var(--ease-out-quint),
+      --scroll-row-end 0.3s var(--ease-out-quint);
+  }
+  .scroll-row-view[data-more-start] {
+    --scroll-row-start: var(--scroll-row-fade);
+  }
+  .scroll-row-view[data-more-end] {
+    --scroll-row-end: var(--scroll-row-fade);
+  }
+  /* Eased, and empty under the arrow, so a control slips under it instead of being cut in half. */
+  .scroll-row-view:is([data-more-start], [data-more-end]) {
+    mask-image: linear-gradient(
+      to right,
+      transparent calc(var(--scroll-row-start) * 0.42),
+      rgb(0 0 0 / 0.5) calc(var(--scroll-row-start) * 0.72),
+      #000 var(--scroll-row-start),
+      #000 calc(100% - var(--scroll-row-end)),
+      rgb(0 0 0 / 0.5) calc(100% - var(--scroll-row-end) * 0.72),
+      transparent calc(100% - var(--scroll-row-end) * 0.42)
+    );
+  }
+
+  /* The arrow is just its chevron, in a soft shade (its ::before): darkest at the chevron, trailing
+     56px in over the controls, and faded out 24px the other way, 8px past the row's edge. So it
+     stays inside the bar's padding, clear of its rounded corners, and never draws an outline. */
+  .scroll-row-arrow svg {
+    filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+  }
+  .scroll-row-arrow::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    bottom: 0;
+    width: 80px;
+    pointer-events: none;
+  }
+  .scroll-row-arrow[data-side="end"]::before {
+    right: -8px;
+    background: radial-gradient(56px 22px at calc(100% - 24px) 50%, rgb(8 7 12 / 0.45), rgb(8 7 12 / 0.3) 38%, rgb(8 7 12 / 0.1) 72%, transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+  .scroll-row-arrow[data-side="start"]::before {
+    left: -8px;
+    background: radial-gradient(56px 22px at 24px 50%, rgb(8 7 12 / 0.45), rgb(8 7 12 / 0.3) 38%, rgb(8 7 12 / 0.1) 72%, transparent);
+    mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+  }
+}
+
+/*
+ * Loading placeholder: soft waves of light drifting across. The waves are one wide layer that slides
+ * (a transform the compositor runs), so a page of placeholders never repaints while it waits.
+ */
+@layer components {
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-apple);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 400%;
+    background: linear-gradient(90deg, var(--color-apple) 0%, var(--color-apple-2) 25%, var(--color-apple) 50%, var(--color-apple-2) 75%, var(--color-apple) 100%);
+    animation: var(--animate-shimmer);
+  }
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gaffer) transparent;
+}
+
+/*
+ * In the base layer so a component's own `outline-none` / focus style wins. Unlayered, this beat
+ * every Tailwind utility and drew a square orange box inside rounded fields (the composer).
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-spike);
+    outline-offset: 2px;
+  }
+}
+
+/* Range input: thin track, chunky thumb that reads like a fader cap. */
+.crackio-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+.crackio-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.crackio-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.crackio-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 6px;
+  background: var(--color-paper);
+  box-shadow:
+    0 0 0 3px rgb(16 17 20 / 0.9),
+    0 2px 6px rgb(0 0 0 / 0.5);
+}
+.crackio-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--color-paper);
+  box-shadow:
+    0 0 0 3px rgb(16 17 20 / 0.9),
+    0 2px 6px rgb(0 0 0 / 0.5);
+}
+.crackio-range:focus-visible {
+  outline: none;
+}
+.crackio-range:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 3px var(--color-spike),
+    0 2px 6px rgb(0 0 0 / 0.5);
+}
+
+/* Checkerboard shown behind transparent cutouts. */
+.checker {
+  background-color: #1b1d22;
+  background-image:
+    linear-gradient(45deg, #23262c 25%, transparent 25%),
+    linear-gradient(-45deg, #23262c 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #23262c 75%),
+    linear-gradient(-45deg, transparent 75%, #23262c 75%);
+  background-size: 12px 12px;
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
+}
+
+/* Reduced motion calms the interface. The dashboard's showcase (marked .motion-always) plays like
+   a muted video instead, with its own pause button, so it looks the same in every browser. */
+@media (prefers-reduced-motion: reduce) {
+  :where(*:not(.motion-always, .motion-always *)),
+  :where(*:not(.motion-always, .motion-always *))::before,
+  :where(*:not(.motion-always, .motion-always *))::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Dashboard hero: frames crossfade (components/dashboard/HeroBackdrop) with a slow drift that
+ * only runs while the frame is up and the hero is on screen. Like the showcase, it plays as a
+ * quiet background video whatever the motion setting (.motion-always).
+ */
+@keyframes hero-drift {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+.hero-slide {
+  opacity: 0;
+  transition: opacity 1.8s cubic-bezier(0.45, 0, 0.25, 1);
+}
+.hero-slide[data-phase="in"] {
+  opacity: 1;
+}
+.hero-slide[data-phase="in"],
+.hero-slide[data-phase="out"] {
+  animation: hero-drift 18s linear forwards;
+}
+.hero-backdrop:not([data-live]) .hero-slide {
+  animation-play-state: paused;
+}
+.hero-sharp {
+  mask-image: radial-gradient(ellipse 70% 66% at 50% 48%, #000 50%, transparent 100%);
+}
+@media (max-width: 640px) {
+  /* A tall, narrow hero keeps more of the frame sharp. */
+  .hero-sharp {
+    mask-image: radial-gradient(ellipse 110% 70% at 50% 46%, #000 55%, transparent 100%);
+  }
+}
+/* Barely there: dark enough behind the title and the composer, a little brighter around them,
+   and sinking into the page at every edge. */
+.hero-shade {
+  background:
+    radial-gradient(56% 50% at 50% 50%, rgb(18 15 23 / 0.68), rgb(18 15 23 / 0.42) 72%, rgb(18 15 23 / 0.3)),
+    linear-gradient(to bottom, rgb(18 15 23 / 0.55), rgb(18 15 23 / 0.18) 28%, rgb(18 15 23 / 0.24) 64%, rgb(18 15 23 / 0.82));
+  box-shadow: inset 0 0 90px 24px rgb(18 15 23 / 0.85);
+}
+@keyframes hero-timer {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.hero-timer {
+  transform: scaleX(0);
+  animation: hero-timer linear forwards;
+}
+@keyframes hero-caption {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+.hero-caption {
+  animation: hero-caption 0.6s var(--ease-out-quint);
+}
+
+/*
+ * The hero's prompt bar (components/dashboard/Composer): cool smoked glass. One even blue-black tint
+ * over a soft blur, so every light behind it comes through the same way, as color and never as
+ * detail, with a rim lit from above and a long shadow. It's the one backdrop blur on Home, on a bar
+ * that's always on screen: blurs on hidden or stacked layers starved the GPU before.
+ */
+@layer components {
+  .smoked-glass {
+    position: relative;
+    background: rgb(14 15 22 / 0.5);
+    -webkit-backdrop-filter: blur(18px) brightness(1.15) saturate(1.5);
+    backdrop-filter: blur(18px) brightness(1.15) saturate(1.5);
+    box-shadow:
+      0 1px 1px rgb(0 0 0 / 0.3),
+      0 30px 80px -28px rgb(0 0 0 / 0.9);
+    transition: box-shadow 200ms var(--ease-out-quint);
+  }
+  /* The rim: a hairline that catches the light at the top and fades down the sides. */
+  .smoked-glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    corner-shape: squircle;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0.08) 38%, rgb(255 255 255 / 0.045) 72%, rgb(255 255 255 / 0.09));
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    pointer-events: none;
+  }
+  /* The whole bar lights up while you type (the textarea itself has no outline). */
+  .smoked-glass:focus-within {
+    box-shadow:
+      0 0 0 4px rgb(255 91 46 / 0.13),
+      0 1px 1px rgb(0 0 0 / 0.3),
+      0 30px 80px -28px rgb(0 0 0 / 0.9);
+  }
+  .smoked-glass:focus-within::before {
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.38), rgb(255 255 255 / 0.17) 38%, rgb(255 255 255 / 0.13) 72%, rgb(255 255 255 / 0.18));
+  }
+  .smoked-glass[data-dragging] {
+    box-shadow:
+      0 0 0 2px var(--color-spike),
+      0 30px 80px -28px rgb(0 0 0 / 0.9);
+  }
+}
+
+/* The bottom of the window: a soft dark edge with a deep-blue glow, so the page reads as
+   "more below" instead of being cut off. Sticky at the end of the page, so it never covers
+   the last section. */
+.scroll-fade {
+  background:
+    radial-gradient(52% 130% at 50% 100%, rgb(42 66 196 / 0.2), rgb(42 66 196 / 0.06) 55%, transparent 80%),
+    linear-gradient(to top, rgb(10 9 15 / 0.9), rgb(10 9 15 / 0.45) 38%, transparent);
+}
+
+/* Showcase rail: the cards drift up and pause under the pointer (ShowcaseRail drives them). */
+
+
+/*
+ * Showcase demos (components/dashboard/showcase). The engine drives everything from script; these
+ * are the ad typography it uses (the fonts load with the rail: showcase/fonts.ts).
+ */
+.ad-sticker {
+  font-family: var(--font-ad), var(--font-display), sans-serif;
+  font-weight: 900;
+  font-style: italic;
+  font-stretch: 62%;
+  font-variation-settings: "wdth" 62;
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  line-height: 0.92;
+  white-space: nowrap;
+}
+.ad-label {
+  font-family: var(--font-ad), var(--font-sans), sans-serif;
+  font-weight: 800;
+  font-style: italic;
+  font-stretch: 75%;
+  font-variation-settings: "wdth" 75;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ad-serif {
+  font-family: var(--font-ad-serif), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+}
+
+/* Motion: the three dots while the agent works. */
+@keyframes motion-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.motion-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.motion-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-spike);
+  animation: motion-dot 1.1s ease-in-out infinite;
+}
+.motion-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.motion-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/*
+ * Library projects (components/library). Set `--hue` to the project's color: icons take it as
+ * `--tint`, which lifts very dark picks just enough to read on the dark UI.
+ */
+@layer components {
+  .project-tint {
+    --tint: var(--hue);
+  }
+  @supports (color: oklch(from red l c h)) {
+    .project-tint {
+      --tint: oklch(from var(--hue) max(l, 0.56) c h);
+    }
+  }
+  .project-glyph {
+    color: var(--tint);
+  }
+  .project-tile {
+    color: var(--tint);
+    background: color-mix(in oklab, var(--tint) 15%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tint) 24%, transparent);
+  }
+  /* An uploaded .svg, drawn as a mask so it takes the color like the built-in icons. */
+  .project-svg {
+    background: currentColor;
+    -webkit-mask: var(--svg) center / contain no-repeat;
+    mask: var(--svg) center / contain no-repeat;
+  }
+
+  /* A folder in the Library's row: quiet until it's open, or something is dragged over it. */
+  .folder-card {
+    background: rgb(255 255 255 / 0.03);
+    box-shadow: inset 0 0 0 1px var(--color-line);
+  }
+  .folder-card:hover {
+    background: rgb(255 255 255 / 0.055);
+  }
+  .folder-card[aria-current="true"] {
+    background: color-mix(in oklab, var(--tint) 9%, rgb(255 255 255 / 0.03));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tint) 42%, transparent);
+  }
+  .folder-card[data-drop] {
+    background: color-mix(in oklab, var(--tint) 17%, transparent);
+    box-shadow:
+      inset 0 0 0 1.5px color-mix(in oklab, var(--tint) 78%, transparent),
+      0 10px 28px -10px color-mix(in oklab, var(--tint) 55%, transparent);
+    transform: scale(1.035);
+  }
+  .folder-card[data-landed] {
+    animation: folder-landed 0.7s var(--ease-out-quint);
+  }
+}
+@keyframes folder-landed {
+  from {
+    transform: scale(1.04);
+    box-shadow:
+      inset 0 0 0 1.5px color-mix(in oklab, var(--tint) 80%, transparent),
+      0 10px 28px -10px color-mix(in oklab, var(--tint) 50%, transparent);
+  }
+}
+@keyframes folder-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+.folder-in {
+  animation: folder-in 0.32s var(--ease-out-quint);
+}
+/* A take on its way into another folder. */
+.take-leaving {
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity 0.18s var(--ease-out-quint),
+    transform 0.18s var(--ease-out-quint);
+}
+/* Opening another folder: its takes settle in. */
+@keyframes library-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.library-in {
+  animation: library-in 0.26s var(--ease-out-quint);
+}
+
+/* The Library's viewer (components/library/Viewer): a quick fade in, opacity only. */
+@keyframes viewer-in {
+  from {
+    opacity: 0;
+  }
+}
+.viewer-in {
+  animation: viewer-in 0.16s var(--ease-out-quint);
+}
+
+/* A clip's scrubber in the viewer: the played part in spike, the thumb shows when you reach for it.
+   `--p` is the played share, set as the clip plays. */
+.clip-scrub {
+  --p: 0%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+.clip-scrub::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--color-spike) var(--p), rgb(255 255 255 / 0.16) var(--p));
+}
+.clip-scrub::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--color-spike) var(--p), rgb(255 255 255 / 0.16) var(--p));
+}
+.clip-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -4.5px;
+  border-radius: 999px;
+  background: var(--color-paper);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  transform: scale(0);
+  transition: transform 0.15s var(--ease-out-quint);
+}
+.clip-scrub::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-paper);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  transform: scale(0);
+  transition: transform 0.15s var(--ease-out-quint);
+}
+.clip-scrub:is(:hover, :focus-visible, :active)::-webkit-slider-thumb {
+  transform: scale(1);
+}
+.clip-scrub:is(:hover, :focus-visible, :active)::-moz-range-thumb {
+  transform: scale(1);
+}
+.clip-scrub:focus-visible {
+  outline: none;
+}
+.clip-scrub:focus-visible::-webkit-slider-runnable-track {
+  box-shadow: 0 0 0 3px rgb(255 91 46 / 0.3);
+}
+
+/* The viewer's strip of takes: it runs off both edges, so both fade. */
+.filmstrip {
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+}
+
+/*
+ * The model library (components/models/ModelLibrary): a drawer over the page, with a shade behind it. A layer of its own,
+ * not a modal <dialog>: opening or closing a modal repaints the whole page (it turns inert and back), sidebar included,
+ * while the drawer is still moving. It runs the full height of the window against its right edge, its left side one long
+ * rounded edge; full screen on a phone. Wide enough for 3 to 5 cards a row. It slides in and back out the whole way (Web
+ * Animations in ModelLibrary). On Home it's smoked glass like the composer it opens from (`data-glass`): the page behind
+ * holds still while it's open, so its one blur costs no repaints.
+ */
+@layer components {
+  .model-library-root {
+    position: fixed;
+    inset: 0;
+    /* Above the sidebar (50) and popovers (70). */
+    z-index: 80;
+  }
+  /* Drawn once, unseen, while the page is idle (ModelLibrary `warm`), out of the pointer's way. */
+  .model-library-root[data-warming] {
+    opacity: 0.002;
+    pointer-events: none;
+  }
+  .model-library-shade {
+    position: absolute;
+    inset: 0;
+    background: rgb(8 7 12 / 0.55);
+  }
+  .model-library-root[data-glass] .model-library-shade {
+    background: rgb(8 7 12 / 0.32);
+  }
+  .model-library {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    overflow: hidden;
+    background: var(--color-flat);
+    color: var(--color-paper);
+    /* Its own GPU layer from its first frame, so what's drawn before the slide is what slides (no second raster mid-move). */
+    will-change: transform;
+  }
+  @media (min-width: 768px) {
+    .model-library {
+      width: min(100vw, max(660px, 56vw), 1100px);
+      border-radius: 32px 0 0 32px;
+      corner-shape: squircle;
+      box-shadow:
+        0 0 0 1px var(--color-line-strong),
+        -12px 0 48px -8px rgb(0 0 0 / 0.6);
+    }
+  }
+  .model-library-root[data-glass] .model-library {
+    background: rgb(14 15 22 / 0.74);
+    -webkit-backdrop-filter: blur(22px) brightness(1.1) saturate(1.4);
+    backdrop-filter: blur(22px) brightness(1.1) saturate(1.4);
+  }
+  @media (min-width: 768px) {
+    .model-library-root[data-glass] .model-library {
+      box-shadow:
+        inset 1px 0 0 rgb(255 255 255 / 0.14),
+        0 0 0 1px rgb(255 255 255 / 0.07),
+        -12px 0 48px -8px rgb(0 0 0 / 0.55);
+    }
+  }
+
+  /* A model's card: its preview, a shade for the name, and the details that unfold from the bottom on hover or focus. */
+  .library-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    border-radius: inherit;
+    corner-shape: squircle;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+    pointer-events: none;
+    transition: box-shadow 160ms var(--ease-out-quint);
+  }
+  .library-card:hover::after {
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  }
+  .library-card:has([data-card-main]:focus-visible)::after {
+    box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.75);
+  }
+  .library-card.library-card-on::after {
+    box-shadow: inset 0 0 0 2px var(--color-spike);
+  }
+  .library-card-still {
+    opacity: 0;
+    transition:
+      opacity 400ms var(--ease-out-quint),
+      transform 700ms var(--ease-out-quint),
+      filter 300ms var(--ease-out-quint);
+  }
+  .library-card-still[data-loaded] {
+    opacity: 1;
+  }
+  .library-card:hover .library-card-still {
+    transform: scale(1.045);
+  }
+  .library-card-locked .library-card-still {
+    filter: grayscale(0.55) brightness(0.72);
+  }
+  .library-card-shade {
+    background: linear-gradient(to top, rgb(10 9 14 / 0.94), rgb(10 9 14 / 0.6) 28%, rgb(10 9 14 / 0) 56%);
+  }
+  .library-card-shade::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgb(10 9 14 / 0.97), rgb(10 9 14 / 0.9) 46%, rgb(10 9 14 / 0.3) 78%, rgb(10 9 14 / 0));
+    opacity: 0;
+    transition: opacity 320ms var(--ease-out-quint);
+  }
+  .library-card-more {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows 340ms var(--ease-out-quint),
+      opacity 240ms var(--ease-out-quint);
+  }
+  .library-card:is(:hover, :focus-within, [data-pinned]) .library-card-shade::after {
+    opacity: 1;
+  }
+  .library-card:is(:hover, :focus-within, [data-pinned]) .library-card-more {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  .library-card-blank {
+    --hue: var(--color-spike);
+    background:
+      radial-gradient(95% 75% at 22% 12%, color-mix(in oklab, var(--hue) 42%, transparent), transparent 64%),
+      radial-gradient(80% 60% at 88% 96%, color-mix(in oklab, var(--hue) 26%, transparent), transparent 72%),
+      var(--color-apple);
+  }
+  /* An upscaler's starting picture: shown as the card is pointed at, then wiped away left to right to its result. */
+  .library-card-before {
+    opacity: 0;
+    clip-path: inset(0 0 0 0);
+    pointer-events: none;
+  }
+  .library-card-before[data-wipe] {
+    animation: library-wipe 2.2s var(--ease-out-quint) both;
+  }
+}
+@keyframes library-wipe {
+  0% {
+    opacity: 0;
+    clip-path: inset(0 0 0 0);
+  }
+  12%,
+  40% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+/* A text model's card (models/TextCardPreview) types its sample out line by line when it's drawn, and again each time
+   it's pointed at (the second keyframes name restarts it). */
+.textcard-line {
+  animation: textcard-type 0.5s steps(22, end) both;
+  animation-delay: calc(var(--i, 0) * 0.34s + 0.2s);
+}
+.library-card:hover .textcard-line {
+  animation-name: textcard-type-again;
+}
+.textcard-caret {
+  animation: textcard-blink 1s steps(1, end) infinite;
+}
+@keyframes textcard-type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes textcard-type-again {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes textcard-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .textcard-line,
+  .textcard-caret {
+    animation: none;
+  }
+}
+
+/* A model card's details fit its size: a narrow card (a phone's two columns, a crowded sheet) drops its ranking and time
+   lines and keeps two lines of what people say. Unlayered, so it wins over the line-clamp utilities. */
+.library-card {
+  container-type: inline-size;
+}
+.library-card-says {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+@container (max-width: 215px) {
+  .library-card-rank,
+  .library-card-time {
+    display: none;
+  }
+  .library-card-says {
+    -webkit-line-clamp: 2;
+  }
+}

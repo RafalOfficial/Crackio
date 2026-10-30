@@ -1,0 +1,214 @@
+{
+  "$comment": "Crackio's own feature and tool images, Director's stage pieces and the visual-vocabulary pickers, generated from these prompts with `pnpm assets:generate` (Codex CLI image tool). Re-run a single asset with `pnpm assets:generate feature-director`. The home page's hero, its prompt gallery and the Video card come from scripts/assets/home.mjs (hero.json, examples.json).",
+  "style": "Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark.",
+  "assets": [
+    {
+      "id": "feature-director",
+      "aspect": "16:10 landscape",
+      "prompt": "Behind-the-scenes photograph on a dark film sound stage: a young woman in a long rust-red wool coat stands on a fluorescent orange tape X mark on the black floor. A cinema camera on a dolly track sits soft-focus in the near foreground, framing her. A single tungsten fresnel backlight carves a warm rim of light through atmospheric haze. Deep shadows, anamorphic feel, wide composition with generous negative space on the left third."
+    },
+    {
+      "id": "feature-angles",
+      "aspect": "16:10 landscape",
+      "prompt": "A sculptural white sneaker floating above a seamless charcoal studio sweep, photographed as a dramatic three-quarter low-angle hero shot. Soft top light, one crisp warm-orange edge light along the sole, faint reflection on the floor. Premium product photography, razor sharp, wide composition with negative space on the left."
+    },
+    {
+      "id": "feature-relight",
+      "aspect": "16:10 landscape",
+      "prompt": "Close portrait of a man in his thirties with freckles and curly dark hair in a dark studio, lit by one hard light from camera left that draws a crisp Rembrandt triangle on his shadow-side cheek, plus a cool blue rim light from behind. Visible skin texture, shallow depth of field, subject placed on the right third, dark negative space on the left."
+    },
+    {
+      "id": "tool-director",
+      "aspect": "4:3 landscape",
+      "prompt": "Overhead three-quarter view of a miniature film set built on a dark wooden table: tiny figurines standing on small orange tape marks, a miniature cinema camera on a tripod, tiny LED lamps casting warm pools of light. Tilt-shift depth of field, playful yet premium."
+    },
+    {
+      "id": "tool-angles",
+      "aspect": "4:3 landscape",
+      "prompt": "A vintage turquoise scooter photographed from a dramatic worm's-eye angle against a clean pale blue sky, strong converging perspective, crisp midday light, editorial magazine look."
+    },
+    {
+      "id": "tool-relight",
+      "aspect": "4:3 landscape",
+      "prompt": "Fine-art still life: a matte ceramic vase and three lemons on a stone table, lit by a single hard window light that throws long dramatic diagonal shadows, deep teal background."
+    },
+    {
+      "id": "tool-cast",
+      "aspect": "4:3 landscape",
+      "prompt": "Photoreal character turnaround of one original woman in her twenties with a short silver bob and a sage-green bomber jacket: front view, three-quarter view and profile view standing side by side on a neutral grey studio backdrop, identical face, hair and outfit in every view, even softbox lighting."
+    },
+    {
+      "id": "tool-retouch",
+      "aspect": "4:3 landscape",
+      "prompt": "A sunlit minimalist living room with a mid-century tan leather armchair, a tall fiddle-leaf fig plant and a round brass mirror on a warm white wall, airy morning light, editorial interior photography."
+    },
+    {
+      "id": "tool-product",
+      "aspect": "4:3 landscape",
+      "prompt": "A frosted glass perfume bottle with no label standing on a wet black river stone in a misty pine forest at dawn, soft volumetric light beams, dew drops, luxury product photography."
+    },
+    {
+      "id": "tool-recast",
+      "aspect": "4:3 landscape",
+      "prompt": "A contemporary dancer frozen mid-leap inside an empty concrete parking garage, harsh overhead fluorescent tubes, long shadows, high energy cinematic photograph."
+    },
+    {
+      "id": "tool-upscale",
+      "aspect": "4:3 landscape",
+      "prompt": "Extreme macro photograph of a human eye with a hazel iris, every iris fiber and eyelash crisp, tiny window reflection in the pupil, studio light, hyper detailed."
+    },
+    {
+      "id": "tool-storyboard",
+      "aspect": "4:3 landscape",
+      "prompt": "An astronaut in a weathered white suit walking through a field of tall golden grass at sunset, wide establishing shot, epic scale, warm haze, film grain."
+    },
+    {
+      "id": "stage-woman",
+      "aspect": "2:3 portrait",
+      "transparent": true,
+      "prompt": "Full-body studio photo of a young woman in a long rust-red wool coat, black trousers and white sneakers, standing relaxed and facing the camera, isolated cutout."
+    },
+    {
+      "id": "stage-dog",
+      "aspect": "1:1 square",
+      "transparent": true,
+      "prompt": "A golden retriever sitting upright and looking slightly to the left, full body, isolated cutout, studio light."
+    },
+    {
+      "id": "stage-chair",
+      "aspect": "1:1 square",
+      "transparent": true,
+      "prompt": "A mid-century modern lounge chair in tan leather with walnut legs, three-quarter view, full object, isolated cutout, studio light."
+    },
+    {
+      "id": "stage-street",
+      "aspect": "16:9 landscape",
+      "prompt": "An empty narrow side street at night after rain with glowing shop windows and lanterns, no readable signs, wet asphalt reflections, eye-level wide shot, no people."
+    },
+    {
+      "id": "stage-studio",
+      "aspect": "16:9 landscape",
+      "prompt": "An empty photo studio with a seamless light grey cyclorama wall and floor, two large softboxes at the edges, eye-level wide shot, no people."
+    },
+    {
+      "id": "vocab-style-photo",
+      "aspect": "1:1 square",
+      "prompt": "Photorealistic photograph with natural textures. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-style-cinematic",
+      "aspect": "1:1 square",
+      "prompt": "Cinematic film still, anamorphic look, subtle film grain, rich teal and orange color grade. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-style-editorial",
+      "aspect": "1:1 square",
+      "prompt": "High-end fashion editorial photograph, polished and posed. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-style-documentary",
+      "aspect": "1:1 square",
+      "prompt": "Candid documentary photograph, natural and unposed, slightly imperfect framing. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-style-product",
+      "aspect": "1:1 square",
+      "prompt": "Commercial advertising photograph with crisp detail and clean polish. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-style-analog",
+      "aspect": "1:1 square",
+      "prompt": "Analog 35mm film photograph with warm muted tones and visible grain. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-style-anime",
+      "aspect": "1:1 square",
+      "prompt": "Anime illustration with clean line art and cel shading. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-style-3d",
+      "aspect": "1:1 square",
+      "prompt": "Stylized 3D animated-film render with soft global illumination. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-style-painting",
+      "aspect": "1:1 square",
+      "prompt": "Painterly digital illustration with visible brushwork. Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat standing on a rainy city street at night, shop lights behind her, eye level."
+    },
+    {
+      "id": "vocab-light-front",
+      "aspect": "1:1 square",
+      "prompt": "Studio portrait, head and shoulders, of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat, plain dark grey seamless background, lit only by soft frontal key light from the camera position, very few shadows. Photorealistic."
+    },
+    {
+      "id": "vocab-light-loop",
+      "aspect": "1:1 square",
+      "prompt": "Studio portrait, head and shoulders, of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat, plain dark grey seamless background, lit only by a classic 45-degree key light from the right side. Photorealistic."
+    },
+    {
+      "id": "vocab-light-rembrandt",
+      "aspect": "1:1 square",
+      "prompt": "Studio portrait, head and shoulders, of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat, plain dark grey seamless background, lit only by Rembrandt lighting from the right: a small triangle of light on her shadow-side cheek. Photorealistic."
+    },
+    {
+      "id": "vocab-light-split",
+      "aspect": "1:1 square",
+      "prompt": "Studio portrait, head and shoulders, of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat, plain dark grey seamless background, lit only by split lighting from the right: exactly half of the face lit, the other half in deep shadow. Photorealistic."
+    },
+    {
+      "id": "vocab-light-rim",
+      "aspect": "1:1 square",
+      "prompt": "Studio portrait, head and shoulders, of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat, plain dark grey seamless background, lit only by rim light from behind outlining her hair and shoulders, face mostly in shadow. Photorealistic."
+    },
+    {
+      "id": "vocab-light-silhouette",
+      "aspect": "1:1 square",
+      "prompt": "Studio portrait, head and shoulders, of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat, plain dark grey seamless background, lit only by strong backlight behind her, she is almost a silhouette against a bright background. Photorealistic."
+    },
+    {
+      "id": "vocab-light-top",
+      "aspect": "1:1 square",
+      "prompt": "Studio portrait, head and shoulders, of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat, plain dark grey seamless background, lit only by hard top light from directly above, deep shadows under the brows and nose. Photorealistic."
+    },
+    {
+      "id": "vocab-mood-golden",
+      "aspect": "1:1 square",
+      "prompt": "Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat outdoors on a quiet city corner, golden hour sunlight with long warm shadows. Photorealistic photograph."
+    },
+    {
+      "id": "vocab-mood-midday",
+      "aspect": "1:1 square",
+      "prompt": "Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat outdoors on a quiet city corner, harsh midday sun with short hard shadows. Photorealistic photograph."
+    },
+    {
+      "id": "vocab-mood-overcast",
+      "aspect": "1:1 square",
+      "prompt": "Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat outdoors on a quiet city corner, soft overcast daylight with no hard shadows. Photorealistic photograph."
+    },
+    {
+      "id": "vocab-mood-blue-hour",
+      "aspect": "1:1 square",
+      "prompt": "Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat outdoors on a quiet city corner, blue hour twilight with cool ambient light and the first street lights on. Photorealistic photograph."
+    },
+    {
+      "id": "vocab-mood-night-neon",
+      "aspect": "1:1 square",
+      "prompt": "Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat outdoors on a quiet city corner, night, lit by magenta and cyan neon signs, wet reflective pavement. Photorealistic photograph."
+    },
+    {
+      "id": "vocab-mood-studio",
+      "aspect": "1:1 square",
+      "prompt": "Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat outdoors on a quiet city corner, clean studio lighting from a large softbox against a seamless backdrop. Photorealistic photograph."
+    },
+    {
+      "id": "vocab-mood-candle",
+      "aspect": "1:1 square",
+      "prompt": "Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat outdoors on a quiet city corner, warm candlelight in a dark room, deep surrounding shadows. Photorealistic photograph."
+    },
+    {
+      "id": "vocab-mood-moonlight",
+      "aspect": "1:1 square",
+      "prompt": "Medium shot of a woman in her late twenties with shoulder-length dark brown hair and a rust-red wool coat outdoors on a quiet city corner, cold moonlight with deep blue shadows. Photorealistic photograph."
+    }
+  ]
+}

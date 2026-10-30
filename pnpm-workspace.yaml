@@ -1,0 +1,11 @@
+allowBuilds:
+  ffmpeg-static: true
+  # Each platform's ffmpeg binary; its only script makes the binary executable (macOS and Linux).
+  "@ffmpeg-installer/darwin-arm64": true
+  "@ffmpeg-installer/darwin-x64": true
+  "@ffmpeg-installer/linux-arm64": true
+  "@ffmpeg-installer/linux-x64": true
+  # Ships its Windows/macOS/Linux binaries in the package; the script only fetches optional CUDA files.
+  onnxruntime-node: false
+  sharp: false
+  unrs-resolver: false

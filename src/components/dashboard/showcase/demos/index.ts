@@ -1,0 +1,12 @@
+export { AnglesDemo } from "./angles";
+export { CastDemo } from "./cast";
+export { DirectorDemo } from "./director";
+export { ImageDemo } from "./image";
+export { MotionDemo } from "./motion";
+export { ProductDemo } from "./product";
+export { RecastDemo } from "./recast";
+export { RelightDemo } from "./relight";
+export { RetouchDemo } from "./retouch";
+export { StoryboardDemo } from "./storyboard";
+export { UpscaleDemo } from "./upscale";
+export { VideoDemo } from "./video";

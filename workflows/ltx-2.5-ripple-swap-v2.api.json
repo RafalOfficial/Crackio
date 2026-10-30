@@ -1,0 +1,2374 @@
+{
+ "1": {
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+   "weight_dtype": "default"
+  }
+ },
+ "2": {
+  "class_type": "LoraLoaderModelOnly",
+  "inputs": {
+   "model": [
+    "1",
+    0
+   ],
+   "lora_name": "LTX25_Ripple_v11.safetensors",
+   "strength_model": 1.35
+  }
+ },
+ "3": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+   "type": "ltxv",
+   "device": "default"
+  }
+ },
+ "4": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "ltx-2.5-video-vae-bf16.safetensors"
+  }
+ },
+ "5": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "ltx-2.5-audio-vae-bf16.safetensors"
+  }
+ },
+ "6": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "text": "Use the reference video for motion, timing, camera movement, composition, and unchanged scene content, while consistently propagating the visual edit established in the first frame throughout the video. The dark-haired woman in the green sweater is now Juno, a freckled woman with copper bob and glasses: A woman in her late twenties with an oval face, green eyes, and light skin densely freckled over her nose, cheeks and upper chest, a slim build, and a short copper-red bob with soft waves ending just above the shoulders, always wearing round tortoiseshell glasses. The blonde woman in the white blouse is now Noor, a woman with long black box braids: A woman in her early thirties with dark brown skin, a softly oval face, warm brown eyes, and long black box braids gathered into a high bun with thick braids hanging down her back, plus small gold hoop earrings and a medium build.",
+   "clip": [
+    "3",
+    0
+   ]
+  }
+ },
+ "7": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "text": "blurry, low resolution, ugly, garbled mess, compression artifacts, glitch, stop motion, still image, pixelated, robotic voice, oversaturated",
+   "clip": [
+    "3",
+    0
+   ]
+  }
+ },
+ "8": {
+  "class_type": "LTXVConditioning",
+  "inputs": {
+   "positive": [
+    "6",
+    0
+   ],
+   "negative": [
+    "7",
+    0
+   ],
+   "frame_rate": 24
+  }
+ },
+ "9": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "crackio/ripple-first-mvt5hida.png"
+  }
+ },
+ "10": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "9",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "width": 704,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "11": {
+  "class_type": "LoadVideo",
+  "inputs": {
+   "file": "crackio/clip-mvt4x32h-9gzjj.mp4"
+  }
+ },
+ "12": {
+  "class_type": "GetVideoComponents",
+  "inputs": {
+   "video": [
+    "11",
+    0
+   ]
+  }
+ },
+ "13": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "12",
+    0
+   ],
+   "batch_index": 36,
+   "length": 114
+  }
+ },
+ "14": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "13",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "width": 704,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "15": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "14",
+    0
+   ],
+   "batch_index": 113,
+   "length": 1
+  }
+ },
+ "16": {
+  "class_type": "RepeatImageBatch",
+  "inputs": {
+   "image": [
+    "15",
+    0
+   ],
+   "amount": 16
+  }
+ },
+ "17": {
+  "class_type": "BatchImagesNode",
+  "inputs": {
+   "images.image0": [
+    "14",
+    0
+   ],
+   "images.image1": [
+    "16",
+    0
+   ]
+  }
+ },
+ "18": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "17",
+    0
+   ],
+   "batch_index": 1,
+   "length": 120
+  }
+ },
+ "19": {
+  "class_type": "BatchImagesNode",
+  "inputs": {
+   "images.image0": [
+    "10",
+    0
+   ],
+   "images.image1": [
+    "18",
+    0
+   ]
+  }
+ },
+ "20": {
+  "class_type": "LTXVEmptyLatentAudio",
+  "inputs": {
+   "frames_number": 121,
+   "frame_rate": 24,
+   "batch_size": 1,
+   "audio_vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "21": {
+  "class_type": "EmptyLTXVLatentVideo",
+  "inputs": {
+   "width": 704,
+   "height": 1280,
+   "length": 121,
+   "batch_size": 1
+  }
+ },
+ "22": {
+  "class_type": "LTXVAddGuide",
+  "inputs": {
+   "positive": [
+    "8",
+    0
+   ],
+   "negative": [
+    "8",
+    1
+   ],
+   "vae": [
+    "4",
+    0
+   ],
+   "latent": [
+    "21",
+    0
+   ],
+   "image": [
+    "19",
+    0
+   ],
+   "frame_idx": 0,
+   "strength": 1
+  }
+ },
+ "23": {
+  "class_type": "BasicScheduler",
+  "inputs": {
+   "model": [
+    "2",
+    0
+   ],
+   "scheduler": "simple",
+   "steps": 8,
+   "denoise": 1
+  }
+ },
+ "24": {
+  "class_type": "RandomNoise",
+  "inputs": {
+   "noise_seed": 115378376725951
+  }
+ },
+ "25": {
+  "class_type": "CFGGuider",
+  "inputs": {
+   "model": [
+    "2",
+    0
+   ],
+   "positive": [
+    "22",
+    0
+   ],
+   "negative": [
+    "22",
+    1
+   ],
+   "cfg": 1
+  }
+ },
+ "26": {
+  "class_type": "KSamplerSelect",
+  "inputs": {
+   "sampler_name": "euler"
+  }
+ },
+ "27": {
+  "class_type": "LTXVConcatAVLatent",
+  "inputs": {
+   "video_latent": [
+    "22",
+    2
+   ],
+   "audio_latent": [
+    "20",
+    0
+   ]
+  }
+ },
+ "28": {
+  "class_type": "SamplerCustomAdvanced",
+  "inputs": {
+   "noise": [
+    "24",
+    0
+   ],
+   "guider": [
+    "25",
+    0
+   ],
+   "sampler": [
+    "26",
+    0
+   ],
+   "sigmas": [
+    "23",
+    0
+   ],
+   "latent_image": [
+    "27",
+    0
+   ]
+  }
+ },
+ "29": {
+  "class_type": "LTXVSeparateAVLatent",
+  "inputs": {
+   "av_latent": [
+    "28",
+    0
+   ]
+  }
+ },
+ "30": {
+  "class_type": "LTXVCropGuides",
+  "inputs": {
+   "positive": [
+    "22",
+    0
+   ],
+   "negative": [
+    "22",
+    1
+   ],
+   "latent": [
+    "29",
+    0
+   ]
+  }
+ },
+ "31": {
+  "class_type": "VAEDecodeTiled",
+  "inputs": {
+   "samples": [
+    "30",
+    2
+   ],
+   "vae": [
+    "4",
+    0
+   ],
+   "tile_size": 512,
+   "overlap": 64,
+   "temporal_size": 64,
+   "temporal_overlap": 16
+  }
+ },
+ "32": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "31",
+    0
+   ],
+   "batch_index": 0,
+   "length": 114
+  }
+ },
+ "33": {
+  "class_type": "LoadVideo",
+  "inputs": {
+   "file": "crackio/outline-mvt5hfeq-7gqpc.mp4"
+  }
+ },
+ "34": {
+  "class_type": "GetVideoComponents",
+  "inputs": {
+   "video": [
+    "33",
+    0
+   ]
+  }
+ },
+ "35": {
+  "class_type": "LoadVideo",
+  "inputs": {
+   "file": "crackio/outline-mvt5hh2z-q2dii.mp4"
+  }
+ },
+ "36": {
+  "class_type": "GetVideoComponents",
+  "inputs": {
+   "video": [
+    "35",
+    0
+   ]
+  }
+ },
+ "37": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "32",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "width": 720,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "38": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "34",
+    0
+   ],
+   "upscale_method": "bilinear",
+   "width": 720,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "39": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "38",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "40": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "39",
+    0
+   ],
+   "value": 0.5
+  }
+ },
+ "41": {
+  "class_type": "ImageBlend",
+  "inputs": {
+   "image1": [
+    "37",
+    0
+   ],
+   "image2": [
+    "13",
+    0
+   ],
+   "blend_factor": 1,
+   "blend_mode": "difference"
+  }
+ },
+ "42": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "41",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "43": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "41",
+    0
+   ],
+   "channel": "green"
+  }
+ },
+ "44": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "42",
+    0
+   ],
+   "source": [
+    "43",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "add"
+  }
+ },
+ "45": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "41",
+    0
+   ],
+   "channel": "blue"
+  }
+ },
+ "46": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "44",
+    0
+   ],
+   "source": [
+    "45",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "add"
+  }
+ },
+ "47": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "46",
+    0
+   ]
+  }
+ },
+ "48": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "47",
+    0
+   ],
+   "blur_radius": 7,
+   "sigma": 2
+  }
+ },
+ "49": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "48",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "50": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "49",
+    0
+   ],
+   "value": 0.36
+  }
+ },
+ "51": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "40",
+    0
+   ]
+  }
+ },
+ "52": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "51",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  }
+ },
+ "53": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "52",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "54": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "53",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "55": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "54",
+    0
+   ]
+  }
+ },
+ "56": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "55",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  }
+ },
+ "57": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "56",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "58": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "57",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "59": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "50",
+    0
+   ],
+   "source": [
+    "58",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "multiply"
+  }
+ },
+ "60": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "40",
+    0
+   ],
+   "source": [
+    "59",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "or"
+  }
+ },
+ "61": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "60",
+    0
+   ]
+  }
+ },
+ "62": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "61",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  }
+ },
+ "63": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "62",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "64": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "63",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "65": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "36",
+    0
+   ],
+   "upscale_method": "bilinear",
+   "width": 720,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "66": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "65",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "67": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "66",
+    0
+   ],
+   "value": 0.5
+  }
+ },
+ "68": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "40",
+    0
+   ]
+  }
+ },
+ "69": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "68",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  }
+ },
+ "70": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "69",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "71": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "70",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "72": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "67",
+    0
+   ],
+   "source": [
+    "71",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "subtract"
+  }
+ },
+ "73": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "72",
+    0
+   ]
+  }
+ },
+ "74": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "73",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 5.12
+  }
+ },
+ "75": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "74",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "76": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "75",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "77": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "64",
+    0
+   ],
+   "source": [
+    "76",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "subtract"
+  }
+ },
+ "78": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "77",
+    0
+   ],
+   "source": [
+    "40",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "or"
+  }
+ },
+ "79": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "78",
+    0
+   ]
+  }
+ },
+ "80": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "79",
+    0
+   ],
+   "blur_radius": 15,
+   "sigma": 7.5
+  }
+ },
+ "81": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "80",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "82": {
+  "class_type": "ImageCompositeMasked",
+  "inputs": {
+   "destination": [
+    "13",
+    0
+   ],
+   "source": [
+    "37",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "resize_source": false,
+   "mask": [
+    "81",
+    0
+   ]
+  }
+ },
+ "83": {
+  "class_type": "LoadVideo",
+  "inputs": {
+   "file": "crackio/clip-back-mvt4x5rj-lyt9o.mp4"
+  }
+ },
+ "84": {
+  "class_type": "GetVideoComponents",
+  "inputs": {
+   "video": [
+    "83",
+    0
+   ]
+  }
+ },
+ "85": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "84",
+    0
+   ],
+   "batch_index": 113,
+   "length": 37
+  }
+ },
+ "86": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "85",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "width": 704,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "87": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "86",
+    0
+   ],
+   "batch_index": 36,
+   "length": 1
+  }
+ },
+ "88": {
+  "class_type": "RepeatImageBatch",
+  "inputs": {
+   "image": [
+    "87",
+    0
+   ],
+   "amount": 16
+  }
+ },
+ "89": {
+  "class_type": "BatchImagesNode",
+  "inputs": {
+   "images.image0": [
+    "86",
+    0
+   ],
+   "images.image1": [
+    "88",
+    0
+   ]
+  }
+ },
+ "90": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "89",
+    0
+   ],
+   "batch_index": 1,
+   "length": 40
+  }
+ },
+ "91": {
+  "class_type": "BatchImagesNode",
+  "inputs": {
+   "images.image0": [
+    "10",
+    0
+   ],
+   "images.image1": [
+    "90",
+    0
+   ]
+  }
+ },
+ "92": {
+  "class_type": "LTXVEmptyLatentAudio",
+  "inputs": {
+   "frames_number": 41,
+   "frame_rate": 24,
+   "batch_size": 1,
+   "audio_vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "93": {
+  "class_type": "EmptyLTXVLatentVideo",
+  "inputs": {
+   "width": 704,
+   "height": 1280,
+   "length": 41,
+   "batch_size": 1
+  }
+ },
+ "94": {
+  "class_type": "LTXVAddGuide",
+  "inputs": {
+   "positive": [
+    "8",
+    0
+   ],
+   "negative": [
+    "8",
+    1
+   ],
+   "vae": [
+    "4",
+    0
+   ],
+   "latent": [
+    "93",
+    0
+   ],
+   "image": [
+    "91",
+    0
+   ],
+   "frame_idx": 0,
+   "strength": 1
+  }
+ },
+ "95": {
+  "class_type": "BasicScheduler",
+  "inputs": {
+   "model": [
+    "2",
+    0
+   ],
+   "scheduler": "simple",
+   "steps": 8,
+   "denoise": 1
+  }
+ },
+ "96": {
+  "class_type": "RandomNoise",
+  "inputs": {
+   "noise_seed": 70436404231606
+  }
+ },
+ "97": {
+  "class_type": "CFGGuider",
+  "inputs": {
+   "model": [
+    "2",
+    0
+   ],
+   "positive": [
+    "94",
+    0
+   ],
+   "negative": [
+    "94",
+    1
+   ],
+   "cfg": 1
+  }
+ },
+ "98": {
+  "class_type": "KSamplerSelect",
+  "inputs": {
+   "sampler_name": "euler"
+  }
+ },
+ "99": {
+  "class_type": "LTXVConcatAVLatent",
+  "inputs": {
+   "video_latent": [
+    "94",
+    2
+   ],
+   "audio_latent": [
+    "92",
+    0
+   ]
+  }
+ },
+ "100": {
+  "class_type": "SamplerCustomAdvanced",
+  "inputs": {
+   "noise": [
+    "96",
+    0
+   ],
+   "guider": [
+    "97",
+    0
+   ],
+   "sampler": [
+    "98",
+    0
+   ],
+   "sigmas": [
+    "95",
+    0
+   ],
+   "latent_image": [
+    "99",
+    0
+   ]
+  }
+ },
+ "101": {
+  "class_type": "LTXVSeparateAVLatent",
+  "inputs": {
+   "av_latent": [
+    "100",
+    0
+   ]
+  }
+ },
+ "102": {
+  "class_type": "LTXVCropGuides",
+  "inputs": {
+   "positive": [
+    "94",
+    0
+   ],
+   "negative": [
+    "94",
+    1
+   ],
+   "latent": [
+    "101",
+    0
+   ]
+  }
+ },
+ "103": {
+  "class_type": "VAEDecodeTiled",
+  "inputs": {
+   "samples": [
+    "102",
+    2
+   ],
+   "vae": [
+    "4",
+    0
+   ],
+   "tile_size": 512,
+   "overlap": 64,
+   "temporal_size": 64,
+   "temporal_overlap": 16
+  }
+ },
+ "104": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "103",
+    0
+   ],
+   "batch_index": 0,
+   "length": 37
+  }
+ },
+ "105": {
+  "class_type": "LoadVideo",
+  "inputs": {
+   "file": "crackio/outline-mvt5hgof-s7274.mp4"
+  }
+ },
+ "106": {
+  "class_type": "GetVideoComponents",
+  "inputs": {
+   "video": [
+    "105",
+    0
+   ]
+  }
+ },
+ "107": {
+  "class_type": "LoadVideo",
+  "inputs": {
+   "file": "crackio/outline-mvt5hher-9tpp9.mp4"
+  }
+ },
+ "108": {
+  "class_type": "GetVideoComponents",
+  "inputs": {
+   "video": [
+    "107",
+    0
+   ]
+  }
+ },
+ "109": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "104",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "width": 720,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "110": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "106",
+    0
+   ],
+   "upscale_method": "bilinear",
+   "width": 720,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "111": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "110",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "112": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "111",
+    0
+   ],
+   "value": 0.5
+  }
+ },
+ "113": {
+  "class_type": "ImageBlend",
+  "inputs": {
+   "image1": [
+    "109",
+    0
+   ],
+   "image2": [
+    "85",
+    0
+   ],
+   "blend_factor": 1,
+   "blend_mode": "difference"
+  }
+ },
+ "114": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "113",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "115": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "113",
+    0
+   ],
+   "channel": "green"
+  }
+ },
+ "116": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "114",
+    0
+   ],
+   "source": [
+    "115",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "add"
+  }
+ },
+ "117": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "113",
+    0
+   ],
+   "channel": "blue"
+  }
+ },
+ "118": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "116",
+    0
+   ],
+   "source": [
+    "117",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "add"
+  }
+ },
+ "119": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "118",
+    0
+   ]
+  }
+ },
+ "120": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "119",
+    0
+   ],
+   "blur_radius": 7,
+   "sigma": 2
+  }
+ },
+ "121": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "120",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "122": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "121",
+    0
+   ],
+   "value": 0.36
+  }
+ },
+ "123": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "112",
+    0
+   ]
+  }
+ },
+ "124": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "123",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  }
+ },
+ "125": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "124",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "126": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "125",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "127": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "126",
+    0
+   ]
+  }
+ },
+ "128": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "127",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  }
+ },
+ "129": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "128",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "130": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "129",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "131": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "122",
+    0
+   ],
+   "source": [
+    "130",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "multiply"
+  }
+ },
+ "132": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "112",
+    0
+   ],
+   "source": [
+    "131",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "or"
+  }
+ },
+ "133": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "132",
+    0
+   ]
+  }
+ },
+ "134": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "133",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  }
+ },
+ "135": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "134",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "136": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "135",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "137": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "108",
+    0
+   ],
+   "upscale_method": "bilinear",
+   "width": 720,
+   "height": 1280,
+   "crop": "disabled"
+  }
+ },
+ "138": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "137",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "139": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "138",
+    0
+   ],
+   "value": 0.5
+  }
+ },
+ "140": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "112",
+    0
+   ]
+  }
+ },
+ "141": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "140",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 10
+  }
+ },
+ "142": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "141",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "143": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "142",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "144": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "139",
+    0
+   ],
+   "source": [
+    "143",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "subtract"
+  }
+ },
+ "145": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "144",
+    0
+   ]
+  }
+ },
+ "146": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "145",
+    0
+   ],
+   "blur_radius": 31,
+   "sigma": 5.12
+  }
+ },
+ "147": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "146",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "148": {
+  "class_type": "ThresholdMask",
+  "inputs": {
+   "mask": [
+    "147",
+    0
+   ],
+   "value": 0.025
+  }
+ },
+ "149": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "136",
+    0
+   ],
+   "source": [
+    "148",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "subtract"
+  }
+ },
+ "150": {
+  "class_type": "MaskComposite",
+  "inputs": {
+   "destination": [
+    "149",
+    0
+   ],
+   "source": [
+    "112",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "operation": "or"
+  }
+ },
+ "151": {
+  "class_type": "MaskToImage",
+  "inputs": {
+   "mask": [
+    "150",
+    0
+   ]
+  }
+ },
+ "152": {
+  "class_type": "ImageBlur",
+  "inputs": {
+   "image": [
+    "151",
+    0
+   ],
+   "blur_radius": 15,
+   "sigma": 7.5
+  }
+ },
+ "153": {
+  "class_type": "ImageToMask",
+  "inputs": {
+   "image": [
+    "152",
+    0
+   ],
+   "channel": "red"
+  }
+ },
+ "154": {
+  "class_type": "ImageCompositeMasked",
+  "inputs": {
+   "destination": [
+    "85",
+    0
+   ],
+   "source": [
+    "109",
+    0
+   ],
+   "x": 0,
+   "y": 0,
+   "resize_source": false,
+   "mask": [
+    "153",
+    0
+   ]
+  }
+ },
+ "155": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 36,
+   "length": 1
+  }
+ },
+ "156": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 35,
+   "length": 1
+  }
+ },
+ "157": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 34,
+   "length": 1
+  }
+ },
+ "158": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 33,
+   "length": 1
+  }
+ },
+ "159": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 32,
+   "length": 1
+  }
+ },
+ "160": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 31,
+   "length": 1
+  }
+ },
+ "161": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 30,
+   "length": 1
+  }
+ },
+ "162": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 29,
+   "length": 1
+  }
+ },
+ "163": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 28,
+   "length": 1
+  }
+ },
+ "164": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 27,
+   "length": 1
+  }
+ },
+ "165": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 26,
+   "length": 1
+  }
+ },
+ "166": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 25,
+   "length": 1
+  }
+ },
+ "167": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 24,
+   "length": 1
+  }
+ },
+ "168": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 23,
+   "length": 1
+  }
+ },
+ "169": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 22,
+   "length": 1
+  }
+ },
+ "170": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 21,
+   "length": 1
+  }
+ },
+ "171": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 20,
+   "length": 1
+  }
+ },
+ "172": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 19,
+   "length": 1
+  }
+ },
+ "173": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 18,
+   "length": 1
+  }
+ },
+ "174": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 17,
+   "length": 1
+  }
+ },
+ "175": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 16,
+   "length": 1
+  }
+ },
+ "176": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 15,
+   "length": 1
+  }
+ },
+ "177": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 14,
+   "length": 1
+  }
+ },
+ "178": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 13,
+   "length": 1
+  }
+ },
+ "179": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 12,
+   "length": 1
+  }
+ },
+ "180": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 11,
+   "length": 1
+  }
+ },
+ "181": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 10,
+   "length": 1
+  }
+ },
+ "182": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 9,
+   "length": 1
+  }
+ },
+ "183": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 8,
+   "length": 1
+  }
+ },
+ "184": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 7,
+   "length": 1
+  }
+ },
+ "185": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 6,
+   "length": 1
+  }
+ },
+ "186": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 5,
+   "length": 1
+  }
+ },
+ "187": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 4,
+   "length": 1
+  }
+ },
+ "188": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 3,
+   "length": 1
+  }
+ },
+ "189": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 2,
+   "length": 1
+  }
+ },
+ "190": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 1,
+   "length": 1
+  }
+ },
+ "191": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "154",
+    0
+   ],
+   "batch_index": 0,
+   "length": 1
+  }
+ },
+ "192": {
+  "class_type": "BatchImagesNode",
+  "inputs": {
+   "images.image0": [
+    "155",
+    0
+   ],
+   "images.image1": [
+    "156",
+    0
+   ],
+   "images.image2": [
+    "157",
+    0
+   ],
+   "images.image3": [
+    "158",
+    0
+   ],
+   "images.image4": [
+    "159",
+    0
+   ],
+   "images.image5": [
+    "160",
+    0
+   ],
+   "images.image6": [
+    "161",
+    0
+   ],
+   "images.image7": [
+    "162",
+    0
+   ],
+   "images.image8": [
+    "163",
+    0
+   ],
+   "images.image9": [
+    "164",
+    0
+   ],
+   "images.image10": [
+    "165",
+    0
+   ],
+   "images.image11": [
+    "166",
+    0
+   ],
+   "images.image12": [
+    "167",
+    0
+   ],
+   "images.image13": [
+    "168",
+    0
+   ],
+   "images.image14": [
+    "169",
+    0
+   ],
+   "images.image15": [
+    "170",
+    0
+   ],
+   "images.image16": [
+    "171",
+    0
+   ],
+   "images.image17": [
+    "172",
+    0
+   ],
+   "images.image18": [
+    "173",
+    0
+   ],
+   "images.image19": [
+    "174",
+    0
+   ],
+   "images.image20": [
+    "175",
+    0
+   ],
+   "images.image21": [
+    "176",
+    0
+   ],
+   "images.image22": [
+    "177",
+    0
+   ],
+   "images.image23": [
+    "178",
+    0
+   ],
+   "images.image24": [
+    "179",
+    0
+   ],
+   "images.image25": [
+    "180",
+    0
+   ],
+   "images.image26": [
+    "181",
+    0
+   ],
+   "images.image27": [
+    "182",
+    0
+   ],
+   "images.image28": [
+    "183",
+    0
+   ],
+   "images.image29": [
+    "184",
+    0
+   ],
+   "images.image30": [
+    "185",
+    0
+   ],
+   "images.image31": [
+    "186",
+    0
+   ],
+   "images.image32": [
+    "187",
+    0
+   ],
+   "images.image33": [
+    "188",
+    0
+   ],
+   "images.image34": [
+    "189",
+    0
+   ],
+   "images.image35": [
+    "190",
+    0
+   ],
+   "images.image36": [
+    "191",
+    0
+   ]
+  }
+ },
+ "193": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "192",
+    0
+   ],
+   "batch_index": 0,
+   "length": 36
+  }
+ },
+ "194": {
+  "class_type": "BatchImagesNode",
+  "inputs": {
+   "images.image0": [
+    "193",
+    0
+   ],
+   "images.image1": [
+    "82",
+    0
+   ]
+  }
+ },
+ "195": {
+  "class_type": "CreateVideo",
+  "inputs": {
+   "images": [
+    "194",
+    0
+   ],
+   "fps": 24,
+   "bit_depth": 8,
+   "color_space": "sRGB",
+   "codec": "none"
+  }
+ },
+ "196": {
+  "class_type": "SaveVideo",
+  "inputs": {
+   "video": [
+    "195",
+    0
+   ],
+   "filename_prefix": "crackio/ltx-2.5-ripple",
+   "format": "auto",
+   "format.codec": "h264",
+   "format.codec.encoding": "re-encode",
+   "format.codec.encoding.crf": 22
+  }
+ }
+}

@@ -1,0 +1,285 @@
+{
+  "$comment": "\"Prompts that worked\" on the home page, in display order. Each image was made from exactly the prompt next to it: `node scripts/assets/home.mjs gallery-13` remakes one through ChatGPT Images.",
+  "examples": [
+    {
+      "id": "gallery-01",
+      "title": "Cobalt suit in the desert",
+      "category": "People",
+      "aspect": "2:3",
+      "prompt": "Fashion editorial portrait of a woman in an oversized cobalt-blue suit standing in a sun-bleached desert, hard noon sun with deep graphic shadows, magazine cover energy. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-14",
+      "title": "Astronaut at the diner",
+      "category": "Cinematic",
+      "aspect": "16:9",
+      "prompt": "An astronaut in a scuffed white spacesuit sits alone at a roadside diner counter at night, helmet on the stool beside him, a waitress pouring him coffee, neon glow through the rain-streaked window, lonely Edward Hopper mood, cinematic 35mm film still, teal and amber palette."
+    },
+    {
+      "id": "gallery-07",
+      "title": "Orange headphones",
+      "category": "Product",
+      "aspect": "1:1",
+      "prompt": "Chunky bright orange over-ear headphones resting on a pastel pink cylindrical pedestal, playful product photography with hard sunlight shadows on a mint backdrop. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-10",
+      "title": "Whale over the village",
+      "category": "Art",
+      "aspect": "3:2",
+      "prompt": "Surreal matte painting of a giant whale gliding through the clouds above a quiet coastal village at night, moonlit, dreamlike. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-13",
+      "title": "Golden-hour freckles",
+      "category": "People",
+      "aspect": "4:5",
+      "prompt": "Close-up portrait of a young woman with freckles by a window at golden hour, sunlight through a sheer curtain casting soft striped shadows across her face, bright catchlights in her green eyes, 85mm lens at f/1.8, natural skin texture, warm Kodak Portra 400 tones."
+    },
+    {
+      "id": "gallery-02",
+      "title": "Ramen in side light",
+      "category": "Food",
+      "aspect": "3:2",
+      "prompt": "A steaming bowl of ramen on a dark wooden counter, moody side light, three-quarter overhead angle, steam catching the light, food photography. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-22",
+      "title": "The fox baker",
+      "category": "Art",
+      "aspect": "1:1",
+      "prompt": "Claymation scene of a tiny fox baker in a striped apron pulling a tray of fresh bread from a brick oven, handmade clay textures with visible fingerprints, warm cozy light, stop-motion film still."
+    },
+    {
+      "id": "gallery-18",
+      "title": "Snow leopard",
+      "category": "Nature",
+      "aspect": "3:2",
+      "prompt": "A snow leopard resting on a rocky ledge in a light blizzard, looking straight into the lens, snowflakes caught in its thick fur, pale blue-grey palette, 600mm telephoto wildlife photograph."
+    },
+    {
+      "id": "gallery-04",
+      "title": "Rooftop at dusk",
+      "category": "Art",
+      "aspect": "2:3",
+      "prompt": "Anime-style illustration of a girl standing on a rooftop at dusk with glowing city lights far below, wind in her hair and jacket, painterly violet and orange sky, cinematic composition. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-28",
+      "title": "Mountain pass at night",
+      "category": "Cinematic",
+      "aspect": "16:9",
+      "prompt": "A matte black sports car driving through a wet mountain pass at night, red light trails from its taillights, mist and cliffs lit by its headlights, long-exposure automotive photography, no badges or plates."
+    },
+    {
+      "id": "gallery-16",
+      "title": "Soufflé pancakes",
+      "category": "Food",
+      "aspect": "4:5",
+      "prompt": "A tall stack of fluffy Japanese soufflé pancakes with a melting pat of butter, maple syrup mid-pour and a dusting of powdered sugar, on a pale ceramic plate, soft backlight from a café window, shallow depth of field, food magazine photography."
+    },
+    {
+      "id": "gallery-05",
+      "title": "Villa over the sea",
+      "category": "Places",
+      "aspect": "3:2",
+      "prompt": "A modern concrete villa cantilevered over a cliff above a stormy sea, dramatic overcast light, architectural photography. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-26",
+      "title": "Crimson on the salt flats",
+      "category": "People",
+      "aspect": "2:3",
+      "prompt": "Fashion editorial on white salt flats at dawn: a woman in a long crimson gown runs toward the camera, small in the frame and fully visible, the red fabric trailing far behind her in the wind, pale pink sky and distant mountains, wide shot."
+    },
+    {
+      "id": "gallery-15",
+      "title": "Watch in black water",
+      "category": "Product",
+      "aspect": "1:1",
+      "prompt": "A steel mechanical wristwatch with a clean dial and no text, splashing into black water, droplets frozen mid-air around it, a single hard rim light tracing the case and bracelet, deep black background, high-speed product photography."
+    },
+    {
+      "id": "gallery-08",
+      "title": "Coastal gas station",
+      "category": "Cinematic",
+      "aspect": "3:2",
+      "prompt": "A red vintage convertible parked at a lonely coastal gas station at dusk, pink and teal neon glow without readable lettering, cinematic Americana. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-30",
+      "title": "Attic on a rainy day",
+      "category": "Places",
+      "aspect": "4:5",
+      "prompt": "A cozy attic reading nook on a rainy afternoon: a worn armchair with a knitted blanket, stacks of books, a cup of tea steaming on the sill of a round window streaked with rain, warm lamp light, interior photography."
+    },
+    {
+      "id": "gallery-25",
+      "title": "Sunrise in a dewdrop",
+      "category": "Nature",
+      "aspect": "3:2",
+      "prompt": "Macro photograph of a dewdrop resting on a dragonfly's wing, the wing veins like stained glass, a tiny upside-down sunrise reflected inside the drop, razor-thin focus, soft green bokeh."
+    },
+    {
+      "id": "gallery-11",
+      "title": "Fisheye ollie",
+      "category": "People",
+      "aspect": "2:3",
+      "prompt": "A skateboarder captured mid-ollie over a concrete stair set, fisheye lens, golden hour, nineties skate magazine look. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-23",
+      "title": "Cutaway apartment",
+      "category": "Art",
+      "aspect": "1:1",
+      "prompt": "Isometric 3D illustration of a cozy cutaway apartment building with three floors: a plant-filled living room, a tiny kitchen and a rooftop garden with string lights, soft pastel colors, clean miniature render."
+    },
+    {
+      "id": "gallery-20",
+      "title": "The buried starship",
+      "category": "Cinematic",
+      "aspect": "16:9",
+      "prompt": "A colossal derelict starship half-buried in desert dunes at sunset, a few tiny explorers with lanterns walking toward its hull, dust hanging in the air, vast minimalist sci-fi scale, cinematic matte painting."
+    },
+    {
+      "id": "gallery-09",
+      "title": "The fisherman",
+      "category": "People",
+      "aspect": "2:3",
+      "prompt": "Street portrait of an elderly fisherman with a deeply weathered face and a yellow raincoat on a harbor, overcast soft light, documentary photography. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-32",
+      "title": "Serum splash",
+      "category": "Product",
+      "aspect": "4:5",
+      "prompt": "A pink serum bottle with a glass dropper splashing into clear water, a crown of droplets frozen around it, soft peach backdrop, clean commercial beauty photography, no label or text."
+    },
+    {
+      "id": "gallery-17",
+      "title": "Tea room at dawn",
+      "category": "Places",
+      "aspect": "3:2",
+      "prompt": "A quiet Japanese tea room at dawn: tatami floor, glowing shoji screens, a single flowering branch in a ceramic vase, long soft shadows across the mats, calm symmetrical composition, minimalist architectural photography."
+    },
+    {
+      "id": "gallery-03",
+      "title": "Greenhouse on a cloud",
+      "category": "Art",
+      "aspect": "1:1",
+      "prompt": "Stylized 3D render of a tiny glass greenhouse cabin floating on a fluffy cloud, soft pastel lighting, clay-like materials, whimsical miniature world. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-31",
+      "title": "Night market of the future",
+      "category": "Cinematic",
+      "aspect": "2:3",
+      "prompt": "A street food stall glowing in a crowded rainy alley of a future city, steam rising from sizzling woks, neon light and holographic reflections in the puddles, cinematic cyberpunk film still, no readable text."
+    },
+    {
+      "id": "gallery-34",
+      "title": "Diving with a turtle",
+      "category": "Nature",
+      "aspect": "16:9",
+      "prompt": "A free diver glides above a coral reef in crystal-clear blue water beside a sea turtle, sun rays piercing down from the surface, wide-angle underwater photography."
+    },
+    {
+      "id": "gallery-40",
+      "title": "Smoke over the ice",
+      "category": "Food",
+      "aspect": "4:5",
+      "prompt": "A cocktail with a large clear ice sphere and an orange peel twist on a dark marble bar, a wisp of smoke drifting over the glass, warm amber backlight, moody bar photography."
+    },
+    {
+      "id": "gallery-24",
+      "title": "Under the elevated tracks",
+      "category": "People",
+      "aspect": "3:2",
+      "prompt": "Black-and-white street photograph of a man in a fedora crossing a sunlit New York intersection, long hard shadows from the elevated train tracks striping the street, high contrast, 1950s rangefinder look, visible grain."
+    },
+    {
+      "id": "gallery-21",
+      "title": "Paris in watercolor",
+      "category": "Art",
+      "aspect": "4:5",
+      "prompt": "Loose watercolor illustration of a Paris café corner on a rainy evening, people with umbrellas, warm glowing windows, soft bleeding washes with fine ink lines, white paper showing through, no readable signs."
+    },
+    {
+      "id": "gallery-06",
+      "title": "Before the fight",
+      "category": "People",
+      "aspect": "2:3",
+      "prompt": "A boxer wrapping his hands in a dim old gym, single overhead bulb, sweat and dust in the air, gritty sports documentary photograph. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-36",
+      "title": "Handheld console concept",
+      "category": "Product",
+      "aspect": "1:1",
+      "prompt": "Concept render of a translucent orange retro-futuristic handheld game console on a terrazzo pedestal, chunky tactile buttons, soft studio light, playful minimalist industrial design, clean product shot, no logos."
+    },
+    {
+      "id": "gallery-29",
+      "title": "Castle in the mist",
+      "category": "Art",
+      "aspect": "3:2",
+      "prompt": "A medieval stone castle on a sea cliff at dawn, mist pouring over its walls like a slow waterfall, a flock of birds circling the tallest tower, soft golden light, painterly fantasy concept art."
+    },
+    {
+      "id": "gallery-37",
+      "title": "Tent under the Milky Way",
+      "category": "Places",
+      "aspect": "2:3",
+      "prompt": "A lone orange tent glowing on a mountain ridge under the Milky Way, a faint green airglow on the horizon, cool blue night, long-exposure astrophotography."
+    },
+    {
+      "id": "gallery-33",
+      "title": "Asleep in the leaves",
+      "category": "Nature",
+      "aspect": "3:2",
+      "prompt": "A golden retriever puppy asleep in a pile of autumn leaves, soft late-afternoon light, shallow depth of field, warm candid pet photography."
+    },
+    {
+      "id": "gallery-38",
+      "title": "Blue spotlight solo",
+      "category": "People",
+      "aspect": "4:5",
+      "prompt": "Moody portrait of a jazz saxophonist mid-solo in a smoky club, a single blue spotlight from above, sweat on his brow, brass glinting, shallow depth of field, classic 1960s jazz record cover mood."
+    },
+    {
+      "id": "gallery-12",
+      "title": "Morning flat lay",
+      "category": "Food",
+      "aspect": "1:1",
+      "prompt": "Overhead flat lay of a cappuccino, a flaky croissant and an open blank notebook on a white marble table, soft morning light, lifestyle photography. Photographic, cinematic color grade, natural film grain, rich contrast. No text, no letters, no logos, no watermark."
+    },
+    {
+      "id": "gallery-35",
+      "title": "Canyon express poster",
+      "category": "Art",
+      "aspect": "2:3",
+      "prompt": "Mid-century travel poster illustration of a sleek streamlined train crossing a desert canyon at sunset, flat geometric shapes, bold limited palette of orange, teal and cream, screen-print texture, no text."
+    },
+    {
+      "id": "gallery-27",
+      "title": "Out of the blocks",
+      "category": "People",
+      "aspect": "3:2",
+      "prompt": "A sprinter exploding out of the starting blocks on a red track at night, low side angle, chalk dust and sweat frozen in the stadium lights, every muscle tense, sports photography at 1/4000s, no logos or sponsor boards."
+    },
+    {
+      "id": "gallery-19",
+      "title": "Glacial river from above",
+      "category": "Places",
+      "aspect": "2:3",
+      "prompt": "Aerial drone photograph looking straight down at a turquoise glacial river braiding across black volcanic sand in Iceland, intricate branching patterns, soft overcast light, abstract and minimal."
+    },
+    {
+      "id": "gallery-39",
+      "title": "Storm at the lighthouse",
+      "category": "Art",
+      "aspect": "16:9",
+      "prompt": "Detailed pixel art of a lighthouse keeper's cottage on a cliff during a thunderstorm, waves crashing below, warm light in the windows, lightning in the distance, 16-bit retro game style, limited palette."
+    }
+  ]
+}

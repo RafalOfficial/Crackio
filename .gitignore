@@ -1,0 +1,68 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js (and copies of its cache)
+/.next/
+/.next*/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed); the example is the template people copy
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# crackio local data (generations, uploads, settings with API keys)
+/data/
+# full-size originals of generated site imagery (optimized copies live in public/assets)
+/assets-src/
+.playwright-mcp/
+
+
+# research notes and reference screenshots (local only)
+/.research/
+
+
+# reference ads (not ours to publish), and any other clip left at the top level
+/hfield-*.mp4
+/*.mp4
+
+# Claude Code's local lock files
+/.claude/*.lock
+
+# Python bytecode (the ComfyUI bridge)
+__pycache__/
+
+# The live demo's local test data (docs/DEMO.md)
+.demo-data/
+*.stackdump

@@ -1,0 +1,151 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux3-image-klein-int8-convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_4b_int8_convrot.safetensors",
+      "type": "flux3",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "Image 1 is a depth map of the shot (white is near): keep its camera and where the 2 subjects are and how big. Image 2 is a rough view of the place, a sunlit Parisian cafe terrace on a cobbled street, morning, from this camera: draw this same view fresh, sharp and real. Image 3 is the teenage boy in a backwards red cap and image 4 is the woman with long black box braids: keep their faces, hair, skin and clothes exactly. The pictures show how they look; the request decides their pose, action, expression and framing. <obj_1>, the teenage boy in a backwards red cap, is in the middle of the frame, nearest the camera, framed from mid-thigh up, turned toward the woman with long black box braids. Turned toward her, he laughs and nudges their shared coffee closer. <obj_2>, the woman with long black box braids, is right of center of the frame, framed from mid-thigh up, turned toward the teenage boy in a backwards red cap. Facing him, she laughs and reaches for the cup between them. Shot at eye level with a 35mm lens. Kai and Noor share a coffee and laugh. They are caught mid-moment, reacting to each other: relaxed, natural body language, real expressions, mid-gesture, not posing. Anything a person holds or uses is clearly visible and real in their hand. Around them the place has its usual life: other people and passers-by in the background. Each of the people named here appears exactly once. Cinematic film still, anamorphic look, subtle film grain, rich color grade. A candid, natural photograph, no text. [{\"id\":\"obj_1\",\"bbox\":[317,415,1000,518],\"desc\":\"teenage boy in a backwards red cap\"},{\"id\":\"obj_2\",\"bbox\":[337,620,1000,725],\"desc\":\"woman with long black box braids\"}]",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/ref-mvtp2e33-83z8.png"
+    }
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/ref-mvtp2enc-o13u.png"
+    }
+  },
+  "7": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/ref-mvt6phfw-iu1k.png"
+    }
+  },
+  "8": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/ref-mvt6qse3-1zst.png"
+    }
+  },
+  "9": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "4",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "ReferenceMultiLatent",
+    "inputs": {
+      "resolution": "resize",
+      "resolution.megapixels": 0.35,
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "9",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "images.image0": [
+        "5",
+        0
+      ],
+      "images.image1": [
+        "6",
+        0
+      ],
+      "images.image2": [
+        "7",
+        0
+      ],
+      "images.image3": [
+        "8",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 203673058808899,
+      "steps": 16,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "10",
+        1
+      ],
+      "latent_image": [
+        "10",
+        2
+      ]
+    }
+  },
+  "12": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "11",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "13": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "12",
+        0
+      ],
+      "filename_prefix": "crackio/flux3-klein"
+    }
+  }
+}

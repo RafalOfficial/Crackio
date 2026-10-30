@@ -1,0 +1,286 @@
+{
+  "keep": [
+    "ltx-2.5",
+    "scail-2",
+    "z-image-turbo",
+    "flux2-klein-4b",
+    "flux3-klein",
+    "seedvr2-3b",
+    "realesrgan-x4"
+  ],
+  "jobs": {
+    "image": [
+      {
+        "name": "t2i",
+        "tool": "image",
+        "aspect": "4:5",
+        "repeat": 2,
+        "prompt": "A close-up portrait photograph of a woman in her late twenties with freckles and loose curly auburn hair, wearing a cream cable-knit sweater, sitting by a rain-streaked caf\u00e9 window in the afternoon. Soft daylight from the left, shallow depth of field, natural skin texture with visible pores, 85mm lens, warm muted colours, photorealistic.",
+        "params": {
+          "kind": "image",
+          "options": {}
+        }
+      }
+    ],
+    "edit": [
+      {
+        "name": "edit",
+        "tool": "image",
+        "aspect": "4:5",
+        "repeat": 2,
+        "prompt": "Change her red raincoat to a bright yellow raincoat. Keep her face, hair, pose, the street and the lighting exactly the same.",
+        "references": [
+          {
+            "url": "/api/media/out/TLfcyFe4eeGkZ2-0.png",
+            "label": "the picture to change",
+            "role": "edit-target"
+          }
+        ],
+        "params": {
+          "kind": "image",
+          "options": {}
+        }
+      }
+    ],
+    "imageedit": [
+      {
+        "name": "t2i",
+        "tool": "image",
+        "aspect": "4:5",
+        "repeat": 2,
+        "prompt": "A close-up portrait photograph of a woman in her late twenties with freckles and loose curly auburn hair, wearing a cream cable-knit sweater, sitting by a rain-streaked caf\u00e9 window in the afternoon. Soft daylight from the left, shallow depth of field, natural skin texture with visible pores, 85mm lens, warm muted colours, photorealistic.",
+        "params": {
+          "kind": "image",
+          "options": {}
+        }
+      },
+      {
+        "name": "edit",
+        "tool": "image",
+        "aspect": "4:5",
+        "repeat": 1,
+        "prompt": "Change her red raincoat to a bright yellow raincoat. Keep her face, hair, pose, the street and the lighting exactly the same.",
+        "references": [
+          {
+            "url": "/api/media/out/TLfcyFe4eeGkZ2-0.png",
+            "label": "the picture to change",
+            "role": "edit-target"
+          }
+        ],
+        "params": {
+          "kind": "image",
+          "options": {}
+        }
+      }
+    ],
+    "upscale": [
+      {
+        "name": "upscale2x",
+        "tool": "upscale",
+        "aspect": "4:5",
+        "repeat": 2,
+        "prompt": "Upscale 2\u00d7",
+        "references": [
+          {
+            "url": "/api/media/out/TLfcyFe4eeGkZ2-0.png",
+            "label": "the original image",
+            "role": "edit-target"
+          }
+        ],
+        "params": {
+          "kind": "upscale",
+          "sourceUrl": "/api/media/out/TLfcyFe4eeGkZ2-0.png",
+          "options": {
+            "scale": 2
+          }
+        }
+      }
+    ],
+    "video": [
+      {
+        "name": "i2v",
+        "tool": "video",
+        "aspect": "4:5",
+        "repeat": 1,
+        "timeoutMin": 45,
+        "prompt": "She slowly turns her head toward the camera and gives a small smile while rain keeps falling, her hair moving slightly in the wind, neon signs flickering behind her. Slow push-in.",
+        "references": [
+          {
+            "url": "/api/media/out/TLfcyFe4eeGkZ2-0.png",
+            "label": "the start frame",
+            "role": "subject"
+          }
+        ],
+        "params": {
+          "kind": "video",
+          "options": {
+            "duration": 5,
+            "resolution": "720p"
+          },
+          "startUrl": "/api/media/out/TLfcyFe4eeGkZ2-0.png"
+        }
+      }
+    ],
+    "t2v": [
+      {
+        "name": "t2v",
+        "tool": "video",
+        "aspect": "16:9",
+        "repeat": 1,
+        "timeoutMin": 45,
+        "prompt": "A woman in a red raincoat walks toward the camera along a rainy neon-lit Tokyo street at night, puddles reflecting the signs, slow tracking shot, cinematic.",
+        "params": {
+          "kind": "video",
+          "options": {
+            "duration": 5,
+            "resolution": "720p"
+          }
+        }
+      }
+    ]
+  },
+  "models": [
+    {
+      "model": "tpl-qwen-image-2.1",
+      "variant": "int8-turbo",
+      "kind": "imageedit",
+      "remove": true
+    },
+    {
+      "model": "tpl-z-image",
+      "variant": "int8",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-krea-2",
+      "variant": "int8-turbo",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-mage-flow-edit",
+      "variant": "int8-turbo",
+      "kind": "edit",
+      "remove": true
+    },
+    {
+      "model": "tpl-boogu-edit",
+      "variant": "fp8",
+      "kind": "edit",
+      "remove": true
+    },
+    {
+      "model": "tpl-mage-flow",
+      "variant": "int8-turbo",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-boogu",
+      "variant": "fp8-turbo",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-ming-image",
+      "variant": "int8",
+      "kind": "imageedit",
+      "remove": true
+    },
+    {
+      "model": "tpl-hidream-o1",
+      "variant": "fp8-dev",
+      "kind": "imageedit",
+      "remove": true
+    },
+    {
+      "model": "tpl-ernie-image",
+      "variant": "default-turbo",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-lens",
+      "variant": "bf16-turbo",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-anima",
+      "variant": "default",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-sdxl",
+      "variant": "default",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-chroma",
+      "variant": "fp8",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-flux2-klein-9b",
+      "variant": "fp8",
+      "kind": "imageedit",
+      "remove": true
+    },
+    {
+      "model": "tpl-qwen-image-edit-2511",
+      "variant": "int8",
+      "kind": "edit",
+      "remove": true
+    },
+    {
+      "model": "tpl-joyai-edit",
+      "variant": "int8",
+      "kind": "edit",
+      "remove": true
+    },
+    {
+      "model": "tpl-ideogram-4",
+      "variant": "int8",
+      "kind": "image",
+      "remove": true
+    },
+    {
+      "model": "tpl-causal-forcing-video",
+      "variant": "default",
+      "kind": "video",
+      "remove": true
+    },
+    {
+      "model": "tpl-kandinsky-5-video",
+      "variant": "default",
+      "kind": "t2v",
+      "remove": true
+    },
+    {
+      "model": "tpl-wan2.2-14b-video",
+      "variant": "fp8",
+      "kind": "video",
+      "remove": true
+    },
+    {
+      "model": "tpl-ltx-2.3-video",
+      "variant": "fp8",
+      "kind": "video",
+      "remove": true
+    },
+    {
+      "model": "tpl-seedvr2-7b-upscale",
+      "variant": "int8",
+      "kind": "upscale",
+      "remove": true,
+      "again": true
+    }
+  ],
+  "evictable": [
+    "ltx-2.5"
+  ]
+}

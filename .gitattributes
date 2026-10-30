@@ -1,0 +1,4 @@
+# One line ending in the repo (LF) for every text file, whichever OS checks it out; git detects binaries itself.
+* text=auto eol=lf
+# Windows runs batch files with CRLF only (labels and goto can break on LF).
+*.bat text eol=crlf

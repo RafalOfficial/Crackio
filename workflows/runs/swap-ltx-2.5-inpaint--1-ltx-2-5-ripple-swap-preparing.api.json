@@ -1,0 +1,424 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "sam3.1_multiplex_fp16.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "crackio/clip-mvu06ek1-y803a.mp4"
+    }
+  },
+  "3": {
+    "class_type": "GetVideoComponents",
+    "inputs": {
+      "video": [
+        "2",
+        0
+      ]
+    }
+  },
+  "4": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "3",
+        0
+      ],
+      "upscale_method": "area",
+      "width": 640,
+      "height": 352,
+      "crop": "disabled"
+    }
+  },
+  "5": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "crackio/clip-back-mvu06j6x-obqra.mp4"
+    }
+  },
+  "6": {
+    "class_type": "GetVideoComponents",
+    "inputs": {
+      "video": [
+        "5",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "6",
+        0
+      ],
+      "upscale_method": "area",
+      "width": 640,
+      "height": 352,
+      "crop": "disabled"
+    }
+  },
+  "8": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "batch_index": 0,
+      "length": 1
+    }
+  },
+  "9": {
+    "class_type": "PrimitiveString",
+    "inputs": {
+      "value": "[{\"x\":318,\"y\":165}]"
+    }
+  },
+  "10": {
+    "class_type": "SAM3_Detect",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "image": [
+        "8",
+        0
+      ],
+      "threshold": 0.4,
+      "refine_iterations": 2,
+      "individual_masks": false,
+      "positive_coords": [
+        "9",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "batch_index": 0,
+      "length": 97
+    }
+  },
+  "12": {
+    "class_type": "SAM3_VideoTrack",
+    "inputs": {
+      "images": [
+        "11",
+        0
+      ],
+      "model": [
+        "1",
+        0
+      ],
+      "initial_mask": [
+        "10",
+        0
+      ],
+      "detection_threshold": 0.5,
+      "max_objects": 1,
+      "detect_interval": 1
+    }
+  },
+  "13": {
+    "class_type": "SAM3_TrackToMask",
+    "inputs": {
+      "track_data": [
+        "12",
+        0
+      ],
+      "object_indices": "0"
+    }
+  },
+  "14": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "13",
+        0
+      ]
+    }
+  },
+  "15": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "7",
+        0
+      ],
+      "batch_index": 96,
+      "length": 1
+    }
+  },
+  "16": {
+    "class_type": "SAM3_VideoTrack",
+    "inputs": {
+      "images": [
+        "15",
+        0
+      ],
+      "model": [
+        "1",
+        0
+      ],
+      "initial_mask": [
+        "10",
+        0
+      ],
+      "detection_threshold": 0.5,
+      "max_objects": 1,
+      "detect_interval": 1
+    }
+  },
+  "17": {
+    "class_type": "SAM3_TrackToMask",
+    "inputs": {
+      "track_data": [
+        "16",
+        0
+      ],
+      "object_indices": "0"
+    }
+  },
+  "18": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "17",
+        0
+      ]
+    }
+  },
+  "19": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "person:24",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "20": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "batch_index": 0,
+      "length": 90
+    }
+  },
+  "21": {
+    "class_type": "SAM3_Detect",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "image": [
+        "20",
+        0
+      ],
+      "conditioning": [
+        "19",
+        0
+      ],
+      "threshold": 0.45,
+      "refine_iterations": 0,
+      "individual_masks": false
+    }
+  },
+  "22": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "21",
+        0
+      ]
+    }
+  },
+  "23": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "batch_index": 90,
+      "length": 7
+    }
+  },
+  "24": {
+    "class_type": "SAM3_Detect",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "image": [
+        "23",
+        0
+      ],
+      "conditioning": [
+        "19",
+        0
+      ],
+      "threshold": 0.45,
+      "refine_iterations": 0,
+      "individual_masks": false
+    }
+  },
+  "25": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "24",
+        0
+      ]
+    }
+  },
+  "26": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "ball:4",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "27": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "batch_index": 0,
+      "length": 90
+    }
+  },
+  "28": {
+    "class_type": "SAM3_Detect",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "image": [
+        "27",
+        0
+      ],
+      "conditioning": [
+        "26",
+        0
+      ],
+      "threshold": 0.45,
+      "refine_iterations": 0,
+      "individual_masks": false
+    }
+  },
+  "29": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "28",
+        0
+      ]
+    }
+  },
+  "30": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "batch_index": 90,
+      "length": 7
+    }
+  },
+  "31": {
+    "class_type": "SAM3_Detect",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "image": [
+        "30",
+        0
+      ],
+      "conditioning": [
+        "26",
+        0
+      ],
+      "threshold": 0.45,
+      "refine_iterations": 0,
+      "individual_masks": false
+    }
+  },
+  "32": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "31",
+        0
+      ]
+    }
+  },
+  "33": {
+    "class_type": "BatchImagesNode",
+    "inputs": {
+      "images.image0": [
+        "14",
+        0
+      ],
+      "images.image1": [
+        "18",
+        0
+      ],
+      "images.image2": [
+        "22",
+        0
+      ],
+      "images.image3": [
+        "25",
+        0
+      ],
+      "images.image4": [
+        "29",
+        0
+      ],
+      "images.image5": [
+        "32",
+        0
+      ]
+    }
+  },
+  "34": {
+    "class_type": "SaveAnimatedWEBP",
+    "inputs": {
+      "images": [
+        "33",
+        0
+      ],
+      "filename_prefix": "crackio/ripple-look",
+      "fps": 24,
+      "lossless": true,
+      "quality": 100,
+      "method": "fastest"
+    }
+  }
+}

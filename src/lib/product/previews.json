@@ -1,0 +1,930 @@
+{
+  "camera-auto": {
+    "drink": "Chilled citrus hydration against bold orange",
+    "tee": "Sage tee laid flat against bold plum",
+    "capsules": "Daily longevity routine against bold amber",
+    "sneakers": "Everyday sneakers against bold blue",
+    "headphones": "Cream headphones against bold blue",
+    "candle": "Terracotta candle against bold cedar green"
+  },
+  "camera-auto-person": {
+    "drink": "A refreshing sip during a beach walk",
+    "tee": "An easy city walk in sage green",
+    "capsules": "Morning capsule and water at the kitchen counter",
+    "sneakers": "An easy stride past neighborhood storefronts",
+    "headphones": "Focused listening at her weekday desk",
+    "candle": "A candlelit pause with an afternoon book"
+  },
+  "camera-close": {
+    "drink": "Cold citrus hydration in crisp orange",
+    "capsules": "Amber glass and ivory label in crisp close-up",
+    "tee": "Soft sage fabric and the OASE chest detail",
+    "headphones": "Cream earcup detail against bold blue",
+    "candle": "Terracotta texture and warm wood up close",
+    "sneakers": "Suede heel detail against bold blue"
+  },
+  "camera-close-person": {
+    "drink": "Just lowered after a refreshing beach sip",
+    "tee": "Chest logo in motion on a city walk",
+    "headphones": "Focused listening at her weekday desk",
+    "capsules": "A capsule and water before breakfast",
+    "sneakers": "Heel detail during a city stroll",
+    "candle": "Just lit for a quiet afternoon at home"
+  },
+  "camera-eye": {
+    "drink": "Chilled citrus hydration with a bright orange backdrop",
+    "capsules": "Daily longevity routine against bold amber",
+    "tee": "Sage everyday tee against a bold plum backdrop",
+    "watch": "Tan leather and silver against bold blue",
+    "bag": "Workday tote against bold blue",
+    "treats": "Green treat pouch against sweet potato orange"
+  },
+  "camera-eye-person": {
+    "tee": "Easy city walk in sage green",
+    "capsules": "Morning capsule ready beside a glass of water",
+    "drink": "A refreshing drink after a beach walk",
+    "watch": "Checking the time over morning coffee",
+    "bag": "Carrying everyday essentials along a city sidewalk",
+    "treats": "A park training reward for a patient dog"
+  },
+  "camera-high": {
+    "drink": "Chilled hydration ready for the next workout",
+    "capsules": "Daily capsules against a bold blue backdrop",
+    "tee": "Sage tee folded on a bold plum backdrop",
+    "bag": "Cognac tote with everyday work essentials",
+    "treats": "Green pouch and bone treats on bold orange",
+    "watch": "Silver and tan against bold blue"
+  },
+  "camera-high-person": {
+    "capsules": "A capsule and water before breakfast",
+    "tee": "An easy stride along a city sidewalk",
+    "watch": "Checking the time over morning coffee",
+    "drink": "A refreshing pause on a beach lounger",
+    "bag": "Cognac tote on a morning city walk",
+    "treats": "A park training reward beside the picnic blanket"
+  },
+  "camera-low": {
+    "drink": "Cool citrus hydration against bold orange",
+    "capsules": "",
+    "tee": "Sage tee hanging against bold plum",
+    "headphones": "Cream headphones against bold blue",
+    "sneakers": "Ivory sneakers on a bold caramel studio floor",
+    "candle": "Terracotta candle against bold blue"
+  },
+  "camera-low-person": {
+    "drink": "Just refreshed on a beach lounger",
+    "tee": "Sage tee moving through a city morning",
+    "sneakers": "Everyday stride past city storefronts",
+    "capsules": "Morning capsule with water at the kitchen counter",
+    "headphones": "Headphones on, settling into focused weekday work",
+    "candle": "Just lit for an afternoon reading break"
+  },
+  "camera-three": {
+    "drink": "Chilled citrus hydration on a bold orange backdrop",
+    "capsules": "A clean daily ritual against bold blue",
+    "tee": "Neatly folded sage tee against bold plum",
+    "serum": "Golden serum on a bold blue vanity stage",
+    "perfume": "Gold fragrance against a bold golden backdrop",
+    "cookies": "Cookie pouch with coffee on a golden backdrop"
+  },
+  "camera-three-person": {
+    "capsules": "Morning capsule routine beside a glass of water",
+    "tee": "Sage-green comfort on a city walk",
+    "serum": "A golden drop before morning skincare",
+    "cookies": "A cookie break by the café window",
+    "drink": "A refreshing pause on a sunny beach lounger",
+    "perfume": "A quiet fragrance ritual before going out"
+  },
+  "camera-top": {
+    "drink": "Citrus hydration laid out with a workout towel",
+    "capsules": "A clean layout for a daily longevity routine",
+    "tee": "Sage everyday tee against a bold rose backdrop",
+    "cookies": "Cookies and coffee on chocolate brown",
+    "perfume": "Gold fragrance on a bold midnight-blue flat lay",
+    "serum": "Golden serum on a bold blue skincare flat lay"
+  },
+  "camera-top-person": {
+    "drink": "A refreshing pause on a beach lounger",
+    "capsules": "Morning capsule and water at the kitchen counter",
+    "tee": "A relaxed pause on a city bench",
+    "cookies": "A cookie with coffee at the window table",
+    "serum": "A few drops pressed into clean skin",
+    "perfume": "A quiet wrist spritz before going out"
+  },
+  "camera-wide": {
+    "drink": "Chilled citrus hydration on bold orange",
+    "capsules": "Daily longevity routine against bold blue",
+    "tee": "Sage tee hanging against bold plum",
+    "watch": "Minimal watch on a bold blue desktop",
+    "bag": "Cognac work tote against bold blue",
+    "treats": "Forest-green pouch against sweet-potato orange"
+  },
+  "camera-wide-person": {
+    "drink": "A refreshing pause on the beach boardwalk",
+    "tee": "An easy walk through the city",
+    "watch": "Checking the time over a café coffee",
+    "capsules": "Morning capsule and water at the kitchen counter",
+    "bag": "Heading to work with her everyday shoulder tote",
+    "treats": "A park training reward before the next walk"
+  },
+  "finish-auto": {
+    "tee": "An easy afternoon walk in sage green",
+    "drink": "A refreshing pause between outdoor court games",
+    "capsules": "A capsule and water before breakfast",
+    "bag": "On her shoulder, heading into the workday",
+    "treats": "A well-earned treat after sitting on command",
+    "watch": "Checking the time before leaving the café"
+  },
+  "finish-auto-alone": {
+    "drink": "Chilled hydration waiting on the gym bench",
+    "capsules": "A quiet morning wellness ritual",
+    "tee": "Your everyday tee, ready in the wardrobe",
+    "bag": "Ready for work on a walnut desk",
+    "watch": "Ready for the day on a walnut dresser",
+    "treats": "Ready for rewards on the kitchen counter"
+  },
+  "finish-cinematic": {
+    "drink": "A cooling drink between evening training sets",
+    "tee": "An evening walk past a neighborhood café",
+    "capsules": "A quiet capsule routine before breakfast",
+    "watch": "Checking the time before leaving the café",
+    "bag": "Leaving work with her everyday shoulder tote",
+    "treats": "A well-earned reward after sitting on command"
+  },
+  "finish-cinematic-alone": {
+    "drink": "Chilled hydration on a quiet gym bench",
+    "capsules": "A quiet supplement routine before the day begins",
+    "tee": "Sage tee hanging in a quiet wardrobe",
+    "bag": "Ready for work on a quiet office console",
+    "treats": "Ready for tomorrow’s training rewards",
+    "watch": "Set aside on the desk after work"
+  },
+  "finish-commercial": {
+    "drink": "A refreshing pause between gym sets",
+    "capsules": "A capsule and water before the day begins",
+    "tee": "An easy stride in everyday sage green",
+    "cookies": "A cookie ready for an afternoon coffee break",
+    "serum": "A golden drop before morning skincare",
+    "perfume": "A finishing spritz at the dressing vanity"
+  },
+  "finish-commercial-alone": {
+    "drink": "Chilled hydration ready on the gym bench",
+    "capsules": "A clean start to the daily wellness routine",
+    "tee": "Everyday sage tee on a wooden hanger",
+    "serum": "Golden serum on a fresh bathroom vanity",
+    "cookies": "Cookies ready for an afternoon coffee break",
+    "perfume": "Gold-capped fragrance on a bright dressing-room vanity"
+  },
+  "finish-editorial": {
+    "drink": "Cooling down courtside after a drink",
+    "capsules": "A capsule and water before breakfast",
+    "tee": "An easy stride outside a neighborhood café",
+    "sneakers": "An easy step outside a neighborhood gallery",
+    "headphones": "An afternoon playlist in her listening corner",
+    "candle": "A quiet evening, just after lighting the candle"
+  },
+  "finish-editorial-alone": {
+    "drink": "Chilled hydration waiting on the gym bench",
+    "capsules": "A quiet place for the daily routine",
+    "tee": "Sage tee hanging in a quiet dressing corner",
+    "sneakers": "Ready for the day by the entryway bench",
+    "headphones": "Quiet listening on a warm walnut desk",
+    "candle": "A quiet evening on the living room sideboard"
+  },
+  "finish-film": {
+    "drink": "A refreshing sip after a park workout",
+    "capsules": "A capsule and water before breakfast",
+    "tee": "An easy afternoon walk in sage green",
+    "sneakers": "An easy step outside the neighborhood gallery",
+    "headphones": "An afternoon listening break by the window",
+    "candle": "A candlelit pause in her reading nook"
+  },
+  "finish-film-alone": {
+    "drink": "Chilled hydration waiting on the gym bench",
+    "capsules": "A quiet morning supplement routine",
+    "tee": "Everyday sage tee on a wooden wardrobe hanger",
+    "sneakers": "Ready for the day by the door",
+    "candle": "Quiet evening candle on a reading nook table",
+    "headphones": "Ready for a quiet afternoon of listening"
+  },
+  "finish-minimal": {
+    "drink": "A quiet sip between gym sets",
+    "capsules": "A quiet capsule routine before breakfast",
+    "tee": "An easy step in a favorite everyday tee",
+    "serum": "A fresh drop before morning skincare",
+    "perfume": "A quiet fragrance ritual before going out",
+    "cookies": "A quiet cookie break at the kitchen counter"
+  },
+  "finish-minimal-alone": {
+    "drink": "Chilled hydration waiting on a clean gym bench",
+    "capsules": "A calm morning supplement station",
+    "tee": "Neatly hung for an easy everyday wardrobe",
+    "cookies": "Cookies ready for a quiet afternoon coffee",
+    "serum": "A quiet place in the morning skincare routine",
+    "perfume": "Quiet luxury on a dressing-room vanity"
+  },
+  "finish-natural": {
+    "drink": "A refreshing pause after her gym workout",
+    "tee": "An easy walk past the neighborhood café",
+    "capsules": "A capsule and water before breakfast",
+    "watch": "Checking the time before leaving the café",
+    "bag": "Shoulder tote on the way into work",
+    "treats": "A well-earned treat after practicing sit"
+  },
+  "finish-natural-alone": {
+    "drink": "Chilled hydration waiting on a gym bench",
+    "tee": "An everyday favorite hanging in a quiet wardrobe",
+    "capsules": "A quiet morning supplement routine",
+    "bag": "Ready for work on a home entryway console",
+    "treats": "Ready for rewards on the kitchen counter",
+    "watch": "Set aside on the desk after work"
+  },
+  "finish-phone": {
+    "drink": "A quick sip after a park workout",
+    "capsules": "Morning capsule with water at the kitchen table",
+    "tee": "An easy walk to the neighborhood café",
+    "cookies": "A cookie break at the kitchen table",
+    "serum": "A fresh drop before morning skincare",
+    "perfume": "A quick fragrance spritz before heading out"
+  },
+  "finish-phone-alone": {
+    "drink": "Cold hydration waiting on the gym bench",
+    "capsules": "Morning supplement beside a glass of water",
+    "tee": "Everyday sage tee ready on the dresser",
+    "cookies": "Cookies ready for an afternoon coffee break",
+    "serum": "Morning serum on a lived-in bathroom vanity",
+    "perfume": "Everyday luxury on a bedroom dresser"
+  },
+  "light-auto": {
+    "drink": "Chilled hydration ready on the gym bench",
+    "tee": "Everyday sage tee on a dressing-room shelf",
+    "capsules": "A considered morning routine beside a glass of water",
+    "cookies": "A cozy afternoon coffee companion",
+    "serum": "Golden serum on a quiet bathroom vanity",
+    "perfume": "Gold-capped fragrance on a dressing-room vanity"
+  },
+  "light-auto-person": {
+    "drink": "A refreshing sip between sets",
+    "capsules": "A morning capsule with water at the kitchen counter",
+    "tee": "An easy afternoon walk in sage green",
+    "serum": "A fresh drop before morning skincare",
+    "perfume": "A final fragrance touch before heading out",
+    "cookies": "A cookie break at the kitchen table"
+  },
+  "light-golden": {
+    "drink": "Chilled hydration beside the outdoor court",
+    "capsules": "A quiet daily ritual at the breakfast table",
+    "tee": "Folded sage tee on a sunlit wardrobe shelf",
+    "serum": "Golden-hour glow on a clean skincare vanity",
+    "cookies": "Golden-hour cookies beside an afternoon coffee",
+    "perfume": "Golden evening on the dressing table"
+  },
+  "light-golden-person": {
+    "drink": "A refreshing pause after a park run",
+    "serum": "A golden drop before the morning skincare routine",
+    "tee": "An easy evening walk in sage green",
+    "capsules": "A quiet morning capsule routine with water",
+    "cookies": "A cookie pause with afternoon coffee",
+    "perfume": "A final spritz before heading out"
+  },
+  "light-moody": {
+    "drink": "Chilled hydration ready on the gym bench",
+    "capsules": "A quiet evening supplement routine",
+    "tee": "Neatly folded on a dark wardrobe shelf",
+    "cookies": "Cookies ready for an evening coffee break",
+    "serum": "Golden serum on a dark bathroom vanity",
+    "perfume": "Gold-capped fragrance on a dark dressing-room vanity"
+  },
+  "light-moody-person": {
+    "drink": "A cool drink between strength sets",
+    "tee": "Everyday sage tee moving through afternoon shadows",
+    "cookies": "A quiet cookie break at the kitchen table",
+    "serum": "A golden drop before evening skincare",
+    "capsules": "A quiet capsule routine before breakfast",
+    "perfume": "A final spritz before heading out"
+  },
+  "light-neon": {
+    "capsules": "Evening wellness beside the city lights",
+    "drink": "Chilled hydration ready for a late-night workout",
+    "tee": "Neatly folded in a boutique after dark",
+    "sneakers": "Everyday sneakers in a neon-lit boutique window",
+    "headphones": "Late-night listening desk above the city",
+    "candle": "Quiet candlelight above the neon-lit city"
+  },
+  "light-neon-person": {
+    "drink": "Cooling down after a neon-lit evening workout",
+    "capsules": "Evening capsule routine beside the city window",
+    "tee": "An evening walk under city neon",
+    "sneakers": "An evening stroll past neon-lit gallery windows",
+    "headphones": "Evening listening beside the city lights",
+    "candle": "Lighting a candle above the nighttime city"
+  },
+  "light-overcast": {
+    "drink": "Chilled hydration ready on the gym bench",
+    "capsules": "Daily longevity routine on a quiet breakfast counter",
+    "tee": "Neatly folded for an easy everyday wardrobe",
+    "watch": "Ready for the day on a dressing tray",
+    "bag": "Ready for work on a quiet office desk",
+    "treats": "Ready for rewards on the kitchen counter"
+  },
+  "light-overcast-person": {
+    "drink": "A refreshing pause after a park run",
+    "tee": "An easy morning walk in sage green",
+    "capsules": "A quiet capsule routine before breakfast",
+    "bag": "On her shoulder, heading into work",
+    "watch": "Checking the time before leaving the café",
+    "treats": "A reward for sitting patiently in the kitchen"
+  },
+  "light-soft": {
+    "drink": "Chilled hydration ready on a gym bench",
+    "tee": "Sage everyday tee folded on a wardrobe shelf",
+    "capsules": "A calm daily routine on the breakfast counter",
+    "sneakers": "Everyday sneakers ready by the door",
+    "headphones": "Ready for a quiet afternoon of listening",
+    "candle": "A warm glow on the living room sideboard"
+  },
+  "light-soft-person": {
+    "drink": "A refreshing pause between workout sets",
+    "tee": "An easy step in an everyday favorite",
+    "capsules": "A quiet capsule routine before breakfast",
+    "sneakers": "Walking into a bright city café",
+    "headphones": "Settling into a favorite album at home",
+    "candle": "A freshly lit candle starts a quiet evening"
+  },
+  "light-sun": {
+    "drink": "Cold hydration waiting beside the outdoor court",
+    "capsules": "A quiet daily ritual on the breakfast counter",
+    "tee": "Sunlit sage tee on a dressing-room shelf",
+    "sneakers": "Everyday sneakers ready by the door",
+    "headphones": "Sunlit headphones ready for a focused afternoon",
+    "candle": "Cedar and fig on a sunlit living room console"
+  },
+  "light-sun-person": {
+    "capsules": "A capsule and water before the day begins",
+    "tee": "An easy afternoon walk in sage green",
+    "drink": "A refreshing pause beside the running track",
+    "sneakers": "An easy stride outside a city gallery",
+    "candle": "A quiet moment just after lighting the candle",
+    "headphones": "Favorite track during a sunny desk break"
+  },
+  "light-window": {
+    "drink": "Chilled hydration ready on a workout bench",
+    "capsules": "A calm morning supplement routine, ready with water",
+    "tee": "Folded neatly for an easy everyday wardrobe",
+    "watch": "Ready for the day on a dresser",
+    "bag": "Ready for work on a quiet office desk",
+    "treats": "Ready for rewards on the kitchen counter"
+  },
+  "light-window-person": {
+    "drink": "A refreshing pause after a studio workout",
+    "tee": "Easy morning movement in a favorite everyday tee",
+    "capsules": "A quiet morning capsule with water",
+    "bag": "Shoulder tote on the way into work",
+    "watch": "Checking the time before leaving the café",
+    "treats": "A reward for sitting patiently in the kitchen"
+  },
+  "moment-auto": {
+    "tee": "An easy city walk in sage green",
+    "drink": "A cool sip in the shade beside the sea",
+    "capsules": "A quiet supplement routine before breakfast",
+    "serum": "A quiet moment before the morning skincare routine",
+    "perfume": "A quiet finishing touch at a dark vanity",
+    "cookies": "A cookie and coffee at the window seat"
+  },
+  "moment-creator": {
+    "drink": "Beach-day selfie with a chilled bottle beside her face",
+    "capsules": "Sharing her morning supplement routine before breakfast",
+    "tee": "Showing her everyday tee on a city walk",
+    "bag": "Showing her everyday tote on a city walk",
+    "watch": "Showing her everyday watch over café coffee",
+    "treats": "Sharing her dog's favorite park reward on camera"
+  },
+  "moment-hand": {
+    "drink": "Chilled hydration held up beside the beach boardwalk",
+    "capsules": "Morning supplement routine, held ready in the kitchen",
+    "tee": "Folded sage tee held on a city walk",
+    "watch": "A closer look at the café window",
+    "bag": "Cognac tote in hand on a city sidewalk",
+    "treats": "Treat pouch in hand during a park break"
+  },
+  "moment-ingredients": {
+    "capsules": "Capsules and powder beside the morning routine",
+    "drink": "Chilled citrus hydration at the beach bar",
+    "tee": "Soft fabric and raw fibers on a city display",
+    "cookies": "Brown butter and chocolate at the café window",
+    "serum": "Vitamin C freshness on a quiet bathroom vanity",
+    "perfume": "Gold and glass frame the fragrance"
+  },
+  "moment-motion": {
+    "drink": "A chilled citrus burst at the beach bar",
+    "tee": "Sage tee snapping through the city air",
+    "capsules": "Capsules tumble into a breakfast dish",
+    "candle": "Wooden lid spins above an open candle",
+    "headphones": "Headphones caught mid-toss above a weekday desk",
+    "sneakers": "Gum soles land in a burst of street dust"
+  },
+  "moment-still": {
+    "drink": "Chilled hydration on a beach-bar counter",
+    "capsules": "A simple supplement routine at the breakfast counter",
+    "tee": "Hanging outside a quiet city clothing shop",
+    "sneakers": "Everyday sneakers outside a city boutique",
+    "headphones": "A quiet listening break at the work desk",
+    "candle": "Quiet afternoon candle on the coffee table"
+  },
+  "moment-together": {
+    "capsules": "A shared morning supplement routine before breakfast",
+    "tee": "Two friends sharing a laugh on a city walk",
+    "drink": "Beach-bar hydration break with a friend",
+    "sneakers": "Friends pause together outside a neighborhood gallery",
+    "headphones": "Working side by side with matching headphones",
+    "candle": "An afternoon catch-up around a glowing candle"
+  },
+  "moment-use": {
+    "drink": "A refreshing sip on a beach lounger",
+    "tee": "An easy stride through the city",
+    "capsules": "Morning capsule with water at the kitchen counter",
+    "serum": "A few golden drops before morning moisturizer",
+    "perfume": "A quiet wrist spritz before an evening out",
+    "cookies": "A cookie pause with afternoon coffee"
+  },
+  "scene-auto": {
+    "drink": "A refreshing pause between sets",
+    "capsules": "A quiet morning supplement routine with water",
+    "tee": "Easy everyday style outside a neighborhood café",
+    "watch": "Quiet morning planning, watch at her cuff",
+    "bag": "Ready for work with cognac on her shoulder",
+    "treats": "A well-earned reward in the kitchen"
+  },
+  "scene-auto-alone": {
+    "tee": "Everyday sage tee on a wooden hanger",
+    "capsules": "",
+    "drink": "Chilled hydration ready on the gym bench",
+    "watch": "Ready for the day on a quiet desk",
+    "bag": "Ready for work on a sunlit entryway console",
+    "treats": "Ready for rewards on the kitchen counter"
+  },
+  "scene-auto-person": {
+    "drink": "A refreshing pause between gym sets",
+    "capsules": "A quiet morning capsule routine with water",
+    "tee": "An easy afternoon walk in sage green",
+    "bag": "On her shoulder, heading into the workday",
+    "watch": "Checking the time before leaving the café",
+    "treats": "A well-earned reward after practicing sit"
+  },
+  "scene-bathroom": {
+    "capsules": "A quiet morning supplement routine at the vanity",
+    "drink": "A hydration pause after a morning workout",
+    "tee": "Ready for the day at the bathroom mirror",
+    "bag": "Shoulder tote ready for the day",
+    "watch": "A quiet time check before heading out",
+    "treats": "A reward after a calm bathroom grooming session"
+  },
+  "scene-bathroom-alone": {
+    "drink": "Cool hydration on the bathroom vanity after a workout",
+    "capsules": "A quiet morning routine on the bathroom vanity",
+    "tee": "Fresh shirt folded on a calm bathroom vanity",
+    "bag": "Ready to leave on a calm bathroom vanity",
+    "watch": "Set aside on a dry bathroom vanity",
+    "treats": "Bath-time rewards ready on a dry vanity"
+  },
+  "scene-bathroom-person": {
+    "drink": "A refreshing sip after a home workout",
+    "tee": "One last mirror check before heading out",
+    "watch": "Checking the time before leaving for work",
+    "capsules": "A quiet supplement routine before the day begins",
+    "bag": "Shoulder tote ready for the morning commute",
+    "treats": "A reward for waiting calmly after bath time"
+  },
+  "scene-beach": {
+    "capsules": "A quiet supplement routine at a beach café",
+    "drink": "Cool hydration on a beach lounger",
+    "tee": "An easy beach walk in sage green",
+    "serum": "Morning skincare in a shaded beach cabana",
+    "perfume": "Beachside fragrance before an evening stroll",
+    "cookies": "Cookies and coffee at a sunny beach café"
+  },
+  "scene-beach-alone": {
+    "drink": "Chilled hydration on a beach café table",
+    "capsules": "A quiet wellness routine at a shaded beach café",
+    "tee": "Ready to wear beside the sea",
+    "serum": "Beachside skincare in cool cabana shade",
+    "cookies": "Beach café cookies beside an afternoon coffee",
+    "perfume": "Beachside fragrance on a shaded dressing table"
+  },
+  "scene-beach-person": {
+    "drink": "A refreshing pause on a beach lounger",
+    "capsules": "A quiet supplement routine at a shaded beach café",
+    "tee": "Sea breeze catches her shirt on the boardwalk",
+    "cookies": "A cookie break at a shaded beach café",
+    "serum": "Morning skincare in a shaded beach cabana",
+    "perfume": "A finishing spritz before the beach promenade"
+  },
+  "scene-cafe": {
+    "drink": "A refreshing sip at the café window",
+    "capsules": "A quiet supplement routine at the café window",
+    "tee": "An easy coffee stop in sage green",
+    "watch": "A quiet time check before coffee",
+    "bag": "Shoulder tote ready for a café morning",
+    "treats": "A café reward for a patient dog"
+  },
+  "scene-cafe-alone": {
+    "drink": "Chilled hydration at a café window table",
+    "capsules": "A quiet supplement routine at the café window",
+    "tee": "Neatly folded beside coffee at a window table",
+    "watch": "A quiet coffee break with timeless style",
+    "bag": "Coffee stop with your everyday tote",
+    "treats": "Ready for rewards at the dog-friendly café"
+  },
+  "scene-cafe-person": {
+    "drink": "A refreshing sip at the café window",
+    "tee": "Reaching for coffee in a favorite everyday tee",
+    "watch": "Checking the time over a café coffee",
+    "capsules": "A quiet supplement routine at the café window",
+    "bag": "Shoulder tote on the way out of the café",
+    "treats": "A café reward for sitting patiently"
+  },
+  "scene-color": {
+    "drink": "Chilled citrus hydration in hand",
+    "tee": "Sage tee held against bold plum",
+    "capsules": "A confident hand presents the daily longevity essential",
+    "sneakers": "Everyday sneakers against bold blue",
+    "headphones": "Cream headphones steadied by a woman's hand",
+    "candle": "Lifting the lid on a warm terracotta ritual"
+  },
+  "scene-color-alone": {
+    "drink": "Chilled citrus hydration on bold orange",
+    "capsules": "Daily longevity routine against bold amber",
+    "tee": "Sage cotton against a bold plum backdrop",
+    "sneakers": "Everyday sneakers against bold caramel",
+    "headphones": "Cream headphones against bold blue",
+    "candle": "Warm candlelight against a bold blue backdrop"
+  },
+  "scene-color-person": {
+    "capsules": "A capsule and water in a bold studio routine",
+    "drink": "A refreshing pause against bright citrus orange",
+    "tee": "An easy step, soft folds, understated sage",
+    "sneakers": "An easy step against bold blue",
+    "headphones": "Lost in music against bold blue",
+    "candle": "Just lit, ready for a quiet evening"
+  },
+  "scene-desert": {
+    "tee": "An easy desert walk in sage green",
+    "drink": "Cool hydration on a desert trail break",
+    "capsules": "A quiet supplement routine overlooking desert rocks",
+    "cookies": "Cookie break overlooking desert dunes",
+    "serum": "Morning skincare overlooking desert dunes",
+    "perfume": "Desert retreat fragrance ritual before an evening out"
+  },
+  "scene-desert-alone": {
+    "drink": "Cool hydration at a desert trail stop",
+    "capsules": "A quiet wellness ritual overlooking desert dunes",
+    "tee": "Sage cotton at a quiet desert retreat",
+    "cookies": "Cookies at a shaded desert picnic stop",
+    "serum": "Desert retreat skincare on a shaded vanity",
+    "perfume": "Desert retreat dressing table at golden hour"
+  },
+  "scene-desert-person": {
+    "capsules": "Morning capsule routine overlooking desert dunes",
+    "tee": "Desert breeze catches a relaxed everyday tee",
+    "drink": "A refreshing pause on a desert walk",
+    "cookies": "Cookie break overlooking the desert",
+    "serum": "Morning skincare overlooking desert dunes",
+    "perfume": "A wrist spritz before a desert evening"
+  },
+  "scene-desk": {
+    "drink": "A refreshing sip between weekday tasks",
+    "capsules": "",
+    "tee": "Everyday comfort at the work desk",
+    "candle": "A warm glow for a focused workday",
+    "headphones": "Focused listening at her weekday desk",
+    "sneakers": "Everyday comfort at her weekday desk"
+  },
+  "scene-desk-alone": {
+    "drink": "Cool hydration for a focused workday",
+    "capsules": "A daily routine beside the work laptop",
+    "tee": "Folded favorite ready for a weekday",
+    "sneakers": "Ready for the commute beside the work desk",
+    "headphones": "Ready for a focused weekday",
+    "candle": "A quiet scent for the working day"
+  },
+  "scene-desk-person": {
+    "drink": "A hydration break between emails",
+    "capsules": "A supplement pause before the workday begins",
+    "tee": "Everyday comfort at her weekday desk",
+    "headphones": "Focused listening during the weekday work session",
+    "sneakers": "Everyday sneakers at a weekday work desk",
+    "candle": "A candlelit pause at the work desk"
+  },
+  "scene-forest": {
+    "drink": "A refreshing pause on a forest walk",
+    "capsules": "A quiet supplement routine at a forest picnic table",
+    "tee": "An easy morning walk through the ferns",
+    "cookies": "A cookie break at a forest picnic table",
+    "serum": "Golden serum held on a quiet forest morning",
+    "perfume": "Gold fragrance held among forest ferns"
+  },
+  "scene-forest-alone": {
+    "drink": "Chilled hydration at a forest picnic stop",
+    "capsules": "A quiet wellness routine overlooking the forest",
+    "tee": "Sage tee hanging in a quiet forest clearing",
+    "serum": "Golden serum on a shaded forest stone",
+    "cookies": "Cookies ready for a forest coffee break",
+    "perfume": "Gold fragrance on a quiet forest stone"
+  },
+  "scene-forest-person": {
+    "drink": "A refreshing pause on a forest walk",
+    "tee": "An easy morning walk beneath the trees",
+    "cookies": "A cookie break at a forest picnic table",
+    "capsules": "Morning capsule routine on a forest cabin terrace",
+    "serum": "Morning serum ritual at a forest retreat",
+    "perfume": "A quiet fragrance ritual at a forest retreat"
+  },
+  "scene-gym": {
+    "drink": "A quick hydration break between strength sets",
+    "capsules": "A quiet supplement routine before the workout",
+    "tee": "Taking a breath between strength sets",
+    "cookies": "A cookie break after the last set",
+    "serum": "Skincare packed for the post-workout routine",
+    "perfume": "A polished finish after her workout"
+  },
+  "scene-gym-alone": {
+    "capsules": "A focused wellness routine beside the gym bench",
+    "drink": "Chilled hydration waiting on the gym bench",
+    "tee": "Folded and ready on the gym bench",
+    "cookies": "Cookies ready for a post-workout break",
+    "serum": "Post-workout skincare beside a fresh gym towel",
+    "perfume": "Post-workout fragrance on the gym grooming counter"
+  },
+  "scene-gym-person": {
+    "drink": "A cooling sip between strength sets",
+    "tee": "Easy movement between gym sets",
+    "serum": "Post-workout skincare at the gym vanity",
+    "cookies": "A cookie break after the last set",
+    "capsules": "A quiet supplement routine after training",
+    "perfume": "A finishing spritz after her gym session"
+  },
+  "scene-kitchen": {
+    "drink": "A cool sip before the morning gets moving",
+    "capsules": "A quiet supplement routine before breakfast",
+    "tee": "Easy morning coffee in your everyday tee",
+    "headphones": "Morning listening while reaching for coffee",
+    "sneakers": "Morning coffee before heading out",
+    "candle": "A warm candle for a slow kitchen morning"
+  },
+  "scene-kitchen-alone": {
+    "capsules": "A quiet supplement routine on the kitchen counter",
+    "tee": "Folded for the day beside the breakfast counter",
+    "drink": "Chilled citrus hydration on the breakfast counter",
+    "headphones": "Morning listening on the kitchen counter",
+    "sneakers": "Ready for the day beside the kitchen door",
+    "candle": "Quiet kitchen morning with cedar and fig"
+  },
+  "scene-kitchen-person": {
+    "drink": "A refreshing sip before breakfast",
+    "tee": "An easy morning in her everyday sage tee",
+    "sneakers": "Everyday sneakers while getting breakfast ready",
+    "capsules": "Morning capsule and water at the kitchen counter",
+    "headphones": "Morning listening while preparing breakfast",
+    "candle": "Lighting a candle before a quiet kitchen breakfast"
+  },
+  "scene-living": {
+    "drink": "Hydration break after a living room workout",
+    "capsules": "A quiet supplement routine before afternoon reading",
+    "tee": "An easy afternoon picking a book at home",
+    "cookies": "Afternoon cookies beside a coffee and a good book",
+    "serum": "A quiet skincare pause beside the sofa",
+    "perfume": "A finishing touch before heading out"
+  },
+  "scene-living-alone": {
+    "drink": "Afternoon hydration after a living room workout",
+    "capsules": "A quiet wellness ritual at the coffee table",
+    "tee": "Neatly folded for a relaxed afternoon at home",
+    "cookies": "Cookies ready for a quiet afternoon coffee",
+    "serum": "A quiet skincare moment at the coffee table",
+    "perfume": "A quiet touch of luxury beside the sofa"
+  },
+  "scene-living-person": {
+    "drink": "A refreshing sip after a living-room workout",
+    "serum": "A quiet skincare moment beside the sofa",
+    "capsules": "A quiet supplement routine beside the sofa",
+    "tee": "An easy afternoon at home in sage green",
+    "cookies": "An afternoon cookie break on the sofa",
+    "perfume": "A finishing spritz before heading out"
+  },
+  "scene-luxe": {
+    "drink": "A cool pause at a polished walnut counter",
+    "capsules": "A quiet evening supplement ritual on polished walnut",
+    "tee": "Sage cotton against polished walnut",
+    "cookies": "An indulgent cookie break on polished walnut",
+    "serum": "A quiet gold-lit moment at the vanity",
+    "perfume": "A quiet finishing touch at a walnut vanity"
+  },
+  "scene-luxe-alone": {
+    "tee": "Sage tee folded on polished walnut",
+    "drink": "Chilled citrus hydration on dark marble",
+    "capsules": "A quiet evening wellness ritual in dark walnut",
+    "cookies": "Warm coffee beside cookies on polished walnut",
+    "serum": "Golden serum on a dark marble vanity",
+    "perfume": "Gold perfume on a quiet walnut vanity"
+  },
+  "scene-luxe-person": {
+    "drink": "A quiet drink after an evening workout",
+    "tee": "Sage tee moving through a quiet walnut lounge",
+    "cookies": "An evening cookie with coffee in a quiet lounge",
+    "capsules": "A quiet evening capsule routine with water",
+    "serum": "A golden drop before evening skincare",
+    "perfume": "A final spritz before the evening begins"
+  },
+  "scene-mountains": {
+    "drink": "Catching her breath above the mountain trail",
+    "capsules": "Morning supplement routine overlooking the mountains",
+    "tee": "An easy walk with a mountain view",
+    "sneakers": "A scenic pause at a mountain overlook",
+    "headphones": "A quiet listening break above the valley",
+    "candle": "Candlelight inside a quiet mountain cabin"
+  },
+  "scene-mountains-alone": {
+    "drink": "Chilled hydration at a mountain trail rest stop",
+    "tee": "Folded tee at a mountain cabin overlook",
+    "capsules": "A quiet wellness routine overlooking the mountains",
+    "headphones": "A quiet listening break above the mountain valley",
+    "candle": "Quiet mountain cabin, ready for the evening",
+    "sneakers": "Everyday sneakers at a mountain cabin overlook"
+  },
+  "scene-mountains-person": {
+    "drink": "A refreshing pause on the mountain trail",
+    "headphones": "Listening during a quiet mountain overlook break",
+    "sneakers": "An easy stroll at a mountain overlook",
+    "capsules": "Morning capsule with water overlooking the mountains",
+    "tee": "An easy mountain walk in sage green",
+    "candle": "Lighting a candle after a mountain hike"
+  },
+  "scene-night": {
+    "drink": "Hydration break after an evening city walk",
+    "capsules": "Evening routine above the city lights",
+    "tee": "An easy evening walk under city lights",
+    "watch": "Checking the time before an evening out",
+    "bag": "Shoulder tote on an evening city walk",
+    "treats": "A reward stop on an evening city walk"
+  },
+  "scene-night-alone": {
+    "drink": "Chilled hydration above the city lights",
+    "capsules": "Evening routine above the city lights",
+    "tee": "Sage tee in a boutique window after dark",
+    "bag": "Ready for the journey home after dark",
+    "treats": "Ready for rewards after a nighttime city walk",
+    "watch": "Watch off after an evening in the city"
+  },
+  "scene-night-person": {
+    "drink": "A refreshing pause on a nighttime city walk",
+    "tee": "Sage tee moving through neon-lit city streets",
+    "capsules": "Evening capsule routine above the city lights",
+    "watch": "Checking the time before an evening out",
+    "bag": "Heading home with her everyday shoulder tote",
+    "treats": "A good-dog reward on an evening city walk"
+  },
+  "scene-park": {
+    "drink": "A refreshing pause after a park walk",
+    "tee": "An easy afternoon on the picnic blanket",
+    "capsules": "A quiet wellness routine during a park picnic",
+    "bag": "A sunny park stroll with an everyday tote",
+    "watch": "Checking the time during a park reading break",
+    "treats": "A well-earned treat after a park walk"
+  },
+  "scene-park-alone": {
+    "drink": "Chilled hydration for a sunny park break",
+    "capsules": "A quiet wellness routine at a shaded park table",
+    "tee": "Sage tee laid out for a park afternoon",
+    "bag": "Everyday tote on a sunny park bench",
+    "treats": "Treat pouch ready for a park training break",
+    "watch": "Time off on a sunny park picnic"
+  },
+  "scene-park-person": {
+    "drink": "A refreshing pause after a park walk",
+    "tee": "An easy walk beside a sunny picnic spot",
+    "capsules": "A quiet supplement routine at the picnic table",
+    "watch": "Checking the time during a park picnic",
+    "bag": "A sunny park shortcut with her everyday tote",
+    "treats": "A park training reward, ready to give"
+  },
+  "scene-podium": {
+    "drink": "Chilled hydration on a sculptural studio podium",
+    "tee": "Soft sage cotton folded on a sculptural plinth",
+    "capsules": "A steady hand on a sculptural stone podium",
+    "watch": "Quiet wristwatch detail on a sculptural podium",
+    "bag": "Cognac tote on a sculptural stone podium",
+    "treats": "A steady hand beside a podium hero"
+  },
+  "scene-podium-alone": {
+    "drink": "Chilled citrus hydration on a sculpted studio podium",
+    "capsules": "Daily longevity routine on a sculpted stone podium",
+    "tee": "Folded sage tee on a sculptural stone podium",
+    "treats": "Forest-green pouch on a warm stone podium",
+    "bag": "Everyday polish on a sculptural stone podium",
+    "watch": "Quiet time on a sculpted stone podium"
+  },
+  "scene-podium-person": {
+    "drink": "A refreshing sip beside a sculptural studio podium",
+    "tee": "Relaxed movement seated on a sculptural studio plinth",
+    "capsules": "A capsule and water at a sculptural wellness counter",
+    "watch": "Checking the time with her wrist on a plinth",
+    "bag": "Reaching for essentials at a sculptural studio console",
+    "treats": "A training reward beside a studio plinth"
+  },
+  "scene-pool": {
+    "capsules": "A quiet wellness routine beside the pool",
+    "tee": "An easy poolside stroll in sage green",
+    "drink": "A cool drink during a poolside break",
+    "sneakers": "Poolside pause before heading to the café",
+    "headphones": "A quiet listening break on a poolside lounger",
+    "candle": "A quiet pause beside the pool"
+  },
+  "scene-pool-alone": {
+    "drink": "Chilled hydration beside the pool",
+    "capsules": "Quiet poolside supplement ritual",
+    "tee": "Folded neatly on a sunny poolside lounger",
+    "headphones": "Poolside listening break on a shaded side table",
+    "sneakers": "Poolside pair ready for a relaxed afternoon",
+    "candle": "Quiet fragrance on a shaded poolside table"
+  },
+  "scene-pool-person": {
+    "drink": "A refreshing pause beside the pool",
+    "tee": "An easy poolside stroll in sage green",
+    "capsules": "A quiet supplement routine beside the pool",
+    "sneakers": "An easy stroll beside the pool",
+    "headphones": "Poolside listening in the shade",
+    "candle": "A quiet candle ritual beside the pool"
+  },
+  "scene-snow": {
+    "capsules": "A quiet supplement routine inside a snowy cabin",
+    "tee": "Warming up inside a snowbound cabin",
+    "drink": "Hydration break on a snowy cabin porch",
+    "bag": "Arriving at a snowy cabin with everyday essentials",
+    "watch": "Checking the time inside a snowy cabin",
+    "treats": "A cabin-porch reward after a snowy walk"
+  },
+  "scene-snow-alone": {
+    "drink": "Cold hydration at a snowy cabin",
+    "capsules": "Winter morning supplements inside a snowy cabin",
+    "tee": "Cabin comfort with snow outside",
+    "bag": "Ready for a snowy cabin weekend",
+    "treats": "Winter rewards ready by the cabin window",
+    "watch": "Cabin windowsill watch beside a snowy forest"
+  },
+  "scene-snow-person": {
+    "drink": "A refreshing pause outside a snowy cabin",
+    "tee": "Warm cabin comfort with snow outside",
+    "watch": "Checking the time before leaving a snowy cabin",
+    "bag": "Arriving at a snowy cabin with everyday essentials",
+    "treats": "A training reward on a snowy cabin porch",
+    "capsules": "Morning capsule routine overlooking fresh snow"
+  },
+  "scene-street": {
+    "drink": "A hydration pause on the walk to work",
+    "tee": "An easy city walk in sage green",
+    "capsules": "A quiet wellness routine at a sidewalk café",
+    "sneakers": "An easy pause on a city walk",
+    "headphones": "Her everyday soundtrack on a city walk",
+    "candle": "Discovering a candle outside a neighborhood homeware shop"
+  },
+  "scene-street-alone": {
+    "drink": "Chilled hydration at a sidewalk café stop",
+    "tee": "Sage tee hanging outside a neighborhood boutique",
+    "capsules": "Daily wellness at a quiet sidewalk café",
+    "headphones": "Headphones ready for a city listening break",
+    "sneakers": "Everyday sneakers outside a city boutique",
+    "candle": "Quiet candle display beside a city-facing window"
+  },
+  "scene-street-person": {
+    "drink": "A refreshing pause on the city walk",
+    "sneakers": "Everyday sneakers stepping out on a city sidewalk",
+    "capsules": "A supplement pause at a sidewalk café",
+    "tee": "Sage tee moving through the city",
+    "headphones": "Listening on a sunny city walk",
+    "candle": "Lighting a candle beside a city shop window"
+  },
+  "scene-white": {
+    "capsules": "A steady hand on a clean daily ritual",
+    "tee": "Relaxed studio fit with the full shirt visible",
+    "drink": "A chilled bottle ready for the next sip",
+    "serum": "A gentle hand steadies the golden serum",
+    "cookies": "A helping hand frames the cookie pouch",
+    "perfume": "A light touch on gold"
+  },
+  "scene-white-alone": {
+    "drink": "Chilled citrus hydration on clean white",
+    "tee": "Sage tee laid flat on clean white",
+    "capsules": "A clean, considered daily supplement routine",
+    "cookies": "Cookie pouch with a simple coffee pairing",
+    "serum": "Golden serum with a fresh face towel",
+    "perfume": "Gold-capped fragrance on a clean white sweep"
+  },
+  "scene-white-person": {
+    "drink": "Fresh hydration just after a sip",
+    "tee": "An easy step shows the shirt’s relaxed fit",
+    "capsules": "A capsule and water before the morning dose",
+    "serum": "A fresh drop before her skincare routine",
+    "cookies": "A cookie ready to enjoy beside the open pouch",
+    "perfume": "A light spray before stepping out"
+  }
+}

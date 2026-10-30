@@ -1,0 +1,96 @@
+{
+  "$comment": "The app icons' white glyphs (sidebar, tool marks). Generated with `pnpm assets:icons` on your ChatGPT plan, traced to vectors, and rendered as 4096px transparent masters (assets-src/icons) plus the 256px images the app uses (public/icons). `pick` is the variant that shipped; re-run one icon with `pnpm assets:icons relight`.",
+  "style": "Design one icon glyph for the sidebar of a premium creative app. Style: a solid, filled glyph in pure white (#FFFFFF), slightly bold and geometric, with softly rounded corners. Interior details are clean negative-space cut-outs (transparent), never thin lines or outlines; where a stroke is unavoidable it is thick and rounded (about 9% of the glyph width). Flat vector look, like a premium SF Symbols '.fill' icon: no gradient, no shadow, no glow, no 3D shading, no texture, no text, no letters, no numbers. One glyph only, centered, with even padding: the glyph fills about 65% of the canvas. Crisp anti-aliased edges. Fully transparent background (real alpha channel); only the white glyph is visible.",
+  "icons": [
+    {
+      "id": "home",
+      "pick": 2,
+      "subject": "A house: a pentagon with a rounded peak and rounded eaves, and a rounded rectangular door cut out at the bottom center. No chimney, no windows."
+    },
+    {
+      "id": "image",
+      "pick": 1,
+      "subject": "A photo: a solid rounded-square picture with two mountain peaks and a small round sun cut out as negative space. A small solid four-pointed sparkle star sits just outside the top-right corner, separated from the picture by a clear transparent gap."
+    },
+    {
+      "id": "library",
+      "pick": 2,
+      "subject": "A stack of photo cards: a solid front card (rounded rectangle) with a small mountain shape cut out of it, and two cards peeking out behind it above, each slightly narrower than the one in front, separated by clear transparent gaps."
+    },
+    {
+      "id": "local",
+      "pick": 1,
+      "subject": "A graphics card seen from the front: a solid wide rounded rectangle with one large round fan cut out as negative space (a ring with three curved blades), and a short row of solid connector pins along the bottom edge."
+    },
+    {
+      "id": "connections",
+      "pick": 1,
+      "subject": "A power plug: a solid rounded plug body with two short rounded prongs on top, and a short thick cable with a rounded end leaving the bottom of the plug."
+    },
+    {
+      "id": "models",
+      "pick": 1,
+      "subject": "An isometric cube made of three solid faces (top, left, right), separated by thin transparent gaps, like an elegant 'cube.fill' icon."
+    },
+    {
+      "id": "templates",
+      "pick": 1,
+      "subject": "Viral templates: two tall vertical video cards fanned out like playing cards, the back card tilted to the left and peeking out behind, the front card upright with a solid rounded play triangle cut out of its center as negative space, and a small solid four-pointed sparkle star just outside the front card's top-right corner, every piece separated by clear transparent gaps."
+    },
+    {
+      "id": "director",
+      "pick": 1,
+      "subject": "A film clapperboard: a solid rounded slate with its hinged clapper bar on top, opened at a slight upward angle; the clapper bar and the top strip of the slate have bold diagonal stripes cut out as negative space."
+    },
+    {
+      "id": "angles",
+      "pick": 1,
+      "subject": "Re-shoot from a new angle: a small solid cube seen from a three-quarter view at the center (its three faces separated by thin transparent gaps), with one bold curved arrow sweeping around it in a three-quarter circle and ending in a rounded arrowhead."
+    },
+    {
+      "id": "relight",
+      "pick": 1,
+      "subject": "Light direction: a circular disc whose left half is solid white and whose right half is only a thick white ring outline (transparent inside), surrounded by eight short, thick, rounded rays evenly spaced around it."
+    },
+    {
+      "id": "cast",
+      "pick": 2,
+      "subject": "Two people: a solid person silhouette (round head above rounded shoulders) in front on the left, and a second, slightly smaller person silhouette behind it on the right, separated from the front one by a clear transparent gap."
+    },
+    {
+      "id": "retouch",
+      "pick": 1,
+      "subject": "A paintbrush: a solid brush lying diagonally, handle toward the top-right and a rounded bristle tip toward the bottom-left, with a small transparent gap between the handle and the metal ferrule, plus a small solid four-pointed sparkle star near the top-left."
+    },
+    {
+      "id": "product",
+      "pick": 1,
+      "subject": "A product on a podium: a solid perfume bottle with a small square cap (separated from the bottle by a thin transparent gap) standing on a low round podium seen slightly from above, separated from the podium by a thin transparent gap."
+    },
+    {
+      "id": "video",
+      "pick": 2,
+      "subject": "A video camera: a solid rounded rectangular camera body with a play triangle cut out of its center, and a solid lens hood shaped like a rounded trapezoid on its right side, separated from the body by a small transparent gap."
+    },
+    {
+      "id": "motion",
+      "pick": 1,
+      "subject": "Motion graphics: a solid rounded play triangle pointing right, with two short solid rounded speed streaks trailing from its left side, and a small solid four-pointed sparkle star just above its top-right corner, every piece separated by clear transparent gaps."
+    },
+    {
+      "id": "recast",
+      "pick": 1,
+      "subject": "Swap a person: a solid person silhouette (round head above rounded shoulders) at the center, enclosed by two bold curved arrows that form a circle around it, one on top pointing clockwise and one on the bottom pointing clockwise, like a refresh symbol."
+    },
+    {
+      "id": "upscale",
+      "pick": 1,
+      "subject": "Enlarge: two bold diagonal arrows pointing outward, one to the top-right corner and one to the bottom-left corner, each with a rounded arrowhead, and a small solid four-pointed sparkle star at the center between them."
+    },
+    {
+      "id": "storyboard",
+      "pick": 1,
+      "subject": "A storyboard: three solid rounded panels laid out like a comic page, two squarish panels side by side on top and one wide panel across the bottom, separated by clear transparent gaps."
+    }
+  ]
+}

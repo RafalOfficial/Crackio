@@ -1,0 +1,65 @@
+{
+  "$comment": "The home hero's backdrops. Made with `node scripts/assets/home.mjs hero-...` from exactly these prompts; `title` is the caption, `focus` keeps the subject in frame when a narrow screen crops the sides.",
+  "backdrops": [
+    {
+      "id": "hero-highlands",
+      "title": "A rider crossing a Highland glen at first light",
+      "focus": "47% 55%",
+      "prompt": "A lone rider on a dark horse crossing a wide valley in the Scottish Highlands at first light, seen from a low hill far away, small near the center of the frame. Rolling fog fills the glen between dark hills; a thin line of warm sunrise light catches the mountain ridges under a pale, cold sky. Cinematic film still, 50mm lens, muted natural color, soft atmospheric haze, fine 35mm film grain, unretouched. No text."
+    },
+    {
+      "id": "hero-iceland",
+      "title": "A black-sand beach as the wave breaks",
+      "focus": "45% 50%",
+      "prompt": "A person in a dark wool coat stands at the edge of a black-sand beach in Iceland as a tall wave breaks white in front of them, basalt sea stacks fading into mist behind, wind-blown spray, overcast silver light. The figure is small near the center of the frame. Documentary photograph, 35mm lens, cold muted palette, true-to-life color, natural grain, unretouched. No text."
+    },
+    {
+      "id": "hero-tokyo",
+      "title": "A Tokyo side street in the rain",
+      "focus": "53% 50%",
+      "prompt": "A narrow Tokyo side street at night in light rain: paper lanterns, warm shop windows and a glowing vending machine reflect in the wet asphalt, power lines overhead. A single person with a clear umbrella walks away down the middle of the street, small near the center of the frame. Shot on Kodak Vision3 500T film, 35mm anamorphic lens, soft halation, natural grain. No readable signs, no text."
+    },
+    {
+      "id": "hero-dunes",
+      "title": "A caravan on the crest of a Sahara dune",
+      "focus": "54% 50%",
+      "prompt": "A small camel caravan led by two walkers crosses the knife-edge crest of a towering dune in the Sahara at sunset, seen from far away with a long lens, the line of figures near the center of the frame. Long shadows ripple across the sand, warm golden light, a pale hazy sky. Cinematic, true-to-life color, light film grain, unretouched. No text."
+    },
+    {
+      "id": "hero-alps",
+      "title": "Two climbers above a sea of clouds",
+      "focus": "49% 55%",
+      "prompt": "Two mountaineers roped together on a narrow snow ridge above a sea of clouds at sunrise in the Alps, small near the center of the frame, the sun just breaking over distant peaks and grazing the snow with warm light while the valleys stay blue. Shot from a neighboring ridge with a long lens. True-to-life color, crisp air, subtle film grain, unretouched. No text."
+    },
+    {
+      "id": "hero-surf",
+      "title": "Paddling out into a glowing wave at dusk",
+      "focus": "50% 60%",
+      "prompt": "A surfer paddles out alone toward a tall glassy wave at dusk, shot from the water at surface level, the surfer small near the center of the frame. The low sun shines through the wave's lip so it glows amber and teal, droplets hanging in the air. Cinematic film still, natural color, gentle grain, unretouched. No text."
+    },
+    {
+      "id": "hero-viaduct",
+      "title": "A mountain train crossing a viaduct at dusk",
+      "focus": "44% 40%",
+      "prompt": "A red mountain train crosses a tall curved stone viaduct over a snowy Swiss gorge at dusk, warm light glowing in its windows, the viaduct and train near the center of the frame. Snow falls softly; pine forests and steep mountainsides fade into blue twilight. Cinematic, natural tones, 35mm film grain, unretouched. No text."
+    },
+    {
+      "id": "hero-horses",
+      "title": "White horses running through the Camargue",
+      "focus": "46% 45%",
+      "prompt": "A herd of white horses gallops through shallow marsh water in the Camargue at sunset, spray and droplets backlit in gold, shot low from the water's edge with a long lens, the herd near the center of the frame. Soft haze, motion and splashes. Wildlife photograph, natural color, fine grain, unretouched. No text."
+    },
+    {
+      "id": "hero-lighthouse",
+      "title": "A lighthouse as the storm rolls in",
+      "focus": "46% 45%",
+      "prompt": "A white lighthouse on a rocky headland at blue hour as a storm rolls in from the sea, its beam cutting through rain and sea mist, waves exploding on the rocks below, one lit cottage window beside it. The lighthouse stands near the center of the frame. Cinematic, moody natural color, film grain, unretouched. No text."
+    },
+    {
+      "id": "hero-filmset",
+      "title": "A night shoot on a rain-soaked street",
+      "focus": "52% 50%",
+      "prompt": "Behind the scenes of a night shoot on a rain-soaked city street: an actress in a long coat stands under a single tungsten streetlight while a film crew and a cinema camera on a dolly wait in silhouette, rain towers catching the light, wet asphalt reflecting warm amber and cool blue. The actress is near the center of the frame. Cinematic 35mm, film grain, unretouched. No readable text."
+    }
+  ]
+}

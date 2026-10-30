@@ -1,0 +1,21 @@
+# Model folders on the endpoint's network volume (filled by a "fetch" job), next to ComfyUI's own.
+runpod_volume:
+  base_path: /runpod-volume/models
+  checkpoints: checkpoints
+  diffusion_models: |
+    diffusion_models
+    unet
+  text_encoders: |
+    text_encoders
+    clip
+  vae: vae
+  loras: loras
+  upscale_models: upscale_models
+  latent_upscale_models: latent_upscale_models
+  controlnet: controlnet
+  clip_vision: clip_vision
+  model_patches: model_patches
+  audio_encoders: audio_encoders
+  style_models: style_models
+  embeddings: embeddings
+  sam3: sam3

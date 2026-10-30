@@ -1,0 +1,588 @@
+{
+  "camera-auto": {
+    "ugc-capsules": {
+      "idea": "A morning supplement beside her coffee",
+      "seconds": 12
+    }
+  },
+  "camera-car": {
+    "ugc-car": {
+      "idea": "Citrus hydration for the drive after a workout",
+      "seconds": 6
+    }
+  },
+  "camera-drift": {
+    "banner-candle": {
+      "idea": "A quiet evening with a cedar and fig candle",
+      "seconds": 6
+    }
+  },
+  "camera-friend": {
+    "ugc-friend": {
+      "idea": "A café cookie break with coffee",
+      "seconds": 6
+    }
+  },
+  "camera-handheld": {
+    "life-tee": {
+      "idea": "A relaxed walk in a muted sage tee",
+      "seconds": 8
+    }
+  },
+  "camera-locked": {
+    "hero-drink": {
+      "idea": "A quiet citrus hydration moment by the water",
+      "seconds": 8
+    }
+  },
+  "camera-macro": {
+    "hero-watch": {
+      "idea": "A quiet morning detail, captured in brushed steel and leather",
+      "seconds": 8
+    }
+  },
+  "camera-mirror": {
+    "ugc-mirror": {
+      "idea": "A casual mirror check in a soft green tee",
+      "seconds": 6
+    }
+  },
+  "camera-orbit": {
+    "hero-sneakers": {
+      "idea": "Understated sneakers, beautifully considered",
+      "seconds": 8
+    }
+  },
+  "camera-pov": {
+    "demo-cookies": {
+      "idea": "Open a pouch of chocolate chip cookies",
+      "seconds": 6
+    }
+  },
+  "camera-propped": {
+    "ugc-propped": {
+      "idea": "A calm post-shower serum moment",
+      "seconds": 6
+    }
+  },
+  "camera-push": {
+    "hero-perfume": {
+      "idea": "A quiet light sweep over NOIRÉ perfume",
+      "seconds": 8
+    }
+  },
+  "camera-rise": {
+    "hero-headphones": {
+      "idea": "A quiet, polished look at cream over-ear headphones",
+      "seconds": 8
+    }
+  },
+  "camera-selfie": {
+    "ugc-capsules": {
+      "idea": "A morning supplement beside her coffee",
+      "seconds": 12
+    }
+  },
+  "camera-side": {
+    "demo-serum": {
+      "idea": "A close-up first look at vitamin C serum",
+      "seconds": 8
+    }
+  },
+  "camera-still": {
+    "banner-cookies": {
+      "idea": "Warm cookies beside a quietly steaming cup",
+      "seconds": 6
+    }
+  },
+  "camera-top": {
+    "demo-cookies": {
+      "idea": "Open the pouch for a first look at the cookies",
+      "seconds": 8
+    }
+  },
+  "camera-tripod": {
+    "life-drink": {
+      "idea": "A quiet park break with citrus hydration",
+      "seconds": 6
+    }
+  },
+  "camera-walk": {
+    "ugc-tee": {
+      "idea": "The everyday tee she keeps reaching for",
+      "seconds": 12
+    }
+  },
+  "hook-callout": {
+    "ugc-drink": {
+      "idea": "A post-workout citrus hydration moment",
+      "seconds": 10
+    }
+  },
+  "hook-contrarian": {
+    "ugc-cookies": {
+      "idea": "A cozy cookie recommendation from the couch",
+      "seconds": 10
+    }
+  },
+  "hook-drop": {
+    "hero-perfume": {
+      "idea": "A gold perfume bottle lands and catches the light",
+      "seconds": 8
+    }
+  },
+  "hook-fumble": {
+    "ugc-capsules": {
+      "idea": "A casual morning supplement routine",
+      "seconds": 10
+    }
+  },
+  "hook-lens": {
+    "ugc-serum": {
+      "idea": "A casual bathroom-counter serum first impression",
+      "seconds": 10
+    }
+  },
+  "hook-lights": {
+    "hero-headphones": {
+      "idea": "A soft light reveal for AURAL headphones",
+      "seconds": 6
+    }
+  },
+  "hook-none": {
+    "ugc-headphones": {
+      "idea": "Cream headphones for a calmer workday",
+      "seconds": 10
+    }
+  },
+  "hook-question": {
+    "ugc-serum": {
+      "idea": "A casual morning skincare routine",
+      "seconds": 10
+    }
+  },
+  "hook-reveal": {
+    "ugc-treats": {
+      "idea": "A dog spots his training treats",
+      "seconds": 6
+    }
+  },
+  "hook-sound": {
+    "demo-cookies": {
+      "idea": "Open a pouch of chocolate chip cookies",
+      "seconds": 8
+    }
+  },
+  "hook-toss": {
+    "ugc-drink": {
+      "idea": "Citrus hydration after a gym session",
+      "seconds": 10
+    }
+  },
+  "hook-wait": {
+    "ugc-cookies": {
+      "idea": "A cozy living-room cookie discovery",
+      "seconds": 10
+    }
+  },
+  "hook-zoom": {
+    "ugc-tee": {
+      "idea": "An easy everyday tee in a muted sage green",
+      "seconds": 10
+    }
+  },
+  "mood-amazed": {
+    "ugc-headphones": {
+      "idea": "Soft neutral headphones for a cozy desk setup",
+      "seconds": 6
+    }
+  },
+  "mood-calm": {
+    "ugc-headphones": {
+      "idea": "A cozy desk moment with cream headphones",
+      "seconds": 10
+    }
+  },
+  "mood-deadpan": {
+    "ugc-cookies": {
+      "idea": "A movie-night cookie plan goes slightly off track",
+      "seconds": 10
+    }
+  },
+  "mood-excited": {
+    "ugc-capsules": {
+      "idea": "A cheerful morning supplement routine",
+      "seconds": 10
+    },
+    "ugc-headphones": {
+      "idea": "A cozy desk moment with cream headphones",
+      "seconds": 10
+    }
+  },
+  "mood-honest": {
+    "ugc-capsules": {
+      "idea": "A casual morning-counter supplement routine",
+      "seconds": 10
+    }
+  },
+  "mood-relieved": {
+    "ugc-headphones": {
+      "idea": "A relieved desk break with soft over-ear headphones",
+      "seconds": 6
+    }
+  },
+  "mood-secret": {
+    "ugc-headphones": {
+      "idea": "A quiet desk moment with cream headphones",
+      "seconds": 6
+    }
+  },
+  "mood-skeptic": {
+    "ugc-headphones": {
+      "idea": "A skeptical first try of soft everyday headphones",
+      "seconds": 6
+    }
+  },
+  "mood-warm": {
+    "ugc-headphones": {
+      "idea": "A quiet desk moment with soft everyday headphones",
+      "seconds": 10
+    }
+  },
+  "mood-whisper": {
+    "ugc-headphones": {
+      "idea": "A quiet work-from-home moment with cream headphones",
+      "seconds": 6
+    }
+  },
+  "pace-calm": {
+    "hero-perfume": {
+      "idea": "A quiet light sweep over the perfume",
+      "seconds": 8
+    }
+  },
+  "pace-natural": {
+    "hero-watch": {
+      "idea": "A minimalist watch beside morning coffee",
+      "seconds": 6
+    }
+  },
+  "pace-punchy": {
+    "kova": {
+      "idea": "Citrus hydration from gym to beach to park",
+      "seconds": 12
+    }
+  },
+  "still-banner-candle": {
+    "product": "candle",
+    "aspect": "16:9",
+    "idea": "Burning candle on a cozy autumn side table"
+  },
+  "still-banner-cookies": {
+    "product": "cookies",
+    "aspect": "16:9",
+    "idea": "Warm cookies beside the pouch on a kitchen board"
+  },
+  "still-demo-cookies": {
+    "product": "cookies",
+    "aspect": "9:16",
+    "idea": "About to open cookies at a café"
+  },
+  "still-demo-serum": {
+    "product": "serum",
+    "aspect": "9:16",
+    "idea": "Serum held above a stone vanity"
+  },
+  "still-hero-drink": {
+    "product": "drink",
+    "aspect": "9:16",
+    "idea": "Chilled bottle on a sunny beach-bar counter"
+  },
+  "still-hero-headphones": {
+    "product": "headphones",
+    "aspect": "16:9",
+    "idea": "Headphones standing on a calm oak work desk"
+  },
+  "still-hero-perfume": {
+    "product": "perfume",
+    "aspect": "9:16",
+    "idea": "Gold light on black marble"
+  },
+  "still-hero-sneakers": {
+    "product": "sneakers",
+    "aspect": "9:16",
+    "idea": "Ivory sneakers on a sand-colored studio set"
+  },
+  "still-hero-watch": {
+    "product": "watch",
+    "aspect": "9:16",
+    "idea": "Morning espresso beside a quiet café table watch"
+  },
+  "still-life-drink": {
+    "product": "drink",
+    "aspect": "9:16",
+    "idea": "Catching her breath after a park run"
+  },
+  "still-life-tee": {
+    "product": "tee",
+    "aspect": "9:16",
+    "idea": "Walking in golden afternoon light"
+  },
+  "still-ugc-capsules": {
+    "product": "capsules",
+    "aspect": "9:16",
+    "idea": "A kitchen selfie before her morning wellness routine"
+  },
+  "still-ugc-car": {
+    "product": "drink",
+    "aspect": "9:16",
+    "idea": "Parked-car selfie with citrus hydration"
+  },
+  "still-ugc-cookies": {
+    "product": "cookies",
+    "aspect": "9:16",
+    "idea": "Evening cookie selfie on the sofa"
+  },
+  "still-ugc-drink": {
+    "product": "drink",
+    "aspect": "9:16",
+    "idea": "Post-workout selfie with citrus electrolyte water"
+  },
+  "still-ugc-friend": {
+    "product": "cookies",
+    "aspect": "9:16",
+    "idea": "Laughing over cookies at a neighborhood café"
+  },
+  "still-ugc-headphones": {
+    "product": "headphones",
+    "aspect": "9:16",
+    "idea": "Window-lit desk selfie with headphones around her neck"
+  },
+  "still-ugc-mirror": {
+    "product": "tee",
+    "aspect": "9:16",
+    "idea": "Mirror selfie in a bright apartment hallway"
+  },
+  "still-ugc-propped": {
+    "product": "serum",
+    "aspect": "9:16",
+    "idea": "Vanity creator shares her serum routine"
+  },
+  "still-ugc-serum": {
+    "product": "serum",
+    "aspect": "9:16",
+    "idea": "Bathroom selfie after cleansing"
+  },
+  "still-ugc-tee": {
+    "product": "tee",
+    "aspect": "9:16",
+    "idea": "Sunny sidewalk selfie in the OASE tee"
+  },
+  "still-ugc-treats": {
+    "product": "treats",
+    "aspect": "9:16",
+    "idea": "A park selfie with a golden retriever and treats"
+  },
+  "story-apply": {
+    "demo-serum": {
+      "idea": "A serum drop, ready for a skincare routine",
+      "seconds": 6
+    }
+  },
+  "story-auto": {
+    "banner-cookies": {
+      "idea": "Warm cookies, a slow curl of steam",
+      "seconds": 6
+    }
+  },
+  "story-before": {
+    "ugc-capsules": {
+      "idea": "A slow morning and a simple supplement routine",
+      "seconds": 6
+    }
+  },
+  "story-breeze": {
+    "life-tee": {
+      "idea": "A quiet breeze through a sage-green everyday T-shirt",
+      "seconds": 6
+    }
+  },
+  "story-cuts": {
+    "kova": {
+      "idea": "Citrus hydration from gym to beach to park",
+      "seconds": 12
+    }
+  },
+  "story-detail": {
+    "hero-headphones": {
+      "idea": "A close look at the headphones’ soft cushions and finish",
+      "seconds": 6
+    }
+  },
+  "story-drops": {
+    "hero-drink": {
+      "idea": "Cold citrus hydration by the water",
+      "seconds": 6
+    }
+  },
+  "story-elements": {
+    "banner-cookies": {
+      "idea": "Brown butter chocolate chip cookies, presented in a warm kitchen",
+      "seconds": 6
+    }
+  },
+  "story-flow": {
+    "millo": {
+      "idea": "Brown butter cookies with coffee and a cozy evening",
+      "seconds": 6
+    }
+  },
+  "story-glow": {
+    "banner-candle": {
+      "idea": "A quiet evening candle beside the books",
+      "seconds": 6
+    }
+  },
+  "story-handoff": {
+    "ugc-cookies": {
+      "idea": "A cozy cookie share at home",
+      "seconds": 12
+    }
+  },
+  "story-joins": {
+    "ugc-treats": {
+      "idea": "A park training treat gets the dog’s attention",
+      "seconds": 6
+    }
+  },
+  "story-light": {
+    "hero-watch": {
+      "idea": "A quiet coffee moment with a minimalist watch",
+      "seconds": 6
+    }
+  },
+  "story-one": {
+    "ugc-capsules": {
+      "idea": "A morning supplement beside her coffee",
+      "seconds": 12
+    }
+  },
+  "story-pour": {
+    "demo-serum": {
+      "idea": "A close-up of golden serum returning to its bottle",
+      "seconds": 6
+    }
+  },
+  "story-punch": {
+    "ugc-tee": {
+      "idea": "The everyday tee she keeps reaching for",
+      "seconds": 12
+    }
+  },
+  "story-show": {
+    "ugc-serum": {
+      "idea": "A calm bathroom serum routine",
+      "seconds": 10
+    }
+  },
+  "story-splash": {
+    "hero-drink": {
+      "idea": "Citrus hydration by the water",
+      "seconds": 6
+    }
+  },
+  "story-steam": {
+    "banner-cookies": {
+      "idea": "Warm cookies, a slow curl of steam",
+      "seconds": 6
+    }
+  },
+  "story-story": {
+    "oase": {
+      "idea": "A sage-green tee goes from city stroll to mirror check",
+      "seconds": 6
+    }
+  },
+  "story-sweep": {
+    "hero-perfume": {
+      "idea": "A quiet light sweep over the perfume",
+      "seconds": 8
+    }
+  },
+  "story-turn": {
+    "hero-sneakers": {
+      "idea": "Ivory sneakers on a slow studio turn",
+      "seconds": 6
+    }
+  },
+  "story-unbox": {
+    "demo-cookies": {
+      "idea": "Open a pouch of chocolate chip cookies",
+      "seconds": 6
+    }
+  },
+  "story-unveil": {
+    "hero-headphones": {
+      "idea": "Cream headphones revealed in soft studio light",
+      "seconds": 6
+    }
+  },
+  "story-use": {
+    "ugc-drink": {
+      "idea": "A post-workout sip and honest citrus reaction",
+      "seconds": 12
+    }
+  },
+  "style-campaign": {
+    "kova": {
+      "idea": "Citrus hydration from gym to beach to park",
+      "seconds": 12
+    }
+  },
+  "style-creator": {
+    "ugc-serum": {
+      "idea": "A simple serum step at the bathroom mirror",
+      "seconds": 10
+    },
+    "ugc-capsules": {
+      "idea": "A casual morning counter moment with a wellness supplement",
+      "seconds": 10
+    },
+    "ugc-tee": {
+      "idea": "A relaxed everyday tee in a muted sage green",
+      "seconds": 10
+    }
+  },
+  "style-demo": {
+    "demo-cookies": {
+      "idea": "Open a pouch of brown butter chocolate chip cookies",
+      "seconds": 6
+    }
+  },
+  "style-hero": {
+    "hero-perfume": {
+      "idea": "A quiet light sweep over the perfume",
+      "seconds": 8
+    }
+  },
+  "style-lifestyle": {
+    "life-drink": {
+      "idea": "A quiet citrus-water break after a walk",
+      "seconds": 8
+    },
+    "life-tee": {
+      "idea": "A relaxed walk in a muted sage tee",
+      "seconds": 8
+    }
+  },
+  "style-living": {
+    "banner-cookies": {
+      "idea": "Warm cookies, a slow curl of steam",
+      "seconds": 6
+    },
+    "banner-candle": {
+      "idea": "A quiet evening candle beside the books",
+      "seconds": 6
+    }
+  }
+}

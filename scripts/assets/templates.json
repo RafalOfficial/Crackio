@@ -1,0 +1,145 @@
+{
+  "$comment": "Crackio's own clips for the template formats with no single real clip to use (the rest of the library downloads each trend's real post, see src/lib/server/template-originals.ts). Made on your Grok plan by scripts/assets/templates.mjs: `still` is the opening frame (Grok Imagine 2.0, 9:16), `motion` animates it (Grok Imagine Video 1.5). Swap clips are the base a remix keeps, so the people in them must match each slot's `target` in src/lib/templates/library.ts. `pick` and `clipPick` are the takes that shipped. Entries with `imageModel` / `videoModel` are made on your own GPU instead (FLUX 3 Klein stills, LTX-2.5 clips with their own sound); `gain` (dB) lifts a soundtrack the model made too quiet.",
+  "templates": [
+    {
+      "id": "car-jump",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 still on a desert dirt track at golden hour: a woman sits relaxed in a folding camp chair in the middle of the track holding a cup, behind her a lifted red pickup truck speeds toward a dirt ramp, wide shot from the side, dust in the air. Photorealistic, cinematic. No text, no logos, no license plate characters, no watermark.",
+      "motion": "Static wide shot from the side. At 2 seconds the red pickup truck launches off the dirt ramp right behind her and flies through the air high above her head, filling the top of the frame, then lands in a burst of dust behind her at 4 seconds. She keeps calmly sipping her drink without flinching, then raises her cup to the camera. Engine roar and a dusty thud. Photoreal, natural motion.",
+      "seconds": 8,
+      "pick": 1
+    },
+    {
+      "id": "costume-walk",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "parts": [
+        {
+          "still": "Vertical 9:16 ankle-height shot in a long apartment hallway with warm wall sconces and a patterned runner rug: a woman's feet in white sneakers and light-blue jeans walking toward the camera, only her lower legs visible, moody warm light. Photorealistic. No text, no logos, no watermark.",
+          "motion": "Ankle-height gimbal shot moving slowly backward as the white sneakers and jeans walk toward the camera in rhythm on the runner rug, step by step. Driving electro-pop beat building up. Photoreal, natural motion.",
+          "seconds": 3,
+          "trim": [
+            0,
+            3
+          ],
+          "pick": 1
+        },
+        {
+          "still": "Vertical 9:16 ankle-height shot in the same long apartment hallway with warm wall sconces and a patterned runner rug: a woman walking toward the camera in black heeled boots, the hem of a sweeping black velvet cape swirling around her ankles. Photorealistic, moody warm light, light haze. No text, no logos, no watermark.",
+          "motion": "The heeled boots stride toward the camera as the black velvet cape sweeps; then the camera tilts up and pulls back to reveal the full Halloween costume: a woman in a pointed witch hat, the sweeping black velvet cape and smoky makeup; she stops, poses and smirks at the camera. Driving electro-pop beat after the drop. Photoreal, natural motion.",
+          "seconds": 6,
+          "trim": [
+            0,
+            5.5
+          ],
+          "pick": 1
+        }
+      ]
+    },
+    {
+      "id": "studio-dance",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 full-body photo in a bright, colourful photo studio: a young woman with long dark curly hair, wearing a vivid yellow tracksuit (zip-up jacket and matching wide trousers) and chunky white sneakers, stands in the middle of the frame starting to dance, one arm raised, smiling. Her whole body is in frame from head to toe, about two thirds of the frame's height, with clear space above her head, below her feet and at both sides. Behind her a seamless studio backdrop in bold colour blocks of coral pink, teal and violet, a smooth light-grey floor, bright even softbox lighting. Shot straight on at waist height with a 35 mm lens, sharp focus, natural skin texture. Photorealistic. No text, no logos, no watermark.",
+      "motion": "The woman in the yellow tracksuit dances to the music in the middle of the colourful studio with a relaxed, groovy rhythm: she bounces gently on her knees, sways her hips, rolls her shoulders and swings her arms loosely at chest height, taking small steps side to side. Her head stays steady and her smiling face stays turned toward the camera, her curly hair moving softly. She stays in the centre of the frame with her whole body visible from head to toe throughout. The camera is locked off on a tripod at a wide full-body framing and does not move. Bright, even studio light on the coral, teal and violet backdrop. Sound: upbeat pop dance music with a punchy beat, sneakers squeaking lightly on the floor.",
+      "seconds": 8,
+      "takes": 4,
+      "pick": 2,
+      "clipTakes": 2,
+      "clipPick": 2
+    },
+    {
+      "id": "city-walk",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 photo on a sunny city sidewalk in the morning: a woman in her late twenties with shoulder-length auburn hair, wearing a belted beige trench coat over a white top, slim black trousers and white sneakers, walks toward the camera in the middle of a wide, empty pavement. Her whole body is in frame from head to toe, about two thirds of the frame's height, with space above her head and below her feet. Behind her a long, softly blurred street of pale stone buildings and green trees, warm low sunlight and soft shadows, no other people near her. Shot at chest height with a 50 mm lens, shallow depth of field, natural skin texture. Photorealistic. No text, no readable signs, no logos, no watermark.",
+      "motion": "The woman in the beige trench coat walks toward the camera along the sunny sidewalk at a relaxed, confident pace, her coat swaying with each step, arms swinging naturally, looking ahead with a slight smile. The camera dollies smoothly backward at the same speed, so she stays the same size in the centre of the frame with her whole body from head to toe visible the entire time. Warm morning sunlight, tree shadows sliding over the pavement, the street softly blurred behind her. Sound: city ambience with her footsteps on the pavement, distant traffic and birdsong.",
+      "seconds": 8,
+      "takes": 4,
+      "pick": 1,
+      "clipPick": 1,
+      "gain": 10
+    },
+    {
+      "id": "cafe-duo",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 wide shot inside a cosy, sunlit café, taken from across the room at eye level: two young women sit side by side on wooden chairs at a small round café table, a little apart from each other, smiling and chatting, each holding a white ceramic coffee cup. The woman on the left has long straight black hair and wears a forest-green knit sweater and jeans; the woman on the right has wavy blonde hair in a low bun and wears a white blouse and light trousers. Both are seen whole from head to chair, small in the frame and placed in its lower half, with the café's wooden floor below them, plants and shelves visible to the left and right of them, and tall windows and pendant lamps above them. There is a clear gap between their shoulders. Warm window light, no other people. Natural skin texture. Photorealistic. No text, no logos, no watermark.",
+      "motion": "The two women sit side by side at the small café table and chat happily. The woman in the green sweater on the left tells a funny story with small hand gestures, then sips from her cup; the woman in the white blouse on the right laughs, nods and lifts her cup toward her lips. They stay seated on their chairs, apart from each other, both completely in frame the whole time, each keeping hold of her white cup. The café around them is quiet and empty apart from the two of them, and outside the windows only leafy trees sway gently in the breeze. The camera stays still at eye level in a steady wide shot. Warm window light. Sound: soft café ambience, their light laughter, cups clinking on saucers and an espresso machine hissing in the background.",
+      "seconds": 8,
+      "takes": 4,
+      "pick": 2,
+      "clipTakes": 3,
+      "clipPick": 3,
+      "trim": [
+        1.75,
+        8
+      ]
+    },
+    {
+      "id": "coastal-drive",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 photo of a sunny coastal cliff road seen from slightly above: a glossy red two-seat convertible sports car of an original design, with the top down, drives toward the camera at a front three-quarter angle. The car is small in the frame, about half the frame's width, in the lower middle, with open road all around it and plenty of space on both sides. A woman in sunglasses and a light scarf is at the wheel. The bonnet and nose are smooth plain red paint from headlight to headlight, and there is no plate on the front. Turquoise sea and rocky cliffs on one side, a low stone wall along the road, bright midday sun, crisp shadows. Shot from a camera car with a telephoto lens. Photorealistic, commercial car photography. No text, no logos, no badges, no watermark.",
+      "motion": "The red convertible cruises slowly along the coastal road toward the camera. The camera is mounted on a vehicle driving backward directly in front of the car, in a straight line at exactly the car's speed, so the car stays in the same place in the middle of the frame and keeps the same size and the same front three-quarter angle for the whole shot; the camera never turns, orbits or moves sideways. Only the road markings, the stone wall and the sea slide past. The woman at the wheel keeps both hands on the wheel, her scarf fluttering in the wind. Bright sunshine glints on the red paint. Sound: a smooth engine purr, tyres humming on the asphalt, rushing wind and distant waves.",
+      "seconds": 8,
+      "takes": 4,
+      "pick": 1,
+      "clipTakes": 3,
+      "clipPick": 3,
+      "trim": [
+        0,
+        6.7
+      ],
+      "gain": 20
+    },
+    {
+      "id": "product-spin",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 product photo: a single clean white leather low-top sneaker with white laces and a white rubber sole, completely plain with no logos or brand marks, standing on a round matte pastel-pink pedestal in the centre of the frame, seen from the side at a slight three-quarter angle, at pedestal height. Minimal pastel studio with a soft lilac seamless backdrop, soft diffused light from the left and a gentle shadow under the shoe. The whole sneaker and the top of the pedestal are in frame with generous space around them. Photorealistic, crisp detail, commercial product photography. No text, no logos, no watermark.",
+      "motion": "The single white sneaker turns slowly on the round pastel-pink pedestal, which rotates smoothly and steadily, about a quarter turn over the whole clip, showing the shoe from the side and then from the front three-quarter angle. The sneaker keeps its exact shape and stays whole in the centre of the frame. The camera is perfectly still. Soft diffused studio light glides across the white leather, and the lilac backdrop stays calm and even. Sound: a soft, airy ambient synth pad and the quiet hum of the turntable.",
+      "seconds": 8,
+      "takes": 4,
+      "pick": 2,
+      "clipPick": 1
+    },
+    {
+      "id": "moon-moonwalk",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 full-body photo on the surface of the Moon: a woman astronaut in a bulky, plain white spacesuit with a white life-support backpack, white gloves and chunky white moon boots stands on flat grey lunar dust, striking a cool, smooth dance pose, one knee bent with the toe of that boot touching the ground, arms relaxed at her sides. Her rounded white helmet has its gold sun visor flipped up, so her face is fully visible through the clean, clear glass: a woman in her thirties with a calm, completely deadpan expression, looking straight at the camera. Her whole body is in frame from helmet to boots, about two thirds of the frame's height, standing in the centre with clear space above her helmet, below her boots and at both sides. Behind her a pitch-black sky and the bright blue-and-white Earth hanging large and sharp high in the sky to one side of her, a gently rolling grey horizon with a few small craters and scattered pebbles, hard white sunlight from the side casting a crisp shadow beside her. Shot straight on at waist height with a 35 mm lens, sharp focus. Photorealistic, cinematic. No flags, no patches, no text, no logos, no watermark.",
+      "motion": "The woman astronaut in the white spacesuit does a smooth moonwalk dance on the grey lunar surface: she glides slowly backward over the dust toward the right with sliding steps, one boot flat and sliding back while the other heel lifts, then switching, again and again in a steady rhythm, her arms swinging loosely and her shoulders bobbing to the beat. Small soft puffs of grey moon dust rise from her boots with every slide and drift slowly down in the low gravity. Her face stays calm and completely deadpan, looking at the camera as if this is perfectly normal. She stays in the centre of the frame with her whole body from helmet to boots visible the entire time. The camera follows her slowly and smoothly, steady, at a full-body framing. The black sky, the bright blue Earth and the grey horizon stay calm behind her. Sound: a smooth, funky disco bassline groove with finger snaps, soft and dreamy.",
+      "seconds": 8,
+      "takes": 4,
+      "pick": 2,
+      "clipPick": 1
+    },
+    {
+      "id": "trolley-surf",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 photo in an empty, brightly lit supermarket at night: a young woman with a long brown ponytail, wearing a bright yellow hooded raincoat, blue jeans and white sneakers, surfs a moving metal shopping trolley down the middle of a long, wide aisle toward the camera. She rides standing on the trolley's low back bar in a surfer's stance, knees bent, arms stretched out wide to both sides for balance, grinning. The trolley is seen at a slight front three-quarter angle, so her whole figure is clearly visible above and beside the wire basket. She and the whole trolley are in frame from her head to its wheels, about two thirds of the frame's height, with clear space above her head, below the wheels and at both sides. Tall shelves of colourful goods line both sides of the aisle, softly blurred into plain colour blocks with no readable labels; a glossy pale floor reflects rows of bright white ceiling lights stretching into the distance; no other people. Shot at chest height with a 35 mm lens, shallow depth of field, natural skin texture. Photorealistic, cinematic. No text, no readable signs, no hanging aisle signs, no labels, no logos, no watermark.",
+      "motion": "The woman in the bright yellow raincoat surfs the shopping trolley as it glides slowly and smoothly down the middle of the empty supermarket aisle: she stands up inside its wire basket, knees softly bent in a surfer's stance, arms held out to her sides at shoulder height with her elbows slightly bent, swaying gently from side to side like a surfer riding a calm wave. Her head stays steady and her big grin stays turned toward the camera; her ponytail and raincoat sway softly. Her feet stay planted in the basket. The camera glides backward in front of her a little faster than the trolley moves, so she gets slightly smaller in the frame, and her whole body, both hands and the whole trolley stay fully inside the frame with space around them the entire time. The shelves and the bright ceiling lights slide past slowly on both sides. Sound: the soft rattle and squeak of the trolley's wheels on the shiny floor, the hum of the store's lights and a twangy surf-rock guitar riff.",
+      "seconds": 8,
+      "takes": 4,
+      "pick": 3,
+      "clipTakes": 2,
+      "clipPick": 2
+    },
+    {
+      "id": "office-chair-race",
+      "imageModel": "local:flux3-klein",
+      "videoModel": "local:ltx-2.5",
+      "still": "Vertical 9:16 photo in a long, empty, modern office corridor: a woman in her thirties with sleek dark hair in a low bun, wearing a sharp tailored grey business suit, blazer and trousers, with a white blouse and black heels, sits on a black rolling office chair with five wheels, gliding fast toward the camera down the middle of the corridor, her feet lifted off the floor and her hands on the armrests, grinning with excitement. She and the whole chair are in frame from her head to its wheels, about two thirds of the frame's height, with clear space above her head, below the wheels and at both sides. The corridor stretches far behind her: glass office walls, pale grey carpet, a row of bright ceiling lights and a few potted plants, no other people. Shot at seated eye level with a 35 mm lens, slight motion blur on the walls, natural skin texture. Photorealistic, cinematic. No text, no signs, no logos, no watermark.",
+      "motion": "The woman in the grey business suit zooms down the long, empty office corridor toward the camera on the rolling office chair, feet lifted, hands on the armrests. Halfway along she spins the chair around once, one full smooth turn, and comes back round facing the camera, laughing out loud with delight, still rolling forward. Her blazer flaps and her bun stays neat. The camera tracks smoothly backward in front of her at the same speed, so she stays the same size in the centre of the frame with her whole body and the whole chair visible the entire time. The glass walls and ceiling lights stream past. Sound: the rumble of the chair's wheels on the floor, a quick whoosh as she spins and her joyful laughter echoing down the corridor.",
+      "seconds": 8,
+      "takes": 4,
+      "pick": 3,
+      "clipPick": 1,
+      "gain": 4,
+      "poster": 0
+    }
+  ]
+}

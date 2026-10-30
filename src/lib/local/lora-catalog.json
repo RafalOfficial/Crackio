@@ -1,0 +1,5194 @@
+{
+ "entries": [
+  {
+   "id": "fdev-realism",
+   "name": "Realism",
+   "models": [
+    "tpl-flux1-dev"
+   ],
+   "repo": "comfyanonymous/flux_RealismLora_converted_comfyui",
+   "revision": "4822048f44f4c9bad294ab99e0a642cdf0df3bba",
+   "files": [
+    {
+     "path": "flux_realism_lora.safetensors",
+     "bytes": 22433528,
+     "sha256": "379e73dccfb57822ee3b12f374e141ce1c79a13b7ff19da4219ef2a2a610038e",
+     "match": "^(?!.*[Kk]ontext)"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Pushes FLUX.1 dev toward natural, photographic skin, texture and light instead of the glossy AI look.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "none stated (ComfyUI conversion of XLabs-AI/flux-RealismLora, FLUX.1 [dev] Non-Commercial)",
+    "commercial": "no"
+   },
+   "downloads": 0,
+   "likes": 83,
+   "gated": false,
+   "author": "comfyanonymous",
+   "note": "ComfyUI conversion of XLabs-AI's Realism LoRA by ComfyUI's author; the original XLabs file does not load in ComfyUI."
+  },
+  {
+   "id": "fdev-turbo-alpha",
+   "name": "Turbo 8-Step",
+   "models": [
+    "tpl-flux1-dev"
+   ],
+   "repo": "alimama-creative/FLUX.1-Turbo-Alpha",
+   "revision": "7b29bf041b413949089d78b826a5c9726e3c8e50",
+   "files": [
+    {
+     "path": "diffusion_pytorch_model.safetensors",
+     "bytes": 694082424,
+     "sha256": "77f7523a5e9c3da6cfc730c6b07461129fa52997ea06168e9ed5312228aa0bff",
+     "match": "^(?!.*[Kk]ontext)"
+    }
+   ],
+   "category": "speed",
+   "blurb": "Makes FLUX.1 dev pictures in 8 steps instead of 20 to 30, about three times faster.",
+   "strength": 1,
+   "range": [
+    0,
+    1.2
+   ],
+   "licence": {
+    "name": "FLUX.1 [dev] Non-Commercial",
+    "commercial": "no"
+   },
+   "downloads": 18769,
+   "likes": 643,
+   "gated": false,
+   "preview": "https://huggingface.co/alimama-creative/FLUX.1-Turbo-Alpha/resolve/7b29bf041b413949089d78b826a5c9726e3c8e50/images/T2I.png",
+   "author": "alimama-creative",
+   "note": "Set steps to 8 and keep guidance at 3.5. The file is called diffusion_pytorch_model.safetensors, so save it under a unique name such as FLUX.1-Turbo-Alpha.safetensors."
+  },
+  {
+   "id": "fdev-logo-design",
+   "name": "Logo Design",
+   "models": [
+    "tpl-flux1-dev",
+    "tpl-flux1-krea"
+   ],
+   "repo": "Shakker-Labs/FLUX.1-dev-LoRA-Logo-Design",
+   "revision": "3c09a22c71712dabcaaa8decadf73283419c4705",
+   "files": [
+    {
+     "path": "FLUX-dev-lora-Logo-Design.safetensors",
+     "bytes": 38404800,
+     "sha256": "53f44b6f4e4f9e20313ac7686190bd64292a872354ebd457c9480a6846c5051b",
+     "match": "^(?!.*[Kk]ontext)"
+    }
+   ],
+   "category": "design",
+   "blurb": "Draws clean, minimalist logo marks and simple emblems from a short description, including a word or initial.",
+   "trigger": "wablogo, logo, Minimalist",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX.1 [dev] Non-Commercial",
+    "commercial": "no"
+   },
+   "downloads": 511,
+   "likes": 404,
+   "gated": false,
+   "preview": "https://huggingface.co/Shakker-Labs/FLUX.1-dev-LoRA-Logo-Design/resolve/3c09a22c71712dabcaaa8decadf73283419c4705/images/03.png",
+   "author": "Shakker-Labs",
+   "note": "Made for FLUX.1 dev. Krea dev has the same architecture, so the LoRA loads there, but the look may shift."
+  },
+  {
+   "id": "fdev-360-panorama",
+   "name": "360 Panorama",
+   "models": [
+    "tpl-flux1-dev",
+    "tpl-flux1-krea"
+   ],
+   "repo": "jbilcke-hf/flux-dev-panorama-lora-2",
+   "revision": "feb46ba450f16bcd8ea308e238e2201d980fedc1",
+   "files": [
+    {
+     "path": "flux_train_replicate.safetensors",
+     "bytes": 171969416,
+     "sha256": "dea506dc7b0923ee5e693449c122d8ecad700c54d78d7096a74d43c99d4a398e",
+     "match": "^(?!.*[Kk]ontext)"
+    }
+   ],
+   "category": "world",
+   "blurb": "Makes 360-degree panoramas that wrap all the way around, to use as a surrounding world or an HDRI backdrop.",
+   "trigger": "HDRI panoramic view of TOK",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX.1 [dev] Non-Commercial",
+    "commercial": "no"
+   },
+   "downloads": 171,
+   "likes": 72,
+   "gated": false,
+   "preview": "https://huggingface.co/jbilcke-hf/flux-dev-panorama-lora-2/resolve/feb46ba450f16bcd8ea308e238e2201d980fedc1/samples/HDRI%20panoramic%20view%20of%20TOK,%20inside%20of%20a%20beautiful%20japanese%20onsen%20with%20sakura%20tree,%20hot%20baths.webp",
+   "author": "jbilcke-hf",
+   "note": "Use a 2:1 frame (for example 2048 by 1024) so the picture wraps. Download only the .safetensors file; optimizer.pt in the repo is not needed."
+  },
+  {
+   "id": "fdev-film-snapshot",
+   "name": "Film Snapshot",
+   "models": [
+    "tpl-flux1-dev",
+    "tpl-flux1-krea"
+   ],
+   "repo": "alvdansen/flux-koda",
+   "revision": "9812c8d2cf02d836dd851857d7423596fe6558e5",
+   "files": [
+    {
+     "path": "araminta_k_flux_koda.safetensors",
+     "bytes": 687476680,
+     "sha256": "1c835c096722c4bff455e691b89350ee21b49d5cc4399d2ea5fcccbcf678843c",
+     "match": "^(?!.*[Kk]ontext)"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Gives pictures a nostalgic analog-film snapshot look, with warm colour, soft focus and golden-hour light.",
+   "trigger": "flmft style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "creativeml-openrail-m (on a FLUX.1 [dev] Non-Commercial base)",
+    "commercial": "no"
+   },
+   "downloads": 813,
+   "likes": 252,
+   "gated": false,
+   "preview": "https://huggingface.co/alvdansen/flux-koda/resolve/9812c8d2cf02d836dd851857d7423596fe6558e5/images/ComfyUI_00572_.png",
+   "author": "alvdansen"
+  },
+  {
+   "id": "kontext-relight",
+   "name": "Relight",
+   "models": [
+    "tpl-flux1-dev"
+   ],
+   "repo": "kontext-community/relighting-kontext-dev-lora-v3",
+   "revision": "8da7b17cb6b6e51be970b038d10e96a2539d7bd3",
+   "files": [
+    {
+     "path": "relighting-kontext-dev-lora-v3.safetensors",
+     "bytes": 306596088,
+     "sha256": "f71d7c695eb8b4950f8079115bea970c14c383f7a43801e14802ea7e708a8f4f",
+     "match": "[Kk]ontext"
+    }
+   ],
+   "category": "light",
+   "blurb": "Relights your picture the way you describe it, such as warm sunset from the left or cool studio light, and keeps the scene.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "other (FLUX.1 Kontext [dev] Non-Commercial base)",
+    "commercial": "no"
+   },
+   "downloads": 571,
+   "likes": 74,
+   "gated": false,
+   "author": "kontext-community",
+   "note": "An edit tool for FLUX.1 Kontext: describe the new lighting in the prompt. No trigger word is needed."
+  },
+  {
+   "id": "kontext-remove",
+   "name": "Remove Anything",
+   "models": [
+    "tpl-flux1-dev"
+   ],
+   "repo": "starsfriday/Kontext-Remover-General-LoRA",
+   "revision": "c3a545596e31939077bfa7782e71cffdeac8e324",
+   "files": [
+    {
+     "path": "kontext_remove.safetensors",
+     "bytes": 171969352,
+     "sha256": "dc1454c7eb0090de0e36a9bf76715ff2b2a55681f4c347bde583f081ef7f2770",
+     "match": "[Kk]ontext"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Removes the person or object you name and fills the gap with matching background.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "apache-2.0 (on a FLUX.1 Kontext [dev] Non-Commercial base)",
+    "commercial": "no"
+   },
+   "downloads": 194,
+   "likes": 88,
+   "gated": false,
+   "preview": "https://huggingface.co/starsfriday/Kontext-Remover-General-LoRA/resolve/c3a545596e31939077bfa7782e71cffdeac8e324/results/3.png",
+   "author": "starsfriday",
+   "note": "Prompt with an instruction like 'Remove the bicycle from the scene'. Download only the .safetensors file; optimizer.pt is not needed."
+  },
+  {
+   "id": "kontext-same-scene",
+   "name": "Same Scene, New Shot",
+   "models": [
+    "tpl-flux1-dev"
+   ],
+   "repo": "peteromallet/Flux-Kontext-InScene",
+   "revision": "b49f4c12b2e5e28aab6c7283c1a4e1eced0e728a",
+   "files": [
+    {
+     "path": "InScene-v1.0.safetensors",
+     "bytes": 343806376,
+     "sha256": "78f26cdce15edda0e522f600bf32acc4876a84380857846624dbbf57750f9fb8",
+     "match": "[Kk]ontext"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Makes a new shot of the same scene and keeps the place, characters and style of your picture, which suits storyboards.",
+   "trigger": "Make a shot in the same scene of",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "apache-2.0 (on a FLUX.1 Kontext [dev] Non-Commercial base)",
+    "commercial": "no"
+   },
+   "downloads": 146,
+   "likes": 174,
+   "gated": false,
+   "author": "peteromallet",
+   "note": "After the trigger, describe the new shot. Weaker on action such as running or punching."
+  },
+  {
+   "id": "kontext-turnaround",
+   "name": "Turnaround Sheet",
+   "models": [
+    "tpl-flux1-dev"
+   ],
+   "repo": "reverentelusarca/kontext-turnaround-sheet-lora-v1",
+   "revision": "4604deeebcf69f30da0b785cda5ecd0337efb794",
+   "files": [
+    {
+     "path": "kontext-turnaround-sheet-v1.safetensors",
+     "bytes": 343806408,
+     "sha256": "bdf42b642adbff9d67da351dc810b9e9008cb6dc7f8ec304d159a7b5451ed47c",
+     "match": "[Kk]ontext"
+    }
+   ],
+   "category": "characters",
+   "blurb": "Turns one full-body picture of a character into a five-view turnaround sheet (front, three-quarter, side, back) on white.",
+   "trigger": "create turnaround sheet of this exact character",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "flux-kontext-dev-license",
+    "commercial": "no"
+   },
+   "downloads": 297,
+   "likes": 27,
+   "gated": false,
+   "author": "reverentelusarca",
+   "note": "Give it a full-body picture, not a headshot. Works best on illustrated or 3D characters, in a wide frame."
+  },
+  {
+   "id": "kontext-zoom-out",
+   "name": "Zoom Out",
+   "models": [
+    "tpl-flux1-dev"
+   ],
+   "repo": "reverentelusarca/flux-kontext-zoom-out-lora",
+   "revision": "e1129d8098e60a7b8be3b4bfb7186fdafe8bc4d6",
+   "files": [
+    {
+     "path": "zoomout-fal-v1.safetensors",
+     "bytes": 306793968,
+     "sha256": "0aae532bbe5c166d359585dfec983199d8c35158ccfe6ada43594d6ba059ee80",
+     "match": "[Kk]ontext"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Pulls the camera back: keeps your subject as it is and extends the scene evenly on every side.",
+   "trigger": "Zoom out and keep the visible subject exactly the same in position, scale and appearance. Expand the canvas evenly in every direction and fill all new areas with a natural continuation of the scene, matching the original lighting, perspective and photographic style.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "flux-kontext-dev-license",
+    "commercial": "no"
+   },
+   "downloads": 0,
+   "likes": 53,
+   "gated": false,
+   "author": "reverentelusarca",
+   "note": "New edges can look blocky, and close-ups of faces or hands can warp. A wider picture size extends it one way."
+  },
+  {
+   "id": "krea1-realism",
+   "name": "Krea Realism",
+   "models": [
+    "tpl-flux1-krea"
+   ],
+   "repo": "gokaygokay/Flux-Krea-Realism-LoRA",
+   "revision": "29e7b1bb9e65a3c00c19e3f1e99667836e14786d",
+   "files": [
+    {
+     "path": "Flux_Krea_Real.safetensors",
+     "bytes": 89745224,
+     "sha256": "34e44dc0bc49b878bc325e7251c381de23489880afdc7e4556739d450e608442"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Makes Krea dev pictures look more like real photos, with natural skin, texture and light.",
+   "trigger": "in the style of R34L",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "apache-2.0 (on a FLUX.1 [dev] Non-Commercial base)",
+    "commercial": "no"
+   },
+   "downloads": 263,
+   "likes": 31,
+   "gated": false,
+   "preview": "https://huggingface.co/gokaygokay/Flux-Krea-Realism-LoRA/resolve/29e7b1bb9e65a3c00c19e3f1e99667836e14786d/1.jpeg",
+   "author": "gokaygokay"
+  },
+  {
+   "id": "krea1-solarpunk",
+   "name": "Solarpunk",
+   "models": [
+    "tpl-flux1-krea"
+   ],
+   "repo": "tusharmagar/FLUX.1-Krea-dev-LoRA-Solarpunk",
+   "revision": "ea2f3449279b6bda96268bc4aa185cf9ee2734de",
+   "files": [
+    {
+     "path": "flux1-krea-dev-lora-solarpunk.safetensors",
+     "bytes": 89745224,
+     "sha256": "2d087c2e49aa5ccea3eda309902a6cc0cf786a5271c33de48ce2c39f085981ca"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Reimagines cities and landscapes as bright solarpunk places with greenery, solar sails and clean white architecture.",
+   "trigger": "[SLRPNK]",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "mit (on a FLUX.1 [dev] Non-Commercial base)",
+    "commercial": "no"
+   },
+   "downloads": 41,
+   "likes": 2,
+   "gated": false,
+   "preview": "https://huggingface.co/tusharmagar/FLUX.1-Krea-dev-LoRA-Solarpunk/resolve/ea2f3449279b6bda96268bc4aa185cf9ee2734de/images/Santorini_Solarpunk.jpg",
+   "author": "tusharmagar",
+   "note": "A small LoRA with little use so far."
+  },
+  {
+   "id": "q2511-multiple-angles",
+   "name": "Multiple Angles",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA",
+   "revision": "e3066224ab74263f4a5b6179cd1a3b0a15577e44",
+   "files": [
+    {
+     "path": "qwen-image-edit-2511-multiple-angles-lora.safetensors",
+     "bytes": 295140688,
+     "sha256": "42426ded4e25fd22879d9e198b857556445ef4ca56e8da3246d0345155bb6765"
+    }
+   ],
+   "category": "angles",
+   "blurb": "Re-shoots your picture from a new camera position: 8 sides, 4 heights and 3 distances.",
+   "trigger": "<sks>",
+   "strength": 0.9,
+   "range": [
+    0,
+    1.2
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 73790,
+   "likes": 1604,
+   "gated": false,
+   "preview": "https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA/resolve/e3066224ab74263f4a5b6179cd1a3b0a15577e44/poses_96_distance_comparison.png",
+   "author": "fal",
+   "note": "Write the view after the trigger: '<sks> [azimuth] [elevation] [distance]', e.g. '<sks> front-left quarter view elevated shot medium shot'. Azimuths: front / front-right quarter / right side / back-right quarter / back / back-left quarter / left side / front-left quarter view; elevations: low-angle / eye-level / elevated / high-angle shot; distances: close-up / medium shot / wide shot."
+  },
+  {
+   "id": "q2511-anypose",
+   "name": "AnyPose",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "lilylilith/AnyPose",
+   "revision": "27c4b1f7688940d39767e652fe8d87faf44a0881",
+   "files": [
+    {
+     "path": "2511-AnyPose-base-000006250.safetensors",
+     "bytes": 295146208,
+     "sha256": "0396314e43b94f7520cf5242e6aa6e8e9095d784f7e87ee45980c2e541ee8c4d"
+    },
+    {
+     "path": "2511-AnyPose-helper-00006000.safetensors",
+     "bytes": 295146216,
+     "sha256": "674340c62fff3cf981d0cfc55daf2f0e6f51c56b50159e241d931748200cf1eb"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Puts the person from your first picture into the exact pose of the person in your second picture.",
+   "trigger": "Make the person in image 1 do the exact same pose of the person in image 2. Changing the style and background of the image of the person in image 1 is undesirable, so don't do it. The new pose should be pixel accurate to the pose we are trying to copy. The position of the arms and head and legs should be the same as the pose we are trying to copy. Change the field of view and angle to match exactly image 2. Head tilt and eye gaze pose should match the person in image 2.",
+   "strength": 0.7,
+   "range": [
+    0,
+    1.2
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 72554,
+   "likes": 516,
+   "gated": false,
+   "author": "lilylilith",
+   "note": "Needs two input pictures (character first, pose second) and both files at the same strength. Trained on 3D-posed figures, so flat 2D art works poorly. To keep the first picture's background, add: 'Remove the background of image 2, and replace it with the background of image 1.'"
+  },
+  {
+   "id": "q2511-anything2real",
+   "name": "Anything to Real",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "lrzjason/Anything2Real",
+   "revision": "b547e090d255ac10b190204c7868b03a61faf15e",
+   "files": [
+    {
+     "path": "anything2real_2601_A_final_patched.safetensors",
+     "bytes": 613580128,
+     "sha256": "d4cbbabf5610a8f0ea3f530dc0bc9e8a254be6563c4738795bea45d247903528"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Turns a drawing, anime frame, cartoon or painting into a convincing photograph while keeping its layout.",
+   "trigger": "change the picture 1 to realistic photograph,",
+   "strength": 1,
+   "range": [
+    0,
+    1.2
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 106569,
+   "likes": 147,
+   "gated": false,
+   "author": "lrzjason",
+   "note": "Use this 2601 A file only: the repo also holds FLUX.2 klein versions (f2k_*) that do not fit this model. Add a short description of the picture after the trigger."
+  },
+  {
+   "id": "q2511-upscale-2k",
+   "name": "Upscale 2K",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "joyfox/Qwen-Image-Edit-2511-Upscale2K",
+   "revision": "f01d5271256b718321d5441e02615814550122e3",
+   "files": [
+    {
+     "path": "qwen_image_edit_2511_upscale.safetensors",
+     "bytes": 590057176,
+     "sha256": "2be84dd96690311cebfa86bf5c5a3a656bd6ca4da6181dcbeea794a227bd2a74"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Enlarges a picture to about 2K and sharpens its fine detail.",
+   "trigger": "Upscale this picture to 4K resolution.",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 1982,
+   "likes": 165,
+   "gated": false,
+   "preview": "https://huggingface.co/joyfox/Qwen-Image-Edit-2511-Upscale2K/resolve/f01d5271256b718321d5441e02615814550122e3/result/result1.png",
+   "author": "joyfox",
+   "note": "Makes about 2K. For bigger, run an upscaler afterwards."
+  },
+  {
+   "id": "q2511-object-remover",
+   "name": "Object Remover",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "prithivMLmods/Qwen-Image-Edit-2511-Object-Remover",
+   "revision": "3d92218a37c01592db63ff95ea95bb07b4508ddb",
+   "files": [
+    {
+     "path": "Qwen-Image-Edit-2511-Object-Remover.safetensors",
+     "bytes": 236117064,
+     "sha256": "8102b5fda35de505d3825b73e355f1df69baff466fa53800fd31e6232c447632"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Removes the things you name and fills the gap so the background looks untouched.",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 7029,
+   "likes": 75,
+   "gated": false,
+   "author": "prithivMLmods",
+   "note": "Write: 'Remove the [object] from the image while preserving the background and remaining elements, maintaining realism and original details.'"
+  },
+  {
+   "id": "q2511-inflate",
+   "name": "Inflate",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "systms/SYSTMS-INFL8-LoRA-Qwen-Image-Edit-2511",
+   "revision": "d12b29cd92da261f9f439629515618c15837a7dd",
+   "files": [
+    {
+     "path": "SYSTMS_INFL8_LoRA_Qwen_Image_Edit_2511.safetensors",
+     "bytes": 295146200,
+     "sha256": "48cff1497edf7610c904a18d94e996f97466c8c3784de4e790a31f9d45f33998"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Blows up any object or character in your picture like a balloon.",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 3048,
+   "likes": 21,
+   "gated": false,
+   "preview": "https://huggingface.co/systms/SYSTMS-INFL8-LoRA-Qwen-Image-Edit-2511/resolve/d12b29cd92da261f9f439629515618c15837a7dd/SAMPLE_IMAGES/01.png",
+   "author": "systms",
+   "note": "Prompt 'Inflate the [subject]', e.g. 'Inflate the apple'."
+  },
+  {
+   "id": "q2511-studio-delight",
+   "name": "Studio De-Light",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "prithivMLmods/QIE-2511-Studio-DeLight",
+   "revision": "a5c2440989ba6a025ac99acac095369486e32774",
+   "files": [
+    {
+     "path": "QIE-2511-Studio-DeLight-5000.safetensors",
+     "bytes": 236117056,
+     "sha256": "6e8004bba1df89ac49a1129ccb73b6321782098926831a2bde7d3f95e6245c7d"
+    }
+   ],
+   "category": "light",
+   "blurb": "Removes harsh or colored lighting and gives the picture even, neutral studio light.",
+   "trigger": "Neutral uniform lighting Preserve identity and composition",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 6361,
+   "likes": 24,
+   "gated": false,
+   "author": "prithivMLmods",
+   "note": "Best on indoor shots and over-processed pictures; strong outdoor sun may turn the background white."
+  },
+  {
+   "id": "q2511-style-transfer",
+   "name": "Style Transfer",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "zooeyy/Style-Transfer",
+   "revision": "88b73376f56b5fbec98e796b84b42627490f3172",
+   "files": [
+    {
+     "path": "Style Transfer-Alpha-V0.5.safetensors",
+     "bytes": 590059104,
+     "sha256": "696424248b420fc2ef95f8ebad163301abeb3e75e00816c9f5192d3c87354b4d"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Repaints your first picture in the style of a second reference picture.",
+   "trigger": "图1变为图2风格",
+   "strength": 0.8,
+   "range": [
+    0,
+    1.2
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 7617,
+   "likes": 24,
+   "gated": false,
+   "author": "zooeyy",
+   "note": "Needs two pictures: the one to restyle first, the style second."
+  },
+  {
+   "id": "q2511-turnaround-sheet",
+   "name": "Turnaround Sheet",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "tarn59/character_turnaround_sheet_qwen_edit_2511",
+   "revision": "8e7ff1701a251020fa95825ac92b1e9a154a15f1",
+   "files": [
+    {
+     "path": "character_turnaround_sheet_v3_qwen_image_edit_2511_000000400.safetensors",
+     "bytes": 295146344,
+     "sha256": "8f8b2a6f0d416d8a871806ce4a398f55b24a24f11c42f4e69d88b472f4478705"
+    }
+   ],
+   "category": "characters",
+   "blurb": "Turns one picture of a character into a sheet showing them from several sides.",
+   "trigger": "Character turnaround sheet",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 701,
+   "likes": 9,
+   "gated": false,
+   "preview": "https://huggingface.co/tarn59/character_turnaround_sheet_qwen_edit_2511/resolve/8e7ff1701a251020fa95825ac92b1e9a154a15f1/images/ComfyUI_00166_.png",
+   "author": "tarn59",
+   "note": "Works best from a tall input (about 600x1080). On 2511 the figures come out a little narrow; the author widens results by about 20%."
+  },
+  {
+   "id": "q2511-next-scene",
+   "name": "Next Scene",
+   "models": [
+    "tpl-qwen-image-edit-2511"
+   ],
+   "repo": "lovis93/next-scene-qwen-image-lora-2509",
+   "revision": "9b9da698b8a5370efd875f18b1727cc1119f3863",
+   "files": [
+    {
+     "path": "next-scene_lora-v2-3000.safetensors",
+     "bytes": 295146176,
+     "sha256": "8abf2306649a62282f89968515097650acaf7b040687c9b6c56e37558e6df9e1"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Makes the next shot of your picture, as if the camera moved on, for storyboards.",
+   "trigger": "Next Scene:",
+   "strength": 0.75,
+   "range": [
+    0,
+    1.2
+   ],
+   "licence": {
+    "name": "MIT",
+    "commercial": "yes"
+   },
+   "downloads": 12445,
+   "likes": 665,
+   "gated": false,
+   "preview": "https://huggingface.co/lovis93/next-scene-qwen-image-lora-2509/resolve/9b9da698b8a5370efd875f18b1727cc1119f3863/01-update.gif",
+   "author": "lovis93",
+   "note": "Trained on Qwen-Image-Edit 2509; it loads on 2511 (no 2511 version exists). Describe the camera move after the trigger, e.g. 'Next Scene: the camera pulls back to reveal the whole street.'"
+  },
+  {
+   "id": "qie-insubject",
+   "name": "InSubject",
+   "models": [
+    "tpl-qwen-image-edit"
+   ],
+   "repo": "peteromallet/Qwen-Image-Edit-InSubject",
+   "revision": "3d5f8a91cc7b0eaf8eee3648afd58e683b53d117",
+   "files": [
+    {
+     "path": "InSubject-0.5.safetensors",
+     "bytes": 147687248,
+     "sha256": "4625cec72a7cef67fe844eae744b68144d03ac53b353fd3c0690fe024f084bdd"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Keeps your subject looking the same while you change their pose, outfit or action.",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 1416,
+   "likes": 88,
+   "gated": false,
+   "author": "peteromallet",
+   "note": "Prompt pattern: 'Make an image of [subject] in the same scene [new pose, action or details]'."
+  },
+  {
+   "id": "qie-instyle",
+   "name": "InStyle",
+   "models": [
+    "tpl-qwen-image-edit"
+   ],
+   "repo": "peteromallet/Qwen-Image-Edit-InStyle",
+   "revision": "af620a5760ce25a92d0655ef071e11b200f31186",
+   "files": [
+    {
+     "path": "InStyle-0.5.safetensors",
+     "bytes": 147687248,
+     "sha256": "dc5ac15a12a532791ebb6b22bc79c7059d19b66d03635febae6473526d26f6f5"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Uses your picture as a style reference and makes a new image in that style.",
+   "trigger": "Make an image in this style of",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 611,
+   "likes": 96,
+   "gated": false,
+   "author": "peteromallet",
+   "note": "Describe the new subject right after the trigger, e.g. '... a serene mountain landscape at sunset.'"
+  },
+  {
+   "id": "qie-inscene",
+   "name": "InScene",
+   "models": [
+    "tpl-qwen-image-edit"
+   ],
+   "repo": "peteromallet/Qwen-Image-Edit-InScene",
+   "revision": "633967b3b1de7dcdac588470f0ba4ab66e1cb291",
+   "files": [
+    {
+     "path": "InScene-0.7.safetensors",
+     "bytes": 590058976,
+     "sha256": "24215dd60fb4533d264235b300e308a2f1021e5dec2c4e28ec4e5e388c8d0c15"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Makes a different shot inside the same scene as your picture, keeping its place and look.",
+   "trigger": "Show a different image in the same scene of:",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 175,
+   "likes": 92,
+   "gated": false,
+   "preview": "https://huggingface.co/peteromallet/Qwen-Image-Edit-InScene/resolve/633967b3b1de7dcdac588470f0ba4ab66e1cb291/inscene-samples.png",
+   "author": "peteromallet",
+   "note": "Use InScene-0.7 only; the repo's Annotate file needs green boxes drawn on the picture."
+  },
+  {
+   "id": "qie-object-remover",
+   "name": "Object Remover",
+   "models": [
+    "tpl-qwen-image-edit"
+   ],
+   "repo": "starsfriday/Qwen-Image-Edit-Remover-General-LoRA",
+   "revision": "56f3e54794cfd0181ad18e40fe144cebff014708",
+   "files": [
+    {
+     "path": "qwen-edit-remover.safetensors",
+     "bytes": 472047184,
+     "sha256": "3a1ca93be812edc8c7640d0dbdb53b6f0bf3719e343e339690633ce5b868cafb"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Removes the people or objects you name and rebuilds what was behind them.",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 217,
+   "likes": 18,
+   "gated": false,
+   "preview": "https://huggingface.co/starsfriday/Qwen-Image-Edit-Remover-General-LoRA/resolve/56f3e54794cfd0181ad18e40fe144cebff014708/result/result1.png",
+   "author": "starsfriday",
+   "note": "Write 'Remove the [object]'."
+  },
+  {
+   "id": "qie-white-model-render",
+   "name": "White Model to Render",
+   "models": [
+    "tpl-qwen-image-edit"
+   ],
+   "repo": "dx8152/Qwen-Image-Edit-2509-White_film_to_rendering",
+   "revision": "20cb339255bdaa3f86f180e478603e444265d396",
+   "files": [
+    {
+     "path": "白膜转材质.safetensors",
+     "bytes": 236117032,
+     "sha256": "622ad978ef5b4736e21684131d307d58bb1f248b5bf318ba5d48e65a8dfc0214"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Turns a plain white 3D model or clay render into a finished render with real materials.",
+   "trigger": "白膜转材质",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 289,
+   "likes": 53,
+   "gated": false,
+   "author": "dx8152",
+   "note": "Give it a plain white 3D model render; it paints in materials, colour and light."
+  },
+  {
+   "id": "qi-illustration",
+   "name": "Illustration 1.0",
+   "models": [
+    "tpl-qwen-image",
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "alvdansen/illustration-1.0-qwen-image",
+   "revision": "f7d76903b11e17eac0d670575b855f0dddd0db2b",
+   "files": [
+    {
+     "path": "illustration-1.0-qwen-image.safetensors",
+     "bytes": 774377312,
+     "sha256": "a196b3f13321edfe116f8b6d0c191f4012dabd4bf83060109aa52ffff3aeaa1c"
+    }
+   ],
+   "category": "looks",
+   "blurb": "A broad illustration look: anime cels, European comics, risograph prints, watercolor and gouache.",
+   "strength": 0.9,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "other (no terms stated)",
+    "commercial": "no"
+   },
+   "downloads": 0,
+   "likes": 20,
+   "gated": false,
+   "preview": "https://huggingface.co/alvdansen/illustration-1.0-qwen-image/resolve/f7d76903b11e17eac0d670575b855f0dddd0db2b/Qwen-Image_00004__3.png",
+   "author": "alvdansen",
+   "note": "No trigger: add style words such as 'risograph print' or 'clean cel shading'. Trained on the original Qwen-Image; same shapes on 2512."
+  },
+  {
+   "id": "qi-realism",
+   "name": "Realism",
+   "models": [
+    "tpl-qwen-image",
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "flymy-ai/qwen-image-realism-lora",
+   "revision": "9b5a5951d4f9c998349000aeb84bc2823fc7975f",
+   "files": [
+    {
+     "path": "flymy_realism.safetensors",
+     "bytes": 94435528,
+     "sha256": "f78ebf393813eac9f4e6339ddec022102bb4c0f3ab58b0f1e6db311601b1ccc8"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Makes photos look more real, with natural skin, faces and lighting.",
+   "trigger": "Realism",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 2976,
+   "likes": 139,
+   "gated": false,
+   "preview": "https://huggingface.co/flymy-ai/qwen-image-realism-lora/resolve/9b5a5951d4f9c998349000aeb84bc2823fc7975f/assets/flymy_realism.png",
+   "author": "flymy-ai",
+   "note": "Trained on the original Qwen-Image; same shapes on 2512."
+  },
+  {
+   "id": "qi-360-panorama",
+   "name": "360 Panorama",
+   "models": [
+    "tpl-qwen-image"
+   ],
+   "repo": "ProGamerGov/qwen-360-diffusion",
+   "revision": "f63e5de60bd27b7d9af9c64f8c591381775ea9aa",
+   "files": [
+    {
+     "path": "qwen-360-diffusion-int8-bf16-v1.safetensors",
+     "bytes": 377552312,
+     "sha256": "1dc0d8c164e92bda96a7ab4d55a846e7c36cec369ba37ee85d19ef1707210de3"
+    }
+   ],
+   "category": "world",
+   "blurb": "Makes full 360-degree panoramas you can look around in: skies, rooms and whole worlds.",
+   "trigger": "360 degree panorama with equirectangular projection",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "MIT",
+    "commercial": "yes"
+   },
+   "downloads": 8055,
+   "likes": 59,
+   "gated": false,
+   "preview": "https://huggingface.co/ProGamerGov/qwen-360-diffusion/resolve/f63e5de60bd27b7d9af9c64f8c591381775ea9aa/example_grid.jpg",
+   "author": "ProGamerGov",
+   "note": "Generate at 2:1, ideally 2048x1024. This is the original-Qwen-Image file (48 epochs, trained at int8)."
+  },
+  {
+   "id": "qi2512-360-panorama",
+   "name": "360 Panorama",
+   "models": [
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "ProGamerGov/qwen-360-diffusion",
+   "revision": "f63e5de60bd27b7d9af9c64f8c591381775ea9aa",
+   "files": [
+    {
+     "path": "qwen-360-diffusion-2512-int8-bf16-v2.safetensors",
+     "bytes": 755039336,
+     "sha256": "11065421c2a4c8f503ee1be5d6dc0320a9ffb5bfaded2490813046fd2312578d"
+    }
+   ],
+   "category": "world",
+   "blurb": "Makes full 360-degree panoramas you can look around in: skies, rooms and whole worlds.",
+   "trigger": "360 degree panorama with equirectangular projection",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "MIT",
+    "commercial": "yes"
+   },
+   "downloads": 8055,
+   "likes": 59,
+   "gated": false,
+   "preview": "https://huggingface.co/ProGamerGov/qwen-360-diffusion/resolve/f63e5de60bd27b7d9af9c64f8c591381775ea9aa/example_grid.jpg",
+   "author": "ProGamerGov",
+   "note": "Generate at 2:1, ideally 2048x1024."
+  },
+  {
+   "id": "qi-detail-slider",
+   "name": "Detail Slider",
+   "models": [
+    "tpl-qwen-image",
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "ostris/qwen_image_detail_slider",
+   "revision": "9fb100d33ca0cf6bf9f00063f3e4948a4f949c08",
+   "files": [
+    {
+     "path": "qwen_image_detail_slider.safetensors",
+     "bytes": 73957936,
+     "sha256": "3449b8a4a07bd408a50f39002ca8146a3e2a3b8030b1bccb6251626fc329fdb3"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Turn it up for more fine detail, or down for a cleaner, simpler picture.",
+   "strength": 1,
+   "range": [
+    -1.5,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 321,
+   "likes": 18,
+   "gated": false,
+   "preview": "https://huggingface.co/ostris/qwen_image_detail_slider/resolve/9fb100d33ca0cf6bf9f00063f3e4948a4f949c08/images/_mnt_Train2_out_ui_qwen_image_detail_slider_samples_1758128339512__000000450_3.jpg",
+   "author": "ostris",
+   "note": "Between -1 and 1 works best; below zero takes detail away."
+  },
+  {
+   "id": "qi-modern-anime",
+   "name": "Modern Anime",
+   "models": [
+    "tpl-qwen-image"
+   ],
+   "repo": "alfredplpl/qwen-image-modern-anime-lora",
+   "revision": "23fdf83a9ba1124d1bd568945b255e3634025e5c",
+   "files": [
+    {
+     "path": "lora.safetensors",
+     "bytes": 590154440,
+     "sha256": "a2635a3b0bb501f3047d35d5ca7207be7785367264b693df11736434c37cd161"
+    }
+   ],
+   "category": "looks",
+   "blurb": "A clean, current Japanese anime look.",
+   "trigger": "Japanese modern anime style,",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 828,
+   "likes": 27,
+   "gated": false,
+   "preview": "https://huggingface.co/alfredplpl/qwen-image-modern-anime-lora/resolve/23fdf83a9ba1124d1bd568945b255e3634025e5c/sample1.jpg",
+   "author": "alfredplpl"
+  },
+  {
+   "id": "qi-flat-color",
+   "name": "Flat Color",
+   "models": [
+    "tpl-qwen-image"
+   ],
+   "repo": "motimalu/qwen-flat-color-v2",
+   "revision": "becddad933ab7c0c722640bdf5da148a401b5391",
+   "files": [
+    {
+     "path": "qwen_flat_color_v2.safetensors",
+     "bytes": 590058432,
+     "sha256": "7cf4436a4597ecc046598654288cf76015039388955c008efe86fb082622821a"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Flat colors with no outlines and little depth, like a modern poster illustration.",
+   "trigger": "flat color, no lineart",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 395,
+   "likes": 3,
+   "gated": false,
+   "preview": "https://huggingface.co/motimalu/qwen-flat-color-v2/resolve/becddad933ab7c0c722640bdf5da148a401b5391/images/ComfyUI_00852_.png",
+   "author": "motimalu"
+  },
+  {
+   "id": "qi-technicolor",
+   "name": "Technicolor Film",
+   "models": [
+    "tpl-qwen-image",
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "renderartist/technically-color-qwen",
+   "revision": "3dfdbc0bbfa8fb8763f081f04c42b378dff60352",
+   "files": [
+    {
+     "path": "Technically_Color_Qwen_v1_renderartist.safetensors",
+     "bytes": 590058872,
+     "sha256": "d99f834db8d42571ecf606be7c4ac2e0273afbe321eb553c1804751d444e6805"
+    }
+   ],
+   "category": "looks",
+   "blurb": "The rich, saturated color and dramatic light of classic 1940s-60s film stills.",
+   "trigger": "t3chnic4lly",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "CreativeML OpenRAIL-M",
+    "commercial": "yes"
+   },
+   "downloads": 35,
+   "likes": 6,
+   "gated": false,
+   "preview": "https://huggingface.co/renderartist/technically-color-qwen/resolve/3dfdbc0bbfa8fb8763f081f04c42b378dff60352/images/barber.png",
+   "author": "renderartist",
+   "note": "Trained on the original Qwen-Image; same shapes on 2512."
+  },
+  {
+   "id": "qi-awportrait",
+   "name": "AWPortrait",
+   "models": [
+    "tpl-qwen-image"
+   ],
+   "repo": "Shakker-Labs/AWPortrait-QW",
+   "revision": "d873eedefccbe8c4b075eae60cd58e552569edf7",
+   "files": [
+    {
+     "path": "AWPortrait-QW_1.0.safetensors",
+     "bytes": 472055792,
+     "sha256": "9c1d8a829bcd5fedf5274cf27a683d37be9fcd3f1a2296ca66ee135d251ff7b3"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Polished, realistic portrait photography across indoor, outdoor and studio styles.",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 944,
+   "likes": 39,
+   "gated": false,
+   "preview": "https://huggingface.co/Shakker-Labs/AWPortrait-QW/resolve/d873eedefccbe8c4b075eae60cd58e552569edf7/images/cover.png",
+   "author": "Shakker-Labs",
+   "note": "Tuned toward East Asian faces and aesthetics."
+  },
+  {
+   "id": "qi-boreal-snapshot",
+   "name": "Boreal Snapshot",
+   "models": [
+    "tpl-qwen-image"
+   ],
+   "repo": "kudzueye/boreal-qwen-image",
+   "revision": "4a028722116f0e858791db0642e6e763d8720662",
+   "files": [
+    {
+     "path": "qwen-boreal-general-discrete-low-rank.safetensors",
+     "bytes": 47249496,
+     "sha256": "977fbe4164fbcaa18c3f280a63e24d771c29644ef1620c7467ecf7090c61abe4"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Everyday, candid snapshots that look like real point-and-shoot photos.",
+   "trigger": "photo",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "none stated",
+    "commercial": "no"
+   },
+   "downloads": 1485,
+   "likes": 129,
+   "gated": false,
+   "preview": "https://huggingface.co/kudzueye/boreal-qwen-image/resolve/4a028722116f0e858791db0642e6e763d8720662/YYFkEtSld6TSDB_1EcjFw.jpeg",
+   "author": "kudzueye",
+   "note": "Experimental, per the author; this is the general file. Prompts like '2009 photo of ...' work well."
+  },
+  {
+   "id": "qi2512-logo",
+   "name": "Logo Design",
+   "models": [
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "artificialguybr/Logo-Redmond-QwenImage2512",
+   "revision": "7a2e7da9679288a6051c8e015350e4c04e5cbaae",
+   "files": [
+    {
+     "path": "[Qwen.Image]Logo_Redmond.safetensors",
+     "bytes": 590058888,
+     "sha256": "b06a97b86f311016cfb222d031077f73ae0e42778cc7d64a6d62eaa7ad66376c"
+    }
+   ],
+   "category": "design",
+   "blurb": "Clean, original logo designs from a description.",
+   "trigger": "LOGO, logoredmaf",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 371,
+   "likes": 2,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/Logo-Redmond-QwenImage2512/resolve/7a2e7da9679288a6051c8e015350e4c04e5cbaae/images/qwen_logo_04.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "qi2512-stickers",
+   "name": "Stickers",
+   "models": [
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "artificialguybr/STICKERS-REDMOND-QWEN-IMAGE",
+   "revision": "84c93d09f32eccac478739fdee5def0f375c9674",
+   "files": [
+    {
+     "path": "[Qwen.Image]Stickers_Redmond.safetensors",
+     "bytes": 590058912,
+     "sha256": "3d9001f58cb2d8c7501ecd89bf17f1b90fa076350a683372ae79193b0a7196ca"
+    }
+   ],
+   "category": "design",
+   "blurb": "Die-cut sticker artwork with bold outlines and consistent style.",
+   "trigger": "Sticker, Stickers",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 363,
+   "likes": 3,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/STICKERS-REDMOND-QWEN-IMAGE/resolve/84c93d09f32eccac478739fdee5def0f375c9674/images/stickers_qwen_lineart_08.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "qi2512-coloring-book",
+   "name": "Coloring Book",
+   "models": [
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "artificialguybr/COLORINGBOOK-REDMOND-QWENIMAGE",
+   "revision": "dbce803bf28eda05a89c04065ff8febd6343f0ad",
+   "files": [
+    {
+     "path": "[Qwen.Image]ColoringBook_Redmond.safetensors",
+     "bytes": 590058944,
+     "sha256": "da74d95767ed778ec5ee4503d640c0e5f99507faeadf3db13150aee94f0d94c4"
+    }
+   ],
+   "category": "design",
+   "blurb": "Black-and-white line art pages ready to color in.",
+   "trigger": "Coloring Book, ColoringBookAF",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 1494,
+   "likes": 3,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/COLORINGBOOK-REDMOND-QWENIMAGE/resolve/dbce803bf28eda05a89c04065ff8febd6343f0ad/images/coloringbook_qwen_lineart_10.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "qi2512-poster",
+   "name": "Poster",
+   "models": [
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "artificialguybr/POSTER-REDMOND-QWENIMAGE",
+   "revision": "b3860c5246bb471bdfa7852ff5d5224defdfcbc0",
+   "files": [
+    {
+     "path": "[Qwen.Image]Poster_Redmond.safetensors",
+     "bytes": 590058872,
+     "sha256": "8c6d75b9d678649df24721561eb4f9f598b18aec91c594cedbf1ec665679dc20"
+    }
+   ],
+   "category": "design",
+   "blurb": "Bold, graphic poster designs.",
+   "trigger": "Poster.",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 415,
+   "likes": 4,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/POSTER-REDMOND-QWENIMAGE/resolve/b3860c5246bb471bdfa7852ff5d5224defdfcbc0/images/015.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "qi2512-app-icons",
+   "name": "App Icons",
+   "models": [
+    "tpl-qwen-image-2512"
+   ],
+   "repo": "artificialguybr/ICONS-REDMOND-QWENIMAGE",
+   "revision": "f51f618dcecb90e64545d67cdc75fb24e5963510",
+   "files": [
+    {
+     "path": "[Qwen.Image]Icons_Redmond.safetensors",
+     "bytes": 590058888,
+     "sha256": "91d24faf184bfee663143220c8fe4f1fcd3319e87e3af420094104891b58ef87"
+    }
+   ],
+   "category": "design",
+   "blurb": "Glossy app-icon style artwork.",
+   "trigger": "ICONS. ICREDM.",
+   "strength": 1,
+   "range": [
+    0,
+    1.3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 109,
+   "likes": 2,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/ICONS-REDMOND-QWENIMAGE/resolve/f51f618dcecb90e64545d67cdc75fb24e5963510/images/014.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "wan22-orbit-shot",
+   "name": "Orbit Shot",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "ostris/wan22_i2v_14b_orbit_shot_lora",
+   "revision": "7b637fe0079bbf4ac0f977ff2c58971b8835b9c7",
+   "files": [
+    {
+     "path": "wan22_14b_i2v_orbit_high_noise.safetensors",
+     "bytes": 153453568,
+     "sha256": "29577153141ca7f6405e34259d52bd32c673be7fd647dd607ba57db11c73cf14",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "wan22_14b_i2v_orbit_low_noise.safetensors",
+     "bytes": 153453568,
+     "sha256": "6eed20e70161f97d209fca83fd5f1a37119885590a25db1ce3231b122c6ecf95",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "motion",
+   "blurb": "The camera circles all the way around your subject, like a smooth orbit shot.",
+   "trigger": "orbit 360",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 2855,
+   "likes": 76,
+   "gated": false,
+   "preview": "https://huggingface.co/ostris/wan22_i2v_14b_orbit_shot_lora/resolve/7b637fe0079bbf4ac0f977ff2c58971b8835b9c7/images/ComfyUI_00787_.webp",
+   "author": "ostris"
+  },
+  {
+   "id": "wan22-360-rotation",
+   "name": "360 Rotation",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "artificialguybr/360Rotation-Redmond-WAN2-I2V-14B",
+   "revision": "f89d5e868c483364279cd62e282c33eb8c6b6a1b",
+   "files": [
+    {
+     "path": "[WAN2.2]360Rotation_Redmond_high_noise.safetensors",
+     "bytes": 153453616,
+     "sha256": "1dc6acbb1fd3b64646739ee559039c4bc8a8bb1b3ce5e94a29577846871686a4",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "[WAN2.2]360Rotation_Redmond_low_noise.safetensors",
+     "bytes": 153453616,
+     "sha256": "258af1a39cad4a4f4d2e027d752ce07b03623e1a07849b5b0994ff17c169530b",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "motion",
+   "blurb": "Spins the subject a full turn so it is seen from every side, made for product showcases.",
+   "trigger": "360 Rotation",
+   "strength": 0.9,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CC0-1.0",
+    "commercial": "yes"
+   },
+   "downloads": 1069,
+   "likes": 4,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/360Rotation-Redmond-WAN2-I2V-14B/resolve/f89d5e868c483364279cd62e282c33eb8c6b6a1b/Videos/i2v_1080x720_8e1c2392-a9d5-4a78-a410-ecfaa57931ed.mp4",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "wan22-wiggle",
+   "name": "Living Photo Wiggle",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "artificialguybr/Wiggle-Redmond-WAN2-I2V-14B",
+   "revision": "3bfe3508f46aea2d691f09cf74425799e6487c4c",
+   "files": [
+    {
+     "path": "[WAN2.2]Wiggle_Redmond_high_noise.safetensors",
+     "bytes": 153453592,
+     "sha256": "bd9756358f15be21cc1e727a7316bf32ddcc84b6b3c7772e6f98fc9a77f79d4f",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "[WAN2.2]Wiggle_Redmond_low_noise.safetensors",
+     "bytes": 153453592,
+     "sha256": "0d9949737865b3d42f2b9582468007901b51fcae67b02575c897fbb408353207",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "motion",
+   "blurb": "Brings a still picture to life with a gentle, natural wiggle of motion.",
+   "trigger": "Wiggle",
+   "strength": 0.9,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CC0-1.0",
+    "commercial": "yes"
+   },
+   "downloads": 250,
+   "likes": 0,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/Wiggle-Redmond-WAN2-I2V-14B/resolve/3bfe3508f46aea2d691f09cf74425799e6487c4c/Videos/i2v_1096x832_08752d2b-abc1-416d-9a55-89e9ca156db6.mp4",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "wan22-explosion",
+   "name": "Explosion",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "artificialguybr/Explosion-Redmond-WAN2-I2V-14B",
+   "revision": "145ca6ad0d7ab8370225b0de4650601128437a5c",
+   "files": [
+    {
+     "path": "[WAN2.2-I2V]EXPLOSION_REDMOND_high_noise.safetensors",
+     "bytes": 76775008,
+     "sha256": "51b20f2b4f713d1021c1da78c5bdcebc273efa9a2c7c18992d93e3cebabba604",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "[WAN2.2-I2V]EXPLOSION_REDMOND_low_noise.safetensors",
+     "bytes": 76775008,
+     "sha256": "9630953d9830ea072f7698e6fc13d943f7f8da7f2d75edf5266a784255152774",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Blows up the object in your picture with fire, smoke and flying debris.",
+   "trigger": "EXPLOSION",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CC0-1.0",
+    "commercial": "yes"
+   },
+   "downloads": 181,
+   "likes": 4,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/Explosion-Redmond-WAN2-I2V-14B/resolve/145ca6ad0d7ab8370225b0de4650601128437a5c/Video/i2v_752x1000_02c5734e-a28b-456e-b103-ac61a12952c2.mp4",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "wan22-disintegration",
+   "name": "Disintegrate",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "artificialguybr/Disintegration-Redmond-WAN2-I2V-14B",
+   "revision": "a68546e6cbba0260db15db78f117f5085f2be5c2",
+   "files": [
+    {
+     "path": "[Wan2.2]Disintegration_Redmond_high_noise.safetensors",
+     "bytes": 76775024,
+     "sha256": "555d2d39913a829820d844a9c9082fbaeaa8ca4d963087ad0cbf67f09d0fa606",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "[Wan2.2]Disintegration_Redmond_low_noise.safetensors",
+     "bytes": 76775024,
+     "sha256": "c71b0aabae6c73fee423f35f5ed088e082196ca41cddb9265424af5c6a3608a8",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Turns the subject into dust and particles that drift away.",
+   "trigger": "Disintegration",
+   "strength": 0.9,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CC0-1.0",
+    "commercial": "yes"
+   },
+   "downloads": 148,
+   "likes": 3,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/Disintegration-Redmond-WAN2-I2V-14B/resolve/a68546e6cbba0260db15db78f117f5085f2be5c2/Videos/i2v_1168x776_c3495d2e-52a6-4ecf-b30e-abf35c021310.mp4",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "wan22-disappearing",
+   "name": "Vanish",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "artificialguybr/Disappearing-Redmond-WAN2-I2V-14B",
+   "revision": "0d01d44a17a45a2ef88441869f62dcc83226cbd1",
+   "files": [
+    {
+     "path": "[Wan2.2]Disappearing_Redmond_high_noise.safetensors",
+     "bytes": 153453616,
+     "sha256": "3b3277144099e161ad4ec409363141d5507fb5bded919e49790f3b9a0c9e55ce",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "[Wan2.2]Disappearing_Redmond_low_noise.safetensors",
+     "bytes": 153453616,
+     "sha256": "92ac4a839e7fdc6ec73e1bba7481adc75c10091202d0425aef42166ebd3b6ab2",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Makes the subject fade and vanish into thin air.",
+   "trigger": "Disappearing",
+   "strength": 0.9,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CC0-1.0",
+    "commercial": "yes"
+   },
+   "downloads": 77,
+   "likes": 3,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/Disappearing-Redmond-WAN2-I2V-14B/resolve/0d01d44a17a45a2ef88441869f62dcc83226cbd1/Videos/i2v_960x960_61b9bce7-77b1-4597-842f-799281af5764.mp4",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "wan22-inflate",
+   "name": "Inflate",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "systms/SYSTMS-INFL8-LoRA-Wan22",
+   "revision": "2d48a72ce9e34eff34f175e96630b04e41035519",
+   "files": [
+    {
+     "path": "SYSTMS_INFL8_LORA_WAN22_high_noise.safetensors",
+     "bytes": 306807976,
+     "sha256": "570d1f47738581e65ac2f66bfc60d83c21c0ebe03aff5849b62e7d7f49a4fb21",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "SYSTMS_INFL8_LORA_WAN22_low_noise.safetensors",
+     "bytes": 306807976,
+     "sha256": "8d021dbda08bbbb5d8a7028b20075a2509ef7a55b4c995a1cf4677fe0a7142ef",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Puffs the subject up like a balloon.",
+   "trigger": "INFL8",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 62,
+   "likes": 6,
+   "gated": false,
+   "preview": "https://huggingface.co/systms/SYSTMS-INFL8-LoRA-Wan22/resolve/2d48a72ce9e34eff34f175e96630b04e41035519/images/INFL8_01.png",
+   "author": "systms"
+  },
+  {
+   "id": "wan22-thunder-hero",
+   "name": "Thunder Hero",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "artificialguybr/ThunderHero-Redmond-WAN2-I2V-14B",
+   "revision": "27ea8397e55918269810f951b8947a4b024b72d1",
+   "files": [
+    {
+     "path": "[WAN2.2]ThunderHero_Redmond_high_noise.safetensors",
+     "bytes": 153453640,
+     "sha256": "8a7066ecdec71e3639596fd7adbffdfe1d19519c564601b730f834658b7ce458",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "[WAN2.2]ThunderHero_Redmond_low_noise.safetensors",
+     "bytes": 153453640,
+     "sha256": "f7c6b47ae93f1f4c2722345c47d9cafa3a69ff3ca442982ecdd0a767e6843b45",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Charges the scene with lightning and crackling superhero energy.",
+   "trigger": "Thunder Hero",
+   "strength": 0.9,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CC0-1.0",
+    "commercial": "yes"
+   },
+   "downloads": 151,
+   "likes": 1,
+   "gated": false,
+   "preview": "https://huggingface.co/artificialguybr/ThunderHero-Redmond-WAN2-I2V-14B/resolve/27ea8397e55918269810f951b8947a4b024b72d1/Videos/i2v_1032x880_3f6d4e76-f3ec-409d-8f71-182e38ce45bb.mp4",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "wan22-sprite-attack",
+   "name": "Game Sprite Attack",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "Teluv/Wan_Video_Attack_Sprite_Animation",
+   "revision": "574ab3274f2d8f645563c3fa909ee816ed2e1488",
+   "files": [
+    {
+     "path": "Wan_i14b_Attack_Sprite_Animation_ver3_high_noise.safetensors",
+     "bytes": 153453600,
+     "sha256": "9dcaf603a283d3a4161b1456b10db07f66f8475889591b1338da519c7c8096d3",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "Wan_i14b_Attack_Sprite_Animation_ver3_low_noise.safetensors",
+     "bytes": 153453600,
+     "sha256": "1540e1983df386a57808e0ecc1dbd925ad090282c622cfcda6ecd045c89fe21c",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Animates a side-view game character doing a 2D sprite-style attack with flashy effects.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 356,
+   "likes": 21,
+   "gated": false,
+   "author": "Teluv",
+   "note": "Experimental (the author says it is still in training); works best on side-view game characters."
+  },
+  {
+   "id": "wan22-paint-smear",
+   "name": "Oil Paint Smear",
+   "models": [
+    "tpl-wan2.2-14b-video"
+   ],
+   "repo": "Ashmotv/paint_smear",
+   "revision": "058e297be867f18f55d516f551299e1f562268f2",
+   "files": [
+    {
+     "path": "p@int_sm3ar_wan_v1_high_noise.safetensors",
+     "bytes": 306807576,
+     "sha256": "b054a3eb96e48f1c22bf7d26bbd6a9bceb39b3774ba8696f4a9580bf80de1851",
+     "match": "i2v.*high_noise"
+    },
+    {
+     "path": "p@int_sm3ar_wan_v1_low_noise.safetensors",
+     "bytes": 306807576,
+     "sha256": "9d1039270d35194f9c4e6f001daa928fa3e3f0fb939bceafc8ebaada299e6b05",
+     "match": "i2v.*low_noise"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Animates thick, glossy oil paint smearing and swirling like a macro art shot.",
+   "trigger": "p@int_sm3ar",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 0,
+   "likes": 2,
+   "gated": false,
+   "author": "Ashmotv",
+   "note": "New and little-used; describe the paint (impasto, glossy pigment, brushstroke) in the prompt."
+  },
+  {
+   "id": "ltx25-cinemagraph",
+   "name": "Cinemagraph",
+   "models": [
+    "ltx-2.5"
+   ],
+   "repo": "Lightricks/LTX-2.5-22b-LoRA-Cinemagraph",
+   "revision": "a3f23fd142aa8a11e624e12c407a0be383c2f758",
+   "files": [
+    {
+     "path": "ltx-2.5-22b-lora-cinemagraph-0.9.safetensors",
+     "bytes": 201462650,
+     "sha256": "fcd06225e1646080cbb21958a25c9f339ee484519e798bfb00c9b91022cfccfa"
+    }
+   ],
+   "category": "motion",
+   "blurb": "Keeps the whole picture frozen and moves just one thing, like water, light or clouds, in a seamless loop.",
+   "trigger": "CINEMAGRAPH_MOTION",
+   "strength": 1.1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2.x Community License",
+    "commercial": "limited"
+   },
+   "downloads": 3405,
+   "likes": 32,
+   "gated": true,
+   "preview": "https://huggingface.co/Lightricks/LTX-2.5-22b-LoRA-Cinemagraph/resolve/a3f23fd142aa8a11e624e12c407a0be383c2f758/examples/Glasses_LTX_2.3_i2v_00272_.mp4",
+   "author": "Lightricks",
+   "note": "Say what moves and what stays still, plus 'locked-off static camera' and 'seamless natural loop'; no camera moves. Picture-to-video."
+  },
+  {
+   "id": "ltx23-vbvr-reasoning",
+   "name": "Smarter Motion",
+   "models": [
+    "ltx-2.5",
+    "tpl-ltx-2.3-video"
+   ],
+   "repo": "LiconStudio/Ltx2.3-VBVR-lora-I2V",
+   "revision": "584c96e3dd5b211670e6b573b37fdd09d75d9aa4",
+   "files": [
+    {
+     "path": "Ltx2.3-Licon-VBVR-I2V-390K-R32.safetensors",
+     "bytes": 554006432,
+     "sha256": "4cb77bc088b04fd69fe5a711356aec05e1a9d503b47e6e252a7f2577c7716a18"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Makes objects move more believably and follow detailed, multi-step prompts more closely.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community License Agreement",
+    "commercial": "limited"
+   },
+   "downloads": 7715,
+   "likes": 249,
+   "gated": false,
+   "preview": "https://huggingface.co/LiconStudio/Ltx2.3-VBVR-lora-I2V/resolve/584c96e3dd5b211670e6b573b37fdd09d75d9aa4/S3.mp4",
+   "author": "LiconStudio",
+   "note": "Made for LTX-2.3 and tested on 2.5: a pour, stir, sip prompt played out in order, where without it the jug turned into a glass.",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "ltx23-transition",
+   "name": "Scene Transition",
+   "models": [
+    "ltx-2.5"
+   ],
+   "repo": "joyfox/LTX-2.3-Transition-LORA",
+   "revision": "685118b10fdc2aea63b47bbc6c395fe8c602db53",
+   "files": [
+    {
+     "path": "ltx2.3-transition.safetensors",
+     "bytes": 390229424,
+     "sha256": "ba420d6fefafced8e317e2d6ff951b312b52f534377d016b491877a00b830d33"
+    }
+   ],
+   "category": "motion",
+   "blurb": "Smoothly morphs one scene, object or style into another, best between a first and a last frame.",
+   "trigger": "zhuanchang",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0 (LTX-2 Community base)",
+    "commercial": "limited"
+   },
+   "downloads": 17161,
+   "likes": 167,
+   "gated": false,
+   "preview": "https://huggingface.co/joyfox/LTX-2.3-Transition-LORA/resolve/685118b10fdc2aea63b47bbc6c395fe8c602db53/result/output2.mp4",
+   "author": "joyfox",
+   "note": "Made for LTX-2.3; most LTX-2.3 LoRAs work on 2.5 too. Best between a first and a last frame.",
+   "triggerAt": "end"
+  },
+  {
+   "id": "ltx23-better-human-motion",
+   "name": "Smoother Body Motion",
+   "models": [
+    "ltx-2.5",
+    "tpl-ltx-2.3-video"
+   ],
+   "repo": "vpakarinen/better-human-motion-ltx-lora",
+   "revision": "736fbefec86824fb881a6170c6076b27c79f9355",
+   "files": [
+    {
+     "path": "motion_stabilizer_ltx_lora_v2.safetensors",
+     "bytes": 674249616,
+     "sha256": "3cd5aeeff4e079510527650af4c45c1ec8a51495996de34c8d155fe35b6ed6a5"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Steadies people's body movement so walking, turning and gestures look smoother.",
+   "strength": 0.6,
+   "range": [
+    0,
+    1
+   ],
+   "licence": {
+    "name": "Apache-2.0 (LTX-2 Community base)",
+    "commercial": "limited"
+   },
+   "downloads": 828,
+   "likes": 2,
+   "gated": false,
+   "author": "vpakarinen",
+   "note": "Works best at 0.4–0.8. Made for LTX-2.3.",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "ltx23-surface-realism",
+   "name": "Real Surfaces",
+   "models": [
+    "ltx-2.5",
+    "tpl-ltx-2.3-video"
+   ],
+   "repo": "joeygambino/ltx23-surfaces-realism-lora",
+   "revision": "ced7a1c0f219a920839332422c53e0f5fd458f95",
+   "files": [
+    {
+     "path": "ltx23_surfaces_v1.safetensors",
+     "bytes": 352678104,
+     "sha256": "c9a1e61a30d04fca2558230aa2e3ca1899dd25f9e5a678ba3d09392baa1e384c"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Swaps the clean plastic look for real, weathered textures: cracks, scuffs, rust and grain.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community License",
+    "commercial": "limited"
+   },
+   "downloads": 212,
+   "likes": 1,
+   "gated": false,
+   "author": "joeygambino",
+   "note": "Always on, no trigger; naming materials in the prompt still helps."
+  },
+  {
+   "id": "ltx23-skin-hair",
+   "name": "Skin & Hair Detail",
+   "models": [
+    "ltx-2.5",
+    "tpl-ltx-2.3-video"
+   ],
+   "repo": "TheBurgstall/LTX-2.3-skin-hair",
+   "revision": "36fbd13eae124f97d6ffeb86cdc09fb1db7250a6",
+   "files": [
+    {
+     "path": "skin-LTXLora-step00004000.comfy.safetensors",
+     "bytes": 352680000,
+     "sha256": "5c29790a14ba3b40a1954fdabc62268e45fc633c0857749ae2575b97d447dc46"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Removes plastic-looking skin and gives hair real strands and shine.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community License Agreement",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 16,
+   "gated": false,
+   "preview": "https://huggingface.co/TheBurgstall/LTX-2.3-skin-hair/resolve/36fbd13eae124f97d6ffeb86cdc09fb1db7250a6/conc_00002-audio.mp4",
+   "author": "TheBurgstall",
+   "note": "The repo has four training stages; this is the last (4000 steps)."
+  },
+  {
+   "id": "ltx23-googly-eyes",
+   "name": "Googly Eyes",
+   "models": [
+    "ltx-2.5",
+    "tpl-ltx-2.3-video"
+   ],
+   "repo": "TheBurgstall/ltx-2.3-googlyeyes-lora",
+   "revision": "675b63c480ae0d404277c3826d078b9d41b50808",
+   "files": [
+    {
+     "path": "googlyeyes-ltx-2.3-rank32-step03000.safetensors",
+     "bytes": 327287384,
+     "sha256": "1c661427b2bbe15d7b78a0dedcb262a753e077cbc48b2f4b217ccc3bbb894225"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Sticks big wobbly googly eyes on whatever is in the shot, just for fun.",
+   "trigger": "googlyeyes",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community License Agreement",
+    "commercial": "limited"
+   },
+   "downloads": 499,
+   "likes": 10,
+   "gated": false,
+   "author": "TheBurgstall",
+   "note": "The repo's sample clips look like film parodies, so no preview is linked.",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "ltx23-pixel-art",
+   "name": "Modern Pixel Art",
+   "models": [
+    "tpl-ltx-2.3-video"
+   ],
+   "repo": "OmerHagage/ltx2-ume-pixelart-lora",
+   "revision": "e56a4ee1a3a2f2e50c688b6294b57f74395cf485",
+   "files": [
+    {
+     "path": "lora_weights_step_02000.safetensors",
+     "bytes": 855970296,
+     "sha256": "7841675b58f87b98dc16bd5aaa325ecedd43bc3b40d327f91b11acdd98a76d18"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Renders the clip as crisp modern pixel art with a limited palette.",
+   "trigger": "ume-pixelart",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "MIT (LTX-2 Community base)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 2,
+   "gated": false,
+   "preview": "https://huggingface.co/OmerHagage/ltx2-ume-pixelart-lora/resolve/e56a4ee1a3a2f2e50c688b6294b57f74395cf485/comparison/prompt_01/lora.mp4",
+   "author": "OmerHagage",
+   "note": "Put the trigger at the start of the prompt; without it the LoRA stays quiet."
+  },
+  {
+   "id": "ltx23-equirectangular-360",
+   "name": "360° World Video",
+   "models": [
+    "ltx-2.5",
+    "tpl-ltx-2.3-video"
+   ],
+   "repo": "TheBurgstall/Seamless-Equirectangular-LTX2.3-LoRA",
+   "revision": "75a2e6970267be539a680ccf7b5465032a7340b7",
+   "files": [
+    {
+     "path": "Seamless-Equirectangular-LTX2.3-LoRA.safetensors",
+     "bytes": 1410236816,
+     "sha256": "e493d2997aee9bb5df1243ca40072b717e5de6d6b24d2e7b6ccc302adabc2414"
+    }
+   ],
+   "category": "world",
+   "blurb": "Makes a full 360-degree panoramic video you can look around in.",
+   "trigger": "Equirectangular",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Burgstall LoRA License + LTX-2 Community License Agreement",
+    "commercial": "no"
+   },
+   "downloads": 0,
+   "likes": 9,
+   "gated": false,
+   "preview": "https://huggingface.co/TheBurgstall/Seamless-Equirectangular-LTX2.3-LoRA/resolve/75a2e6970267be539a680ccf7b5465032a7340b7/examples/t2v-jungle-after-rain.mp4",
+   "author": "TheBurgstall",
+   "note": "Text-to-video. A fully seamless wrap needs the author's ComfyUI-Seamless-Equirectangular nodes; with a plain loader expect a visible seam. Custom licence: read it before commercial use."
+  },
+  {
+   "id": "f3k-outpaint",
+   "name": "Outpaint",
+   "models": [
+    "flux3-klein"
+   ],
+   "repo": "ausboss/FLUX-3-Image-Klein-Outpaint-LoRA",
+   "revision": "8c3023547b760372d75918cec32a209d4691db40",
+   "files": [
+    {
+     "path": "flux-3-image-klein-outpaint.safetensors",
+     "bytes": 160697104,
+     "sha256": "25385da7f6bfac0c18513e52729dc29f96cda543f0d086df9e5dda3842dede83"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Extends a picture past its edges: fills flat gray borders with more of the scene, keeping your picture in place.",
+   "trigger": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.",
+   "strength": 1.5,
+   "range": [
+    0,
+    2
+   ],
+   "licence": {
+    "name": "FLUX Kommunity (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 23,
+   "preview": "https://huggingface.co/ausboss/FLUX-3-Image-Klein-Outpaint-LoRA/resolve/8c3023547b760372d75918cec32a209d4691db40/comparison.jpg",
+   "note": "Give it your picture padded with flat gray (#808080) where it should grow. Without the LoRA, FLUX 3 slid or zoomed the picture in 36 of 40 tests.",
+   "author": "ausboss"
+  },
+  {
+   "id": "f3k-consistency",
+   "name": "Keep the Frame",
+   "models": [
+    "flux3-klein"
+   ],
+   "repo": "ausboss/FLUX-3-Image-Klein-Consistency-LoRA",
+   "revision": "0367b0cdeb14b16423ff64e1c256a1a5f76cd414",
+   "files": [
+    {
+     "path": "flux-3-image-klein-consistency.safetensors",
+     "bytes": 160696888,
+     "sha256": "abd03ed85d48f0b6d14c93a1fc150cd4ae1c3d71e06e518194ad873cc8660f14"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Keeps an edit on the original's framing: restyles move about half as much.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Kommunity (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 8,
+   "note": "Early release. Helps weather, light and restyles; can hurt hair colour and pose edits.",
+   "author": "ausboss"
+  },
+  {
+   "id": "f3k-restore",
+   "name": "Restore Photo",
+   "models": [
+    "flux3-klein"
+   ],
+   "repo": "ausboss/FLUX-3-Image-Klein-Restore-LoRA",
+   "revision": "be1d0a1c5edf6655d0c370d531a8157815bb5469",
+   "files": [
+    {
+     "path": "flux-3-image-klein-restore.safetensors",
+     "bytes": 160697064,
+     "sha256": "7b758f5c1d494da7675dbebd8309f36c3dcaf4aa67a3349f667403c7a681187e"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Cleans blur, noise and compression from an old or small photo, keeping faces and colours true.",
+   "trigger": "Restore the photo: remove blur, noise and compression artifacts and recover sharp, natural detail, keeping the same composition, people and colors.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Kommunity (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 4,
+   "preview": "https://huggingface.co/ausboss/FLUX-3-Image-Klein-Restore-LoRA/resolve/be1d0a1c5edf6655d0c370d531a8157815bb5469/figure_headphones.jpg",
+   "note": "Edit a photo with it. Made for tiled upscales; the difference on its own is small but measurable on faces.",
+   "author": "ausboss"
+  },
+  {
+   "id": "f3k-360",
+   "name": "360° Panorama",
+   "models": [
+    "flux3-klein"
+   ],
+   "repo": "DenRakEiw/Flux_3_klein_360_Degree",
+   "revision": "fb60ab053421cdd20e9233739015d8fe6abb0bfa",
+   "files": [
+    {
+     "path": "360_f3.safetensors",
+     "bytes": 160696344,
+     "sha256": "a150f3794782072a01729c809a2906c3f2d5b26cab3a4cbe7af7e3f2ec08d5ce"
+    }
+   ],
+   "category": "world",
+   "blurb": "Makes a full 360° panorama you can look around in.",
+   "trigger": "create a 360 hdr",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Kommunity (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 2,
+   "preview": "https://huggingface.co/DenRakEiw/Flux_3_klein_360_Degree/resolve/fb60ab053421cdd20e9233739015d8fe6abb0bfa/images/example_360.webp",
+   "note": "Use a 2:1 picture (2048×1024). A faint seam can remain where the ends meet.",
+   "author": "DenRakEiw",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "f3k-skin-texture",
+   "name": "Natural Skin",
+   "models": [
+    "flux3-klein"
+   ],
+   "repo": "yang520333/Flux3-image-klein-natural-facial-skin-texture-lora",
+   "revision": "e0695010c6c8ae3d85e44a43f8f98ba34938f162",
+   "files": [
+    {
+     "path": "Flux3 image klein Natural facial skin texture_000005000.safetensors",
+     "bytes": 321325504,
+     "sha256": "c23942cb917abc3ed12f7d97278ea323d5a082a6035cf61ecbe18c9261f2ab5b"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Gives over-smooth faces natural skin texture and pores, keeping the person, light and colours.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Kommunity (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "preview": "https://huggingface.co/yang520333/Flux3-image-klein-natural-facial-skin-texture-lora/resolve/e0695010c6c8ae3d85e44a43f8f98ba34938f162/comparison-01.png",
+   "note": "An edit: give it a portrait and ask for natural skin texture. The author's tested checkpoint (5,000 steps).",
+   "author": "yang520333"
+  },
+  {
+   "id": "f3k-halloween-postcard",
+   "name": "Vintage Halloween Card",
+   "models": [
+    "flux3-klein"
+   ],
+   "repo": "maanavdalal/flux3-klein-halloween-lora",
+   "revision": "82e1dd434c95ed9de079891a09c7d47ea103d17a",
+   "files": [
+    {
+     "path": "klein-vqx-shift4k-cosine_000002000.safetensors",
+     "bytes": 160696328,
+     "sha256": "b3ea1920666e045e0b36663fabf9cecdbdaa4c189e4688a0c3117d81cf897efd"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Draws it like a Halloween postcard from the 1900s: aged paper, lithograph colours, playful spooks.",
+   "trigger": "vqx",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Kommunity (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 7,
+   "likes": 0,
+   "preview": "https://huggingface.co/maanavdalal/flux3-klein-halloween-lora/resolve/82e1dd434c95ed9de079891a09c7d47ea103d17a/images/witch-cosine.jpg",
+   "author": "maanavdalal",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "f3k-impressionist-oil",
+   "name": "Impressionist Oil",
+   "models": [
+    "flux3-klein"
+   ],
+   "repo": "pjecuacion/flux3-klein-mnt-oil-monet-lora",
+   "revision": "0d94b6a4601892499defd8c5d89c24f78e78043b",
+   "files": [
+    {
+     "path": "mnt_oil_klein3.safetensors",
+     "bytes": 80381072,
+     "sha256": "a25e926d8e5fd0069ed5ee3db67be8ac191df4d713bc807e2abfe61a8f885047"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Soft broken brushstrokes, hazy light and pastel colour, like an Impressionist oil painting.",
+   "trigger": "mnt_oil",
+   "strength": 1,
+   "range": [
+    0,
+    1.8
+   ],
+   "licence": {
+    "name": "FLUX Kommunity (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "preview": "https://huggingface.co/pjecuacion/flux3-klein-mnt-oil-monet-lora/resolve/0d94b6a4601892499defd8c5d89c24f78e78043b/samples/harbour_without_vs_with.jpg",
+   "note": "For edits the author uses about 1.5.",
+   "author": "pjecuacion",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "zit-pixel-art",
+   "name": "Pixel Art",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "tarn59/pixel_art_style_lora_z_image_turbo",
+   "revision": "0a5092d1619664d94a5a36784f92db84b3ae62bd",
+   "files": [
+    {
+     "path": "pixel_art_style_z_image_turbo.safetensors",
+     "bytes": 170128328,
+     "sha256": "09b1b45ceed0202929bca528e51b50208d0160f4e9d2ba0f42cb7e739a43577f"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Turns the picture into crisp pixel art, like a retro game.",
+   "trigger": "Pixel art style.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 14072,
+   "likes": 58,
+   "preview": "https://huggingface.co/tarn59/pixel_art_style_lora_z_image_turbo/resolve/0a5092d1619664d94a5a36784f92db84b3ae62bd/images/ComfyUI_00268_.png",
+   "author": "tarn59"
+  },
+  {
+   "id": "zit-realism",
+   "name": "Realism",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "suayptalha/Z-Image-Turbo-Realism-LoRA",
+   "revision": "8dc179cb56844d4ddc6e4527c30e98347eeae971",
+   "files": [
+    {
+     "path": "pytorch_lora_weights.safetensors",
+     "bytes": 85094800,
+     "sha256": "b38b074964f1f6564c22fee42125accd7a218a916966b5d0f0b2f63d4939c2f7"
+    }
+   ],
+   "category": "detail",
+   "blurb": "A more natural, photographic look: real skin, light and texture.",
+   "trigger": "Realism",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 4647,
+   "likes": 36,
+   "preview": "https://huggingface.co/suayptalha/Z-Image-Turbo-Realism-LoRA/resolve/8dc179cb56844d4ddc6e4527c30e98347eeae971/images/9QFq0p9Xv2C0kihLBj1ev.png",
+   "author": "suayptalha"
+  },
+  {
+   "id": "zit-awportrait",
+   "name": "AWPortrait",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "Shakker-Labs/AWPortrait-Z",
+   "revision": "9f264c4784cf3a9be4ba4769b9bb516d84905365",
+   "files": [
+    {
+     "path": "AWPortrait-Z.safetensors",
+     "bytes": 680326944,
+     "sha256": "fde6d41cf184ed64a942447955cf0204102eeabfa1d220bb1ad542ecee7cbca3"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Better portraits: clean, real skin without grain, natural studio light and more varied faces.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 3939,
+   "likes": 489,
+   "preview": "https://huggingface.co/Shakker-Labs/AWPortrait-Z/resolve/9f264c4784cf3a9be4ba4769b9bb516d84905365/images/example.png",
+   "author": "Shakker-Labs"
+  },
+  {
+   "id": "zit-technicolor",
+   "name": "Technicolor Film",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "renderartist/Technically-Color-Z-Image-Turbo",
+   "revision": "193838d6d10d552514d51105fa1c07e4a7bbd7e6",
+   "files": [
+    {
+     "path": "Technically_Color_Z_Image_Turbo_v1_renderartist_2000.safetensors",
+     "bytes": 255161456,
+     "sha256": "650539cfed33adc2b611968c8cd2bb35c269bb8b1acfbfd58eed2c8978d1c55e"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Rich 1950s–60s Technicolor film: saturated colour, soft glow and grain.",
+   "trigger": "t3chnic4lly",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 1394,
+   "likes": 90,
+   "preview": "https://huggingface.co/renderartist/Technically-Color-Z-Image-Turbo/resolve/193838d6d10d552514d51105fa1c07e4a7bbd7e6/images/ComfyUI_00673_.png",
+   "author": "renderartist"
+  },
+  {
+   "id": "zit-classic-painting",
+   "name": "Classic Painting",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "renderartist/Classic-Painting-Z-Image-Turbo-LoRA",
+   "revision": "e873cc474ce517d49d09ed1f64358ff43660b276",
+   "files": [
+    {
+     "path": "Classic_Painting_Z_Image_Turbo_v1_renderartist_1750.safetensors",
+     "bytes": 170128288,
+     "sha256": "8beebb73725ec10ad21155d91c1d7667cb9a05544e8b2dfa0cbd72f5fa64a27b"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Old Master oil painting: real brushwork, canvas texture and dramatic light.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 3908,
+   "likes": 20,
+   "preview": "https://huggingface.co/renderartist/Classic-Painting-Z-Image-Turbo-LoRA/resolve/e873cc474ce517d49d09ed1f64358ff43660b276/images/Classic_Painting_Z_00006_.png",
+   "note": "Trained on public-domain paintings from the Art Institute of Chicago; no artist names.",
+   "author": "renderartist"
+  },
+  {
+   "id": "zit-coloring-book",
+   "name": "Coloring Book",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "renderartist/Coloring-Book-Z-Image-Turbo-LoRA",
+   "revision": "3d65420a16668ec00847915f2f69c50854eb5d33",
+   "files": [
+    {
+     "path": "Coloring_Book_Z_Image_Turbo_v1_renderartist_2000.safetensors",
+     "bytes": 31948552,
+     "sha256": "d87cda93d16ca253e3c1b071443449d84466fa24f6185ab893b0437a4ff76715"
+    }
+   ],
+   "category": "design",
+   "blurb": "Clean black-and-white line art, ready to print and colour in.",
+   "trigger": "c0l0ringb00k",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 1491,
+   "likes": 24,
+   "preview": "https://huggingface.co/renderartist/Coloring-Book-Z-Image-Turbo-LoRA/resolve/3d65420a16668ec00847915f2f69c50854eb5d33/images/CBZ_00247_.png",
+   "author": "renderartist"
+  },
+  {
+   "id": "zit-detailed-eyes",
+   "name": "Detailed Eyes",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "bdsqlsz/qinglong_DetailedEyes_Z-Image",
+   "revision": "cf2ef7daebdb5c2c042ea09b59b429aeba1e3bb9",
+   "files": [
+    {
+     "path": "qinglong_detailedeye_z-imageV2comfy.safetensors",
+     "bytes": 381587708,
+     "sha256": "712a88778f13c18310413afc523fe75c27d408cdfe15ea35d319ebe94e1ad0ec"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Sharper, clearer eyes in portraits and close-ups.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 1556,
+   "likes": 38,
+   "note": "The ComfyUI version (V2) of the file.",
+   "author": "bdsqlsz"
+  },
+  {
+   "id": "zit-childrens-drawings",
+   "name": "Child's Drawing",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "ostris/z_image_turbo_childrens_drawings",
+   "revision": "7fcd66a99149c58741990fca28562a4a581af7a9",
+   "files": [
+    {
+     "path": "z_image_turbo_childrens_drawings.safetensors",
+     "bytes": 170128264,
+     "sha256": "25b9959eb2054ccb9dd1815e90add6da3818f550e8e60a081392095830ff0f7a"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Turns anything into a child's crayon drawing.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 592,
+   "likes": 41,
+   "preview": "https://huggingface.co/ostris/z_image_turbo_childrens_drawings/resolve/7fcd66a99149c58741990fca28562a4a581af7a9/images/1764433583842__000003000_0.jpg",
+   "author": "ostris"
+  },
+  {
+   "id": "zit-historic-color",
+   "name": "Historic Colour Photo",
+   "models": [
+    "z-image-turbo"
+   ],
+   "repo": "AlekseyCalvin/HistoricColor_Z-image-Turbo-LoRA",
+   "revision": "c4f2cb7bfd1df640522cc4d5c5ed9fe061de6d61",
+   "files": [
+    {
+     "path": "ZImage1HST.safetensors",
+     "bytes": 340194040,
+     "sha256": "4d32d2c66717d4d9825664600952bae4643d7fb69e563e60f98aac2367f5a6b2"
+    }
+   ],
+   "category": "looks",
+   "blurb": "The soft, faded colour of early colour photographs.",
+   "trigger": "HST photo",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 430,
+   "likes": 8,
+   "preview": "https://huggingface.co/AlekseyCalvin/HistoricColor_Z-image-Turbo-LoRA/resolve/c4f2cb7bfd1df640522cc4d5c5ed9fe061de6d61/HSTZgen.webp",
+   "author": "AlekseyCalvin"
+  },
+  {
+   "id": "q21-next-scene",
+   "name": "Next Scene",
+   "models": [
+    "tpl-qwen-image-2.1"
+   ],
+   "repo": "akhaliq/Qwen-Image-2.1-Next-Scene-LoRA",
+   "revision": "67ce88cd413fe177758af5d91e25eb3a334aa06f",
+   "files": [
+    {
+     "path": "checkpoints/qwen21_next_scene_v1.safetensors",
+     "bytes": 318819832,
+     "sha256": "8a87032dd1d293b64b1c8640c8e6245141f5c9eb6f0568edaeb4a900ca7fb68e"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Directs the next shot of your scene (camera moves, reveals, light changes) and keeps the world and people the same.",
+   "trigger": "Next Scene:",
+   "strength": 0.8,
+   "range": [
+    0,
+    1.2
+   ],
+   "licence": {
+    "name": "Qwen Research (the model's licence)",
+    "commercial": "no"
+   },
+   "downloads": 4904,
+   "likes": 64,
+   "preview": "https://huggingface.co/akhaliq/Qwen-Image-2.1-Next-Scene-LoRA/resolve/67ce88cd413fe177758af5d91e25eb3a334aa06f/chain/next_scene_grid.jpg",
+   "note": "An edit: give it a frame and describe the next shot. It keeps the world and makes a new shot, though not always with the camera move you name.",
+   "author": "akhaliq"
+  },
+  {
+   "id": "q21-detail-fix",
+   "name": "Detail Fix",
+   "models": [
+    "tpl-qwen-image-2.1"
+   ],
+   "repo": "e-n-v-y/Qwen-Image-2.1-Fix-v2.0",
+   "revision": "045f682888e1f32977d1d7358e5022228fbac4f8",
+   "files": [
+    {
+     "path": "qwen2.1-detail-fix-2.0.safetensors",
+     "bytes": 54800124,
+     "sha256": "3f00361145703a64c7b9812d7797079820a1f7b0dbb5768b9d3df1f3c7750dfa"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Cleaner, finer detail and texture where Qwen-Image 2.1 goes soft or messy.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "None stated (personal use)",
+    "commercial": "no"
+   },
+   "downloads": 4776,
+   "likes": 44,
+   "preview": "https://huggingface.co/e-n-v-y/Qwen-Image-2.1-Fix-v2.0/resolve/045f682888e1f32977d1d7358e5022228fbac4f8/images/qwen21-comparison-2026-10-03-033126-616.png",
+   "author": "e-n-v-y",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "k9-consistency",
+   "name": "Consistency",
+   "models": [
+    "tpl-flux2-klein-9b-edit"
+   ],
+   "repo": "dx8152/Flux2-Klein-9B-Consistency",
+   "revision": "8df0c7338cf68cfcd89ca7e461fe679905634607",
+   "files": [
+    {
+     "path": "Flux2-Klein-9B-consistency-V2.safetensors",
+     "bytes": 331379608,
+     "sha256": "61db2017ce420b97bd5ef11984e5a894c90003a6bbf0dc9473f8d7b9ebb3ff93"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Keeps edits true to your picture: the change you ask for, and everything else exactly as it was.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Non-Commercial (the model's licence)",
+    "commercial": "no"
+   },
+   "downloads": 30426,
+   "likes": 501,
+   "note": "Best for local edits (colour, clothes, objects). Switch it off for restyles such as watercolour: it holds on to the photo.",
+   "author": "dx8152",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "k9-film-still",
+   "name": "Cinematic Film Still",
+   "models": [
+    "tpl-flux2-klein-9b"
+   ],
+   "repo": "artificialguybr/CINEMATIC-FILMSTILL-REDMOND-FLUXKLEIN9B",
+   "revision": "0110e3902064b8afe4f03618fadcf21fa69c5f8e",
+   "files": [
+    {
+     "path": "[FLUX.2.Klein]FilmStill_Redmond.safetensors",
+     "bytes": 165704488,
+     "sha256": "883f7c907bb1b679055c5a050077f2cde5c6bbe5ba3bceb0054e11e768e840a2"
+    }
+   ],
+   "category": "looks",
+   "blurb": "A frame from a film: cinematic light, colour grading and depth.",
+   "trigger": "Cinematic, Film Still.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Non-Commercial (the model's licence)",
+    "commercial": "no"
+   },
+   "downloads": 998,
+   "likes": 33,
+   "preview": "https://huggingface.co/artificialguybr/CINEMATIC-FILMSTILL-REDMOND-FLUXKLEIN9B/resolve/0110e3902064b8afe4f03618fadcf21fa69c5f8e/images/001.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "k9-pixel-art",
+   "name": "Pixel Art",
+   "models": [
+    "tpl-flux2-klein-9b"
+   ],
+   "repo": "artificialguybr/PIXELART-REDMOND-FLUXKLEIN9B",
+   "revision": "6da3f88529e4be570f445de0a2814cc30c502f9f",
+   "files": [
+    {
+     "path": "[FLUX.2.Klein]PixelArt_Redmond.safetensors",
+     "bytes": 165704480,
+     "sha256": "f7e4fdead5391dea3df8bb03a75b8607c13902bf0b3655bd738a63cf7d7803cb"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Crisp pixel art in a retro game palette.",
+   "trigger": "Pixel Art, PixArFK",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Non-Commercial (the model's licence)",
+    "commercial": "no"
+   },
+   "downloads": 213,
+   "likes": 15,
+   "preview": "https://huggingface.co/artificialguybr/PIXELART-REDMOND-FLUXKLEIN9B/resolve/6da3f88529e4be570f445de0a2814cc30c502f9f/images/pixarfk64_flux_klein_9b_001.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "k9-isometric",
+   "name": "Isometric",
+   "models": [
+    "tpl-flux2-klein-9b"
+   ],
+   "repo": "artificialguybr/ISOMETRIC-REDMOND-FLUXKLEIN9B",
+   "revision": "63ce35f9e9ae574e1868d567d6d01661fd8a62fc",
+   "files": [
+    {
+     "path": "[FLUX.2.Klein]Isometric_Redmond.safetensors",
+     "bytes": 165704496,
+     "sha256": "633467a585b83b29e34ca133a4aa61c9bd219bba7f119f420644434e055d2188"
+    }
+   ],
+   "category": "design",
+   "blurb": "Clean isometric scenes and objects, like a game map or an infographic.",
+   "trigger": "ISOMETRIC, ISOMETRICREDM",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Non-Commercial (the model's licence)",
+    "commercial": "no"
+   },
+   "downloads": 155,
+   "likes": 8,
+   "preview": "https://huggingface.co/artificialguybr/ISOMETRIC-REDMOND-FLUXKLEIN9B/resolve/63ce35f9e9ae574e1868d567d6d01661fd8a62fc/images/002.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "k9-analog",
+   "name": "Analog Photo",
+   "models": [
+    "tpl-flux2-klein-9b"
+   ],
+   "repo": "artificialguybr/ANALOG-REDMOND-FLUXKLEIN9B",
+   "revision": "33414d5b691c0b7532d38bfcbda7e0d52faeff93",
+   "files": [
+    {
+     "path": "[FLUX.2.Klein]Analog_Redmond.safetensors",
+     "bytes": 165704480,
+     "sha256": "4479157036f654664c9925c8072158a905d2e3ef820ac18612a71bff2d5f9a97"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Shot on film: analog grain, colour and softness.",
+   "trigger": "AnalogRedmAF, Analog",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Non-Commercial (the model's licence)",
+    "commercial": "no"
+   },
+   "downloads": 142,
+   "likes": 10,
+   "preview": "https://huggingface.co/artificialguybr/ANALOG-REDMOND-FLUXKLEIN9B/resolve/33414d5b691c0b7532d38bfcbda7e0d52faeff93/images/analog_flux_klein_9b_001.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "k9-clay",
+   "name": "Clay Animation",
+   "models": [
+    "tpl-flux2-klein-9b"
+   ],
+   "repo": "artificialguybr/ClayAnimation-Redmond-FLUXKLEIN9B",
+   "revision": "8504ec018782541bd9ac31dc3e627d5c508cf47b",
+   "files": [
+    {
+     "path": "[FLUX.2.Klein]ClayAnimation_Redmond.safetensors",
+     "bytes": 165704496,
+     "sha256": "544f4ed72f4332b4e3a6dbca13047a4a174bf3085d5365f7631df40774a980a0"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Everything made of modelling clay, like a stop-motion film.",
+   "trigger": "Clay animation, Clay.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "FLUX Non-Commercial (the model's licence)",
+    "commercial": "no"
+   },
+   "downloads": 115,
+   "likes": 3,
+   "preview": "https://huggingface.co/artificialguybr/ClayAnimation-Redmond-FLUXKLEIN9B/resolve/8504ec018782541bd9ac31dc3e627d5c508cf47b/images/001.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "moss-deband",
+   "name": "DeBand",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "MATLOWAI/MOSS-Image-SFT-DeBand",
+   "revision": "6d6b6179727a5c39c01082b6a4893a2d338d8f62",
+   "files": [
+    {
+     "path": "moss_image_sft_banding_fix_L37-41_bf16.safetensors",
+     "bytes": 1132530600,
+     "sha256": "01329abd340dd9cf55677381a11558fe5307c7fd648f1988b441172fbbd86fd5"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Removes the faint vertical colour stripes MOSS can leave in skies, fog and smooth backdrops.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 5683,
+   "likes": 16,
+   "note": "1.1 GB; the author's main fix, at 1.0.",
+   "author": "MATLOWAI",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "moss-sharpness",
+   "name": "Sharpness Slider",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "aoleg/MOSS-Sharpness-Slider",
+   "revision": "5a98472a70bbb10cec78a79274df5f86f403493d",
+   "files": [
+    {
+     "path": "moss-sharp-v1_000000400.safetensors",
+     "bytes": 18196288,
+     "sha256": "81beddc3e50e045bae4316b7188124a1b73bbd56b6659b971567a7800b2cb04b"
+    }
+   ],
+   "category": "detail",
+   "blurb": "Above zero sharpens, below zero blurs, with no prompt change.",
+   "strength": 1,
+   "range": [
+    -3,
+    3
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 423,
+   "likes": 16,
+   "note": "Made for MOSS Base; on the SFT version Crackio runs its effect is weaker, so go higher.",
+   "author": "aoleg"
+  },
+  {
+   "id": "moss-kodachrome",
+   "name": "Kodachrome",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "aoleg/MOSS-Image-Kodachrome-V2",
+   "revision": "be22f18bd8f41a0f96dc597890e38b022553b5cb",
+   "files": [
+    {
+     "path": "lokr-moss-kodachrome-v2.safetensors",
+     "bytes": 36423196,
+     "sha256": "fc9ef1da1a4053de68803548a1030f537d0cbbbcc384d5549592c0b78b1af278"
+    }
+   ],
+   "category": "looks",
+   "blurb": "The colour and contrast of 1940s Kodachrome slide film.",
+   "trigger": "Kodachrome film",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 155,
+   "likes": 1,
+   "preview": "https://huggingface.co/aoleg/MOSS-Image-Kodachrome-V2/resolve/be22f18bd8f41a0f96dc597890e38b022553b5cb/images/151716783-2605094023-moss_image_base_int8_convrot.png",
+   "author": "aoleg",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "moss-impressionism",
+   "name": "Impressionism",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "Kandoo/MOSS-Image-Impressionism-LoRA",
+   "revision": "5941252a5095f9be551b708419f7df2078d57864",
+   "files": [
+    {
+     "path": "moss-image-impressionism-lora.safetensors",
+     "bytes": 74470552,
+     "sha256": "c8cff3df16db40b1f17daa195c2d18256085d728394533c0a6c958d43b08ea17"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Any scene as an impressionist oil painting: broken brushwork and vibrating light.",
+   "strength": 1.4,
+   "range": [
+    0,
+    2
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 260,
+   "likes": 4,
+   "note": "At 1.0 a photographic scene stays a photo; 1.4–1.6 paints it. Painterly scenes look good from 1.0.",
+   "author": "Kandoo",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "moss-gouache",
+   "name": "Vintage Gouache",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "axiomofmind/Moss-image-gouache-lora",
+   "revision": "63f1d3fa77623c5198714f43f33be30632b9cb44",
+   "files": [
+    {
+     "path": "MOSS-Image-Gouache-LoRA-ComfyUI.safetensors",
+     "bytes": 74379584,
+     "sha256": "136736fd02a932068982a2211f3010ca579d0186a784b37af592020eb947cedf"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Colourful vintage gouache illustration.",
+   "trigger": "moss_vgouache_style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 847,
+   "likes": 3,
+   "preview": "https://huggingface.co/axiomofmind/Moss-image-gouache-lora/resolve/63f1d3fa77623c5198714f43f33be30632b9cb44/images/base_lora_sample_0.png",
+   "author": "axiomofmind",
+   "tested": "2026-10-30"
+  },
+  {
+   "id": "moss-psychedelic",
+   "name": "Psychedelic Pop",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "axiomofmind/Moss-image-psychedelic-lora",
+   "revision": "3482e5226f462b7c14319cc79167ed6d894ded71",
+   "files": [
+    {
+     "path": "MOSS-Image-Psychedelic-LoRA-ComfyUI.safetensors",
+     "bytes": 74379584,
+     "sha256": "43584190c0d0ba4d3ef124c78bf5ddb1ecc942a6d872b79134a1b2d1bd5dec8a"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Bold psychedelic pop-art colour and pattern.",
+   "trigger": "moss_psychpop_style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 570,
+   "likes": 2,
+   "preview": "https://huggingface.co/axiomofmind/Moss-image-psychedelic-lora/resolve/3482e5226f462b7c14319cc79167ed6d894ded71/images/sample_0.png",
+   "author": "axiomofmind"
+  },
+  {
+   "id": "moss-1950s-scifi",
+   "name": "1950s Sci-Fi Movie",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "neph1/1950s_scifi_lora_moss",
+   "revision": "c528c67a21257db2c7763b6e0b920ab3f80a575f",
+   "files": [
+    {
+     "path": "1950s_scifi_moss_200.safetensors",
+     "bytes": 277655144,
+     "sha256": "28e2b5449c80e9d49275ac991136298578c90d6ace9982e50750ddf7e9b9094c"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Stills from a 1950s science-fiction film.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 63,
+   "likes": 0,
+   "preview": "https://huggingface.co/neph1/1950s_scifi_lora_moss/resolve/c528c67a21257db2c7763b6e0b920ab3f80a575f/images/moss-image_00514_.png",
+   "author": "neph1"
+  },
+  {
+   "id": "moss-1950s-western",
+   "name": "1950s Western",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "neph1/1950s_western_lora_moss",
+   "revision": "c7a6e2353625bb7b863464ae0b53794ea7d4c2b7",
+   "files": [
+    {
+     "path": "1950s_western_moss_200.safetensors",
+     "bytes": 277655144,
+     "sha256": "32969f64f8506f8655935b288ba32d7f59110957e8ac2824f5369cd47b020d4c"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Stills from a 1950s Western.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 76,
+   "likes": 0,
+   "preview": "https://huggingface.co/neph1/1950s_western_lora_moss/resolve/c7a6e2353625bb7b863464ae0b53794ea7d4c2b7/images/moss-image_00538_.png",
+   "author": "neph1"
+  },
+  {
+   "id": "moss-flat-anime",
+   "name": "Flat Colour Lineart",
+   "models": [
+    "tpl-moss-image"
+   ],
+   "repo": "Helives/Flat-Color-Anime-Lineart-Style-for-MOSS",
+   "revision": "cb0d7dbc40282852312807cc9e8277616a204e80",
+   "files": [
+    {
+     "path": "Flat Color Anime Lineart Style-dora_1600.safetensors",
+     "bytes": 300050120,
+     "sha256": "12dbbb893c0294e50b87b487025fc8de98e086659a2effb0406f37e39446ca60"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Clean anime lineart with flat, soft colour fills.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "MIT",
+    "commercial": "yes"
+   },
+   "downloads": 75,
+   "likes": 0,
+   "preview": "https://huggingface.co/Helives/Flat-Color-Anime-Lineart-Style-for-MOSS/resolve/cb0d7dbc40282852312807cc9e8277616a204e80/images/x_00059_.png",
+   "author": "Helives"
+  },
+  {
+   "id": "k4-sketch-to-image",
+   "name": "Sketch to Picture",
+   "models": [
+    "flux2-klein-4b"
+   ],
+   "repo": "ostris/sketch_to_image_klein_4b",
+   "revision": "898fa73df3c60b8f7d83ec667345690b31c4d5da",
+   "files": [
+    {
+     "path": "sketch_to_image_klein_4b.safetensors",
+     "bytes": 92426712,
+     "sha256": "6e84275b88b602b352201231e9147c8947b63385f313c1c875467850fb36bbfd"
+    }
+   ],
+   "category": "edit",
+   "blurb": "Turns a rough sketch into a finished picture that follows its lines.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 421,
+   "likes": 14,
+   "preview": "https://huggingface.co/ostris/sketch_to_image_klein_4b/resolve/898fa73df3c60b8f7d83ec667345690b31c4d5da/images/train_a_sketch_control_net.jpg",
+   "note": "An edit: give it the sketch and describe the result. Trained on the Base 4B.",
+   "author": "ostris"
+  },
+  {
+   "id": "k4-yarn-art",
+   "name": "Yarn Art",
+   "models": [
+    "flux2-klein-4b"
+   ],
+   "repo": "Barath/flux2-klein-yarn-art-lora",
+   "revision": "424ccba0914556699b2203995c451be07a8f2d71",
+   "files": [
+    {
+     "path": "klein4b_yarn_art_lora_v1.safetensors",
+     "bytes": 92426608,
+     "sha256": "d9848dabca31925871cdf22f921002050321fbbf959e49846fa352033e98dedc"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Everything stitched and knitted from yarn.",
+   "trigger": "Y4RN_ART",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 179,
+   "likes": 0,
+   "preview": "https://huggingface.co/Barath/flux2-klein-yarn-art-lora/resolve/424ccba0914556699b2203995c451be07a8f2d71/samples/dist4step_trig1.jpg",
+   "note": "Tested by its author on the distilled 4-step model.",
+   "author": "Barath"
+  },
+  {
+   "id": "k4-summer-to-winter",
+   "name": "Summer to Winter",
+   "models": [
+    "flux2-klein-4b"
+   ],
+   "repo": "kphil01/flux.2-klein-4b-summer-to-winter",
+   "revision": "ed3ded9ec741aa41fb956f8acb026343082b2c84",
+   "files": [
+    {
+     "path": "flux2-klein-4b-summer-to-winter.safetensors",
+     "bytes": 46223800,
+     "sha256": "886f7acd54a0a2a8a350d4efd31d66e71d6689b5bfdb25d29ce6b1d17f0168df"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Turns a summer photo into the same place in winter: snow, frost and cold light.",
+   "trigger": "Change the season to winter",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "None stated (personal use)",
+    "commercial": "no"
+   },
+   "downloads": 41,
+   "likes": 2,
+   "preview": "https://huggingface.co/kphil01/flux.2-klein-4b-summer-to-winter/resolve/ed3ded9ec741aa41fb956f8acb026343082b2c84/images/image_grid_3x3.png",
+   "note": "An edit: give it the summer picture.",
+   "author": "kphil01"
+  },
+  {
+   "id": "krea2-realism",
+   "name": "Realism",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "RudySen/Krea2-realism-V2",
+   "revision": "ad6f07e426303e7087d215362dbc057b0073dca3",
+   "files": [
+    {
+     "path": "Krea2-realism-V2.safetensors",
+     "bytes": 1562410344,
+     "sha256": "fb0048ce3340adc2842ccfcc1a9a61a9773b6628b01ae5a2e139ca9c679e715d"
+    }
+   ],
+   "category": "detail",
+   "blurb": "More real photos: textures, light, composition and faces without the stare.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 26456,
+   "likes": 216,
+   "note": "1.6 GB. Shines with a few sentences of natural description.",
+   "author": "RudySen"
+  },
+  {
+   "id": "krea2-sunsetblur",
+   "name": "Ethereal Motion Blur",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_sunsetblur.safetensors",
+     "bytes": 469291992,
+     "sha256": "194abdd531ca190d32799f26ab5bab634aa5ba3f07b7a60ffb282657db8bf3a0"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Dreamy long-exposure blur and glowing sunset light.",
+   "trigger": "ethereal motion blur style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-sunsetblur/resolve/bbc39e05cb5b59f60b00d9cca027495d91f2e10a/images/00_turbo.png"
+  },
+  {
+   "id": "krea2-kidsdrawing",
+   "name": "Naive Sketch",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_kidsdrawing.safetensors",
+     "bytes": 469291992,
+     "sha256": "8c1d45d204aeb4e34a7d9e16a7d473917592ba0048b03f4e03e037e3578ca500"
+    }
+   ],
+   "category": "looks",
+   "blurb": "A loose, expressive drawing with a child-like hand.",
+   "trigger": "naive expressive sketch style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-kidsdrawing/resolve/0103d1c5f33d5b6d1c7226c879d5debc6d136121/images/00_turbo.png"
+  },
+  {
+   "id": "krea2-darkbrush",
+   "name": "Ink Wash",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_darkbrush.safetensors",
+     "bytes": 469291992,
+     "sha256": "f47c4316dd93af66e0518c93b582f459571d4925b519133770c73a52cd5db7c6"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Black ink washes and bold brush strokes.",
+   "trigger": "monochrome ink wash style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-darkbrush/resolve/af7645f3502694cfc9fd69b9c2dca113344df33d/images/00_turbo.jpg"
+  },
+  {
+   "id": "krea2-vintagetarot",
+   "name": "Vintage Tarot",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_vintagetarot.safetensors",
+     "bytes": 469291992,
+     "sha256": "8cca96c56658fb3ac5269f9ef2245bd07cbf1b7a189f517c8763470bb1385f9f"
+    }
+   ],
+   "category": "looks",
+   "blurb": "An old illustrated tarot card.",
+   "trigger": "vintage tarot style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-vintagetarot/resolve/5fb7c2f1d6b7a8a35aca940dbe8c5c02ba85fb3f/images/00_turbo.png"
+  },
+  {
+   "id": "krea2-dotmatrix",
+   "name": "Stippling",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_dotmatrix.safetensors",
+     "bytes": 469291992,
+     "sha256": "805aa30d863347222485b9d3ce81642dbc70a73cebc95ab57219d98b878fceec"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Drawn entirely in fine ink dots.",
+   "trigger": "Monochrome stippling style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-dotmatrix/resolve/47f962a5690534f99a8341d37f10ea6322a0c34a/images/00_turbo.png"
+  },
+  {
+   "id": "krea2-retroanime",
+   "name": "Retro Anime",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_retroanime.safetensors",
+     "bytes": 469291992,
+     "sha256": "ca42107783d9e517c5d62cb9a9db9ab2ba4887d90e9dad97a9d1a7fe6ff14c56"
+    }
+   ],
+   "category": "looks",
+   "blurb": "1980s–90s anime in dusky purple tones.",
+   "trigger": "Purple retro anime style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-retroanime/resolve/23336fcff3bac43028918a2df795fbb63fdc1ff3/images/00_turbo.png"
+  },
+  {
+   "id": "krea2-rainywindow",
+   "name": "Rainy Window",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_rainywindow.safetensors",
+     "bytes": 469291992,
+     "sha256": "7063a6f15ec6112ad3c06d79097b2a30a3ea7d9072821cb36021010d55989fe5"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Seen through a rain-streaked window: drops, blur and moody light.",
+   "trigger": "rainy window style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-rainywindow/resolve/b071a8c4201655dcf175e9b5f8ab66db93525747/images/00_turbo.png"
+  },
+  {
+   "id": "krea2-neondrip",
+   "name": "Textured Abstract",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_neondrip.safetensors",
+     "bytes": 469291992,
+     "sha256": "a779c14435949eabae9ce0bface4320cad6672ef3547e8489107e3498d65e871"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Thick, textured abstract paint in neon colour.",
+   "trigger": "Textured abstract style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-neondrip/resolve/27b1c13a6feb68fe9abc71dc3dbc813fe6af408c/images/00_turbo.png"
+  },
+  {
+   "id": "krea2-softwatercolor",
+   "name": "Art Deco Watercolour",
+   "models": [
+    "tpl-krea-2"
+   ],
+   "repo": "Comfy-Org/Krea-2",
+   "revision": "1171f4dc7e325bf3734586942e737872506c73e1",
+   "author": "Krea",
+   "files": [
+    {
+     "path": "loras/krea2_softwatercolor.safetensors",
+     "bytes": 469291992,
+     "sha256": "3805e8655f19fbcac116542685e3f78f3a642e8fbfb857b5352bb32a4b3d445a"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Soft watercolour with Art Deco shapes and elegance.",
+   "trigger": "Art Deco watercolor style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Krea 2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "note": "Krea's own style, trained on Krea 2 Raw and used on Turbo.",
+   "preview": "https://huggingface.co/krea/Krea-2-LoRA-softwatercolor/resolve/12ff680b14a869b0e72f225bbdb237ad244b6a94/images/00_turbo.png"
+  },
+  {
+   "id": "sdxl-pixel-art",
+   "name": "Pixel Art XL",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "nerijs/pixel-art-xl",
+   "revision": "8bf4a4d9ea283e00a51fafda8e0539f8248ea037",
+   "files": [
+    {
+     "path": "pixel-art-xl.safetensors",
+     "bytes": 170543052,
+     "sha256": "4234637cb80c998f41e348e6a6cb6bc20d8d038b2b0f256b6129b3b5e353eef7"
+    }
+   ],
+   "category": "looks",
+   "blurb": "The classic SDXL pixel art LoRA: clean, game-ready sprites and scenes.",
+   "trigger": "pixel art",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CreativeML OpenRAIL-M",
+    "commercial": "yes"
+   },
+   "downloads": 33517,
+   "likes": 666,
+   "author": "nerijs"
+  },
+  {
+   "id": "sdxl-little-tinies",
+   "name": "Little Tinies",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "alvdansen/littletinies",
+   "revision": "b2de82a8d0310c383342d939ab4f811c6f65adc0",
+   "files": [
+    {
+     "path": "Little_Tinies.safetensors",
+     "bytes": 228455772,
+     "sha256": "7d43ff67299f2412b994f021bb9b3a7713484b8a615e468542959f00fd0098a3"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Cute, tiny hand-drawn characters with a storybook feel.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CreativeML OpenRAIL-M",
+    "commercial": "yes"
+   },
+   "downloads": 251,
+   "likes": 424,
+   "preview": "https://huggingface.co/alvdansen/littletinies/resolve/b2de82a8d0310c383342d939ab4f811c6f65adc0/images/227DE29148BC8798591C0EF99A41B71C44C0CAB5A16B976EFCC387C08D748DC0.jpeg",
+   "author": "alvdansen"
+  },
+  {
+   "id": "sdxl-3d-render",
+   "name": "3D Render",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "goofyai/3d_render_style_xl",
+   "revision": "5ec74a57db5e244a2157173781a7b29045f88237",
+   "files": [
+    {
+     "path": "3d_render_style_xl.safetensors",
+     "bytes": 85450700,
+     "sha256": "393de3e04d956b13ac1a41c3a932e196330ad03d7a70abc2a174d911376ec397"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Glossy 3D render look, like an animated film still.",
+   "trigger": "3d style, 3d render",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 2378,
+   "likes": 131,
+   "preview": "https://huggingface.co/goofyai/3d_render_style_xl/resolve/5ec74a57db5e244a2157173781a7b29045f88237/3d_style_1.jpeg",
+   "author": "goofyai"
+  },
+  {
+   "id": "sdxl-storyboard-sketch",
+   "name": "Storyboard Sketch",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "blink7630/storyboard-sketch",
+   "revision": "be328fecdfe3fb053a500376283013f34f99eebb",
+   "files": [
+    {
+     "path": "Storyboard_sketch.safetensors",
+     "bytes": 228458068,
+     "sha256": "de93616cb7053ea3d05aee57b27d0cb1e0e4c2d44876b86523af0f0e2e63e3a4"
+    }
+   ],
+   "category": "design",
+   "blurb": "Quick grayscale storyboard frames, like a film's pre-production sketches.",
+   "trigger": "storyboard sketch of",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "See the model card",
+    "commercial": "limited"
+   },
+   "downloads": 493,
+   "likes": 104,
+   "author": "blink7630"
+  },
+  {
+   "id": "sdxl-logo",
+   "name": "Logo Design",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "artificialguybr/LogoRedmond-LogoLoraForSDXL-V2",
+   "revision": "9ac7f809201877d5dd82e2fb6b6932f28bb41378",
+   "files": [
+    {
+     "path": "LogoRedmondV2-Logo-LogoRedmAF.safetensors",
+     "bytes": 170540028,
+     "sha256": "55f7f408831c34f84857b1a728d1dd70b76083d80e7279e22097ca5ac4430e13"
+    }
+   ],
+   "category": "design",
+   "blurb": "Clean, simple logos and icons of your own.",
+   "trigger": "LogoRedmAF",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CreativeML OpenRAIL-M",
+    "commercial": "yes"
+   },
+   "downloads": 668,
+   "likes": 82,
+   "preview": "https://huggingface.co/artificialguybr/LogoRedmond-LogoLoraForSDXL-V2/resolve/9ac7f809201877d5dd82e2fb6b6932f28bb41378/00140-237225586.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "sdxl-stickers",
+   "name": "Stickers",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "artificialguybr/StickersRedmond",
+   "revision": "014e8d6a07421c1f9f29c5f8c9ab91a31bb36ec6",
+   "files": [
+    {
+     "path": "StickersRedmond.safetensors",
+     "bytes": 170540036,
+     "sha256": "927a840722d1ac9103223c09da55cc3ae750300e1c0e22a15ffcf460ac6f8a56"
+    }
+   ],
+   "category": "design",
+   "blurb": "Die-cut sticker designs with a white border.",
+   "trigger": "Stickers, sticker",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CreativeML OpenRAIL-M",
+    "commercial": "yes"
+   },
+   "downloads": 778,
+   "likes": 117,
+   "preview": "https://huggingface.co/artificialguybr/StickersRedmond/resolve/014e8d6a07421c1f9f29c5f8c9ab91a31bb36ec6/00000-3383490575.png",
+   "author": "artificialguybr"
+  },
+  {
+   "id": "sdxl-detail-slider",
+   "name": "Detail Slider",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "ntc-ai/SDXL-LoRA-slider.extremely-detailed",
+   "revision": "d3c8e5e8a6f9581d90cc4993d6afd59f3e42dffc",
+   "files": [
+    {
+     "path": "extremely detailed.safetensors",
+     "bytes": 8789076,
+     "sha256": "ef4a6eac1515ed363914f5fe1ef06b776c8c12b139425eb0cbd79d771e99c561"
+    }
+   ],
+   "category": "detail",
+   "blurb": "More fine detail above zero, simpler and cleaner below.",
+   "trigger": "extremely detailed",
+   "strength": 1.5,
+   "range": [
+    -3,
+    3
+   ],
+   "licence": {
+    "name": "MIT",
+    "commercial": "yes"
+   },
+   "downloads": 1366,
+   "likes": 14,
+   "author": "ntc-ai"
+  },
+  {
+   "id": "sdxl-cinematic-lighting",
+   "name": "Cinematic Lighting",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "ntc-ai/SDXL-LoRA-slider.cinematic-lighting",
+   "revision": "53161a1fef0bd14bf3dfd696a3455bcb611b9802",
+   "files": [
+    {
+     "path": "cinematic lighting.safetensors",
+     "bytes": 8789076,
+     "sha256": "529daf6ffd2d73bf54a1a923cac66b6c2a3e4e80998d05498d48208266bfda6c"
+    }
+   ],
+   "category": "light",
+   "blurb": "Dramatic film lighting above zero, flat light below.",
+   "trigger": "cinematic lighting",
+   "strength": 1.5,
+   "range": [
+    -3,
+    3
+   ],
+   "licence": {
+    "name": "MIT",
+    "commercial": "yes"
+   },
+   "downloads": 848,
+   "likes": 15,
+   "preview": "https://huggingface.co/ntc-ai/SDXL-LoRA-slider.cinematic-lighting/resolve/53161a1fef0bd14bf3dfd696a3455bcb611b9802/images/cinematic%20lighting_17_1.5.png",
+   "author": "ntc-ai"
+  },
+  {
+   "id": "sdxl-watercolor",
+   "name": "Watercolour",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "ostris/watercolor_style_lora_sdxl",
+   "revision": "0b65af0ac64347c8a35b82b4695ef5eadeffd5d7",
+   "files": [
+    {
+     "path": "watercolor_v1_sdxl.safetensors",
+     "bytes": 11860808,
+     "sha256": "d375ae7e68e1377305c168b0550a0fda33925421f570f87870fb19278786e9ac"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Soft watercolour painting on paper.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 2353,
+   "likes": 33,
+   "author": "ostris"
+  },
+  {
+   "id": "sdxl-offset",
+   "name": "Deep Contrast",
+   "models": [
+    "tpl-sdxl"
+   ],
+   "repo": "stabilityai/stable-diffusion-xl-base-1.0",
+   "revision": "462165984030d82259a11f4367a4eed129e94a7b",
+   "files": [
+    {
+     "path": "sd_xl_offset_example-lora_1.0.safetensors",
+     "bytes": 49553604,
+     "sha256": "4852686128f953d0277d0793e2f0335352f96a919c9c16a09787d77f55cbdf6f"
+    }
+   ],
+   "category": "light",
+   "blurb": "Stability AI's own offset-noise LoRA: truer blacks, brighter highlights, richer contrast.",
+   "strength": 0.8,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "OpenRAIL++-M",
+    "commercial": "yes"
+   },
+   "downloads": 0,
+   "likes": 0,
+   "author": "stabilityai"
+  },
+  {
+   "id": "wan5b-crush-it",
+   "name": "Crush It",
+   "models": [
+    "wan2.2-5b"
+   ],
+   "repo": "ostris/wan22_5b_i2v_crush_it_lora",
+   "revision": "e4b85be20d75c2ca2ee1b901ba2cf49d9416e233",
+   "files": [
+    {
+     "path": "wan22_5b_i2v_crush_it_lora.safetensors",
+     "bytes": 161293208,
+     "sha256": "00a3ed72d8e257b416e1232cce07acf76cfb3ad7538f8ba995b6818f0b560f23"
+    }
+   ],
+   "category": "effects",
+   "blurb": "A hydraulic press crushes the object in your start frame.",
+   "trigger": "crush it",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 179,
+   "likes": 19,
+   "note": "Clips from a start frame.",
+   "author": "ostris"
+  },
+  {
+   "id": "chrono-upscaler",
+   "name": "Upscale & Sharpen",
+   "models": [
+    "tpl-chronoedit"
+   ],
+   "repo": "nvidia/ChronoEdit-14B-Diffusers-Upscaler-Lora",
+   "revision": "80dad01baaa04f227a9222e37b5029656105f42e",
+   "files": [
+    {
+     "path": "upsample_lora_diffusers.safetensors",
+     "bytes": 306807944,
+     "sha256": "7b7f47060eb40cc25330ea32c0560f7c87366699e1fe27ce215c026389779eca"
+    }
+   ],
+   "category": "detail",
+   "blurb": "NVIDIA's own LoRA: sharper, higher-resolution detail with the picture otherwise unchanged.",
+   "trigger": "The user want to enhance image clarity and resolution while keeping the content identical. super-resolution, high detail, 4K clarity, same composition, natural texture.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "NVIDIA Open Model License",
+    "commercial": "yes"
+   },
+   "downloads": 204,
+   "likes": 95,
+   "author": "nvidia"
+  },
+  {
+   "id": "bernini-anime",
+   "name": "Anime Style Transfer",
+   "models": [
+    "tpl-bernini-r"
+   ],
+   "repo": "tarn59/bernini_r_anime_style_transfer_lora",
+   "revision": "9c8244d055585c82755186b9c4ac892f646d26f7",
+   "files": [
+    {
+     "path": "bernini_r_anime_style_transfer_high_noise.safetensors",
+     "bytes": 613517264,
+     "sha256": "b5b5cf67a67345fb37de4da7bb5967c75496606081ba7e743b67b862a172b26f",
+     "match": "high_noise"
+    },
+    {
+     "path": "bernini_r_anime_style_transfer_low_noise.safetensors",
+     "bytes": 613517264,
+     "sha256": "c944b81911c97897e451da5b12236a2d2aa6f46797a4948b2e671ef466eba5ed",
+     "match": "low_noise"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Redraws your picture as anime.",
+   "trigger": "Anime style transfer.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 118,
+   "likes": 4,
+   "note": "Two files (one for each half of the model).",
+   "author": "tarn59"
+  },
+  {
+   "id": "bernini-real-life",
+   "name": "Real-Life Style Transfer",
+   "models": [
+    "tpl-bernini-r"
+   ],
+   "repo": "tarn59/bernini_r_real_life_style_transfer_lora",
+   "revision": "b48438d22e40dff00d7e585d66c96ff9dd1c11d6",
+   "files": [
+    {
+     "path": "bernini_r_real_life_style_transfer_v3_high_noise.safetensors",
+     "bytes": 613517280,
+     "sha256": "047080ab2333fd69a0188bdb8fb7d8f24f23bd37fc0d62d95df8ffe082790ed0",
+     "match": "high_noise"
+    },
+    {
+     "path": "bernini_r_real_life_style_transfer_v3_low_noise.safetensors",
+     "bytes": 613517280,
+     "sha256": "45d87cb48ecafd2b72143d418127abc42316cb92604f50f262acdfdb2aae93e9",
+     "match": "low_noise"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Turns a drawing or render into a real-looking photo.",
+   "trigger": "Real life style transfer.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 83,
+   "likes": 3,
+   "note": "Two files (one for each half of the model). Version 3.",
+   "author": "tarn59"
+  },
+  {
+   "id": "ltx2-camera-dolly-in",
+   "name": "Dolly In",
+   "models": [
+    "tpl-ltx-2-video"
+   ],
+   "repo": "Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-In",
+   "revision": "da9310669a50dd6224149eab903e0ce586936fc4",
+   "files": [
+    {
+     "path": "ltx-2-19b-lora-camera-control-dolly-in.safetensors",
+     "bytes": 327309208,
+     "sha256": "0da937d528ea619c95859ad0c5cab012c7213fe058b7cb289e2a513ec351f237"
+    }
+   ],
+   "category": "motion",
+   "blurb": "The camera pushes in toward the subject.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 5985,
+   "likes": 20,
+   "note": "Lightricks' own camera LoRA. Describe where the move ends up.",
+   "author": "Lightricks"
+  },
+  {
+   "id": "ltx2-camera-dolly-out",
+   "name": "Dolly Out",
+   "models": [
+    "tpl-ltx-2-video"
+   ],
+   "repo": "Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Out",
+   "revision": "5e5fba47ca3c7aa7e8058490cfdbe3b67a115049",
+   "files": [
+    {
+     "path": "ltx-2-19b-lora-camera-control-dolly-out.safetensors",
+     "bytes": 327309208,
+     "sha256": "554c30e64fa57b6c98e059f1b3ccabc50ad85195aab0911aed317b714f8d644d"
+    }
+   ],
+   "category": "motion",
+   "blurb": "The camera pulls back from the subject, revealing more of the scene.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 0,
+   "likes": 16,
+   "note": "Lightricks' own camera LoRA. Describe where the move ends up.",
+   "author": "Lightricks"
+  },
+  {
+   "id": "ltx2-camera-dolly-left",
+   "name": "Dolly Left",
+   "models": [
+    "tpl-ltx-2-video"
+   ],
+   "repo": "Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Left",
+   "revision": "9259da7cb8283cf416eb8f79df55a434b0f9618b",
+   "files": [
+    {
+     "path": "ltx-2-19b-lora-camera-control-dolly-left.safetensors",
+     "bytes": 327309208,
+     "sha256": "fdd28ee1a53e5413d74b90064c7ec0fe98b78457b5da06c0c9c4ea5810d1f5f6"
+    }
+   ],
+   "category": "motion",
+   "blurb": "The camera glides sideways to the left.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 9158,
+   "likes": 14,
+   "note": "Lightricks' own camera LoRA. Describe where the move ends up.",
+   "author": "Lightricks"
+  },
+  {
+   "id": "ltx2-camera-dolly-right",
+   "name": "Dolly Right",
+   "models": [
+    "tpl-ltx-2-video"
+   ],
+   "repo": "Lightricks/LTX-2-19b-LoRA-Camera-Control-Dolly-Right",
+   "revision": "4494707e3b7f67fc574792b09aeb0a26a372823e",
+   "files": [
+    {
+     "path": "ltx-2-19b-lora-camera-control-dolly-right.safetensors",
+     "bytes": 327309208,
+     "sha256": "ee1a3a34dc21c6b61a4c5775756dd0fab8700e06dd35658c852c0127202aa5dd"
+    }
+   ],
+   "category": "motion",
+   "blurb": "The camera glides sideways to the right.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 2162,
+   "likes": 14,
+   "note": "Lightricks' own camera LoRA. Describe where the move ends up.",
+   "author": "Lightricks"
+  },
+  {
+   "id": "ltx2-camera-jib-up",
+   "name": "Jib Up",
+   "models": [
+    "tpl-ltx-2-video"
+   ],
+   "repo": "Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Up",
+   "revision": "e3d0e1565a6cc8a02424868edc935411013ae5ce",
+   "files": [
+    {
+     "path": "ltx-2-19b-lora-camera-control-jib-up.safetensors",
+     "bytes": 2214978664,
+     "sha256": "c4e8bd628238caf20079515ba2bce5770fa1108e6ed8c1d403a3179a68dce77f"
+    }
+   ],
+   "category": "motion",
+   "blurb": "The camera rises like a crane shot.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 5625,
+   "likes": 15,
+   "note": "Lightricks' own camera LoRA. Describe where the move ends up. 2.2 GB.",
+   "author": "Lightricks"
+  },
+  {
+   "id": "ltx2-camera-jib-down",
+   "name": "Jib Down",
+   "models": [
+    "tpl-ltx-2-video"
+   ],
+   "repo": "Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Down",
+   "revision": "65341c5c5e3722e73a413ddadde71b0202ed785f",
+   "files": [
+    {
+     "path": "ltx-2-19b-lora-camera-control-jib-down.safetensors",
+     "bytes": 2214978664,
+     "sha256": "5a2f72b231841f998a46b949271fa0bcec21012d4238a53e7eb4762bc828bee3"
+    }
+   ],
+   "category": "motion",
+   "blurb": "The camera lowers like a crane shot.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 5473,
+   "likes": 13,
+   "note": "Lightricks' own camera LoRA. Describe where the move ends up. 2.2 GB.",
+   "author": "Lightricks"
+  },
+  {
+   "id": "ltx2-camera-static",
+   "name": "Locked-Off Camera",
+   "models": [
+    "tpl-ltx-2-video"
+   ],
+   "repo": "Lightricks/LTX-2-19b-LoRA-Camera-Control-Static",
+   "revision": "502972f4be629c6067a5f520371fa893c8756a56",
+   "files": [
+    {
+     "path": "ltx-2-19b-lora-camera-control-static.safetensors",
+     "bytes": 2214978664,
+     "sha256": "6b79aad7ecdd60aef07f39177d1ac225a6608806086af94848436fec432e2d0d"
+    }
+   ],
+   "category": "motion",
+   "blurb": "Keeps the camera perfectly still while the scene moves.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "LTX-2 Community (the model's licence)",
+    "commercial": "limited"
+   },
+   "downloads": 5425,
+   "likes": 34,
+   "note": "Lightricks' own camera LoRA. Describe where the move ends up. 2.2 GB.",
+   "author": "Lightricks"
+  },
+  {
+   "id": "vace-flat-color",
+   "name": "Flat Colour Anime",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "motimalu/wan-flat-color-v2",
+   "revision": "1dfba6440282ec13b96b4750ea83db098e836de7",
+   "files": [
+    {
+     "path": "wan_flat_color_v2.safetensors",
+     "bytes": 306807976,
+     "sha256": "e61910ec19fc602d72248c4f3abd338b614d82394f357d2d67f6e1575b4f4819"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Clean flat-colour animation without outlines.",
+   "trigger": "flat color, no lineart",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 209,
+   "likes": 41,
+   "preview": "https://huggingface.co/motimalu/wan-flat-color-v2/resolve/1dfba6440282ec13b96b4750ea83db098e836de7/images/ComfyUI_00177_.webp",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "motimalu"
+  },
+  {
+   "id": "vace-fire",
+   "name": "Real Fire",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "Remade-AI/Fire",
+   "revision": "f3a00d5ff02888ab7a7461066670ffdcba06ca8d",
+   "files": [
+    {
+     "path": "fire_12_epochs.safetensors",
+     "bytes": 306807976,
+     "sha256": "c58a28316af75f7f87d8808a21cd547eea445dda37872964e655c91f461ed003"
+    }
+   ],
+   "category": "effects",
+   "blurb": "Sets things ablaze with realistic flames.",
+   "trigger": "r3al_f1re",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 146,
+   "likes": 6,
+   "preview": "https://huggingface.co/Remade-AI/Fire/resolve/f3a00d5ff02888ab7a7461066670ffdcba06ca8d/example_videos/fire1.mp4",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "Remade-AI"
+  },
+  {
+   "id": "vace-tsunami",
+   "name": "Tsunami",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "Remade-AI/Tsunami",
+   "revision": "b95d8906dc325f4c1b19593cad5ff130a861afc7",
+   "files": [
+    {
+     "path": "tsunami_4_epochs.safetensors",
+     "bytes": 306807976,
+     "sha256": "303e77e63871e809ad774418d5f1c4632c1725c8750d2e55aba4f8c9a9ccb3fb"
+    }
+   ],
+   "category": "effects",
+   "blurb": "A giant realistic wave rolls in.",
+   "trigger": "t5un@m1 realistic tsunami",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 148,
+   "likes": 4,
+   "preview": "https://huggingface.co/Remade-AI/Tsunami/resolve/b95d8906dc325f4c1b19593cad5ff130a861afc7/example_videos/tsunami1.mp4",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "Remade-AI"
+  },
+  {
+   "id": "vace-tornado",
+   "name": "Tornado",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "Remade-AI/Tornado",
+   "revision": "3862931109a00dc76bd94a99fe56d184475fe1e9",
+   "files": [
+    {
+     "path": "tornado_10_epochs.safetensors",
+     "bytes": 359257680,
+     "sha256": "35adec840cec087a10748b2b7e87665552d7b54462c0f3e1a7c18ecf441e5f96"
+    }
+   ],
+   "category": "effects",
+   "blurb": "A tornado tears across the scene.",
+   "trigger": "t0r54d0 tornado",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 82,
+   "likes": 3,
+   "preview": "https://huggingface.co/Remade-AI/Tornado/resolve/3862931109a00dc76bd94a99fe56d184475fe1e9/example_videos/1.mp4",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "Remade-AI"
+  },
+  {
+   "id": "vace-tiny-planet",
+   "name": "Tiny Planet",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "Remade-AI/Tiny-Planet-Fisheye",
+   "revision": "3eb2dc1a4bdee6d8c298f3aaca12c7c218ba3579",
+   "files": [
+    {
+     "path": "fisheye_15_epochs.safetensors",
+     "bytes": 359257680,
+     "sha256": "3b04cd4f522806028d1ac8435cddd4dec8f8b31d223b16d164a20e99411a72ba"
+    }
+   ],
+   "category": "motion",
+   "blurb": "A little-planet fisheye view that curls the world into a ball.",
+   "trigger": "Little planet view fisheye lens",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 134,
+   "likes": 3,
+   "preview": "https://huggingface.co/Remade-AI/Tiny-Planet-Fisheye/resolve/3eb2dc1a4bdee6d8c298f3aaca12c7c218ba3579/example_videos/1.mp4",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "Remade-AI"
+  },
+  {
+   "id": "vace-vhs",
+   "name": "Vintage VHS",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "Remade-AI/Vintage-VHS",
+   "revision": "e8cfc31642c91896f39efc242a5c2f5c54904a44",
+   "files": [
+    {
+     "path": "vhs_20_epochs.safetensors",
+     "bytes": 359257680,
+     "sha256": "e3f10a9af8817410128516cee43db95a21e97d6946ab30df95d163752570837b"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Shot on an old VHS camcorder: tape noise, colour bleed, soft focus.",
+   "trigger": "vh5_c4m3r4 old VHS style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 92,
+   "likes": 4,
+   "preview": "https://huggingface.co/Remade-AI/Vintage-VHS/resolve/e8cfc31642c91896f39efc242a5c2f5c54904a44/example_videos/1.mp4",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "Remade-AI"
+  },
+  {
+   "id": "vace-film-noir",
+   "name": "Film Noir",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "Remade-AI/Film-Noir",
+   "revision": "993229316d95ef509206467703c4a3e548c034a9",
+   "files": [
+    {
+     "path": "film_noir_10_epochs.safetensors",
+     "bytes": 359257680,
+     "sha256": "118d5ee3525b4e69c30e067253d584ebdacdbc59cb8db49f6b0b0b4f737b2391"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Black-and-white film noir: hard shadows and smoky light.",
+   "trigger": "f11m_n01r film noir, black and white video",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 139,
+   "likes": 2,
+   "preview": "https://huggingface.co/Remade-AI/Film-Noir/resolve/993229316d95ef509206467703c4a3e548c034a9/example_videos/1.mp4",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "Remade-AI"
+  },
+  {
+   "id": "vace-fantasy-landscapes",
+   "name": "Fantasy Landscapes",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "Remade-AI/Fantasy-Landscapes",
+   "revision": "d7a186622e6f8071c13a0304b5e954d460f86447",
+   "files": [
+    {
+     "path": "fantasy_50_epochs.safetensors",
+     "bytes": 359257680,
+     "sha256": "ab5f889c4c7de9b0fa57ce24b5020d3ccf06096ff682f1680d4f69f437c0c4ed"
+    }
+   ],
+   "category": "world",
+   "blurb": "Sweeping fantasy worlds: floating islands, glowing forests, impossible skies.",
+   "trigger": "f4nt4sy_sc3n3 fantasy landscape",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 121,
+   "likes": 3,
+   "preview": "https://huggingface.co/Remade-AI/Fantasy-Landscapes/resolve/d7a186622e6f8071c13a0304b5e954d460f86447/example_videos/1.mp4",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "Remade-AI"
+  },
+  {
+   "id": "vace-origami",
+   "name": "Origami",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "shauray/Origami_WanLora",
+   "revision": "698ea6952da38438a55112ab51fea0f5a53556bc",
+   "files": [
+    {
+     "path": "origami_000000500.safetensors",
+     "bytes": 306807608,
+     "sha256": "2e4f299f5e68b61c25253a71cc4107b44d1b447cfeb050f3779f294d159a2140"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Everything folded from paper, moving like origami.",
+   "trigger": "origami",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 53,
+   "likes": 4,
+   "preview": "https://huggingface.co/shauray/Origami_WanLora/resolve/698ea6952da38438a55112ab51fea0f5a53556bc/videos/1742855529510.mp4",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "shauray"
+  },
+  {
+   "id": "vace-old-book",
+   "name": "Old Book Illustration",
+   "models": [
+    "tpl-wan-vace-video"
+   ],
+   "repo": "AdamLucek/Wan2.1-T2V-14B-OldBookIllustrations",
+   "revision": "c45c4632a8543e174431c74fa8eaf4fd65e2a43d",
+   "files": [
+    {
+     "path": "oldbookillustrations_adapter.safetensors",
+     "bytes": 306807976,
+     "sha256": "0263cd4c2551bc9dcc025ba26cf2eaf524a171738aac09ee3786aa3f5e564f4c"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Moving engravings from an old illustrated book.",
+   "trigger": "An old book illustration of",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "MIT",
+    "commercial": "yes"
+   },
+   "downloads": 54,
+   "likes": 1,
+   "preview": "https://huggingface.co/AdamLucek/Wan2.1-T2V-14B-OldBookIllustrations/resolve/c45c4632a8543e174431c74fa8eaf4fd65e2a43d/images/example_1.webp",
+   "note": "Made for Wan 2.1 14B, which VACE is built on.",
+   "author": "AdamLucek"
+  },
+  {
+   "id": "f2dev-historic-color",
+   "name": "Historic Colour Photo",
+   "models": [
+    "tpl-flux2-dev"
+   ],
+   "repo": "AlekseyCalvin/Historic_Color_FLUX2_v1",
+   "revision": "8ddfecfa125fbc44ee5d80d9b35747461a5f7348",
+   "files": [
+    {
+     "path": "Flux2Hst_000002600.safetensors",
+     "bytes": 390111888,
+     "sha256": "ffce1ad8e1ed477acb6ee78fbd8435a0d0e30049ed24bc2483b4564cdc64583a"
+    }
+   ],
+   "category": "looks",
+   "blurb": "The soft, faded colour of early colour photographs.",
+   "trigger": "HST photo",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0 · FLUX.2 dev is non-commercial",
+    "commercial": "no"
+   },
+   "downloads": 46,
+   "likes": 0,
+   "author": "AlekseyCalvin"
+  },
+  {
+   "id": "f2dev-soft-impressionism",
+   "name": "Soft Impressionism",
+   "models": [
+    "tpl-flux2-dev"
+   ],
+   "repo": "ostris/flux2_berthe_morisot",
+   "revision": "5e5738e335ca83a660e01434e81245ff397b598c",
+   "files": [
+    {
+     "path": "flux2_berthe_morisot.safetensors",
+     "bytes": 390112256,
+     "sha256": "2f64a49f5f34925df7720fe9b471eecd76a6c3615cb006ca18601e4d798b0545"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Light, feathery brushwork and pale colour, like 1880s Impressionist painting.",
+   "trigger": "berthe_morisot style",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "None stated (personal use)",
+    "commercial": "no"
+   },
+   "downloads": 802,
+   "likes": 20,
+   "preview": "https://huggingface.co/ostris/flux2_berthe_morisot/resolve/5e5738e335ca83a660e01434e81245ff397b598c/images/1764028086048__000003000_0.jpg",
+   "note": "Trained on Berthe Morisot's public-domain paintings.",
+   "author": "ostris"
+  },
+  {
+   "id": "f2dev-quiet-interiors",
+   "name": "Quiet Interiors",
+   "models": [
+    "tpl-flux2-dev"
+   ],
+   "repo": "jejunepixels/Hammershoi-Flux2-LoRA",
+   "revision": "06660a6c1fa762e1c1523887a2ac3e617ccf52b2",
+   "files": [
+    {
+     "path": "Hammershoi_flux2.safetensors",
+     "bytes": 195076920,
+     "sha256": "4d88f6dfcaa141448393557e602555e5c68049d9b9d7944de23b46485acf2294"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Still, grey-lit rooms and muted colour, like Hammershøi's paintings.",
+   "trigger": "hmrsh",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CreativeML OpenRAIL-M · FLUX.2 dev is non-commercial",
+    "commercial": "no"
+   },
+   "downloads": 34,
+   "likes": 1,
+   "preview": "https://huggingface.co/jejunepixels/Hammershoi-Flux2-LoRA/resolve/06660a6c1fa762e1c1523887a2ac3e617ccf52b2/images/Flux2_dev_00001_.png",
+   "note": "Trained on public-domain paintings (Hammershøi, 1864–1916).",
+   "author": "jejunepixels"
+  },
+  {
+   "id": "f2dev-tarot",
+   "name": "Tarot Card",
+   "models": [
+    "tpl-flux2-dev"
+   ],
+   "repo": "multimodalart/tarot-trtcrd-style",
+   "revision": "108aabce6e1a5497a8caace1367eed4b0ed100d7",
+   "files": [
+    {
+     "path": "tarot-trtcrd-style.safetensors",
+     "bytes": 390112224,
+     "sha256": "6bbf24d600fa873f88f6a6174abcdff95458ef662d04b4b3d27dc5a87abd7b85"
+    }
+   ],
+   "category": "looks",
+   "blurb": "An illustrated tarot card, with its border and title.",
+   "trigger": "trtcrd",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "See the model card · FLUX.2 dev is non-commercial",
+    "commercial": "no"
+   },
+   "downloads": 133,
+   "likes": 1,
+   "author": "multimodalart"
+  },
+  {
+   "id": "hdi1-rubberhose",
+   "name": "Rubber Hose Cartoon",
+   "models": [
+    "tpl-hidream-i1"
+   ],
+   "repo": "renderartist/rubberhose-ruckus-hidream",
+   "revision": "f36e5cdf7f63ca527bba94de0ddc5aa45851a236",
+   "files": [
+    {
+     "path": "Rubberhose_Ruckus_HiDream_v2_renderartist_2800.safetensors",
+     "bytes": 400077608,
+     "sha256": "dd83ef6c8767319b6a0253488fec9416b8bf213fe5084e066522fb05381cf647"
+    }
+   ],
+   "category": "looks",
+   "blurb": "1930s rubber-hose cartoon characters and mascots.",
+   "trigger": "rubb3rh0se, rubberhose cartoon",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 207,
+   "likes": 8,
+   "preview": "https://huggingface.co/renderartist/rubberhose-ruckus-hidream/resolve/f36e5cdf7f63ca527bba94de0ddc5aa45851a236/images/Rubberhose_00070_.png",
+   "author": "renderartist"
+  },
+  {
+   "id": "hdi1-coloring-book",
+   "name": "Coloring Book",
+   "models": [
+    "tpl-hidream-i1"
+   ],
+   "repo": "renderartist/coloringbookhidream",
+   "revision": "3f77858abd5b61772680285f7acb313612bd2a06",
+   "files": [
+    {
+     "path": "Coloring_Book_HiDream_v1_renderartist.safetensors",
+     "bytes": 400077608,
+     "sha256": "a254d887688bbde646d231d971432bb0d69fe90590c3c5a0b124ca513704d666"
+    }
+   ],
+   "category": "design",
+   "blurb": "Clean black-and-white line art, ready to colour in.",
+   "trigger": "c0l0ringb00k, coloring book",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 50,
+   "likes": 22,
+   "preview": "https://huggingface.co/renderartist/coloringbookhidream/resolve/3f77858abd5b61772680285f7acb313612bd2a06/images/Coloring_Book_00001_.png",
+   "author": "renderartist"
+  },
+  {
+   "id": "hdi1-simple-vector",
+   "name": "Simple Vector",
+   "models": [
+    "tpl-hidream-i1"
+   ],
+   "repo": "renderartist/simplevectorhidream",
+   "revision": "b9b608bb5997c52acd3d18066f93168ed85179bb",
+   "files": [
+    {
+     "path": "SImple_Vector_HiDream_v1_renderartist.safetensors",
+     "bytes": 400077608,
+     "sha256": "c595f1c7a04c128e0ddc21e6e809f9726d3283fe86dce0935586ed593d97c4e1"
+    }
+   ],
+   "category": "design",
+   "blurb": "Flat cartoon vector art with clean shapes.",
+   "trigger": "v3ct0r, cartoon vector art",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 31,
+   "likes": 9,
+   "preview": "https://huggingface.co/renderartist/simplevectorhidream/resolve/b9b608bb5997c52acd3d18066f93168ed85179bb/images/SimpleVector_00328_.png",
+   "author": "renderartist"
+  },
+  {
+   "id": "hdi1-floating-heads",
+   "name": "Floating 3D Heads",
+   "models": [
+    "tpl-hidream-i1"
+   ],
+   "repo": "renderartist/floating-heads-hidream",
+   "revision": "4b72e3259a06dd39b55aa03bd4c2b9dbfd5e2b13",
+   "files": [
+    {
+     "path": "Floating_Head_HiDream_v1_3000.safetensors",
+     "bytes": 400077608,
+     "sha256": "f1a5c96d9e522baf6b8be256a3c5318957351891a98ee5a33c4bf21c78b33ca3"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Stylised 3D character heads floating on plain backgrounds, like avatars.",
+   "trigger": "h3adfl0at, 3D floating head",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 19,
+   "likes": 7,
+   "preview": "https://huggingface.co/renderartist/floating-heads-hidream/resolve/4b72e3259a06dd39b55aa03bd4c2b9dbfd5e2b13/images/FloatingHead_00008_.jpeg",
+   "author": "renderartist"
+  },
+  {
+   "id": "hdi1-pixel-art",
+   "name": "Pixel Art",
+   "models": [
+    "tpl-hidream-i1"
+   ],
+   "repo": "tarn59/hidream-pixel-art-lora",
+   "revision": "5f9732283efb460a79b69e4328e4c3ea9c8dbff0",
+   "files": [
+    {
+     "path": "pixel_art_lora_000000400.safetensors",
+     "bytes": 480919056,
+     "sha256": "e4fcace6415f8ea0bbae964763e55ba5168d597b4c8a107b22edd47d420f4fab"
+    }
+   ],
+   "category": "looks",
+   "blurb": "Retro pixel art.",
+   "trigger": "Pixel Art style.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 20,
+   "likes": 0,
+   "author": "tarn59"
+  },
+  {
+   "id": "schnell-realism",
+   "name": "Realism",
+   "models": [
+    "tpl-flux1-schnell"
+   ],
+   "repo": "hugovntr/flux-schnell-realism",
+   "revision": "fb99620514eddae1a351a387e0a63c9d77217d37",
+   "files": [
+    {
+     "path": "schnell-realism_v2.3.safetensors",
+     "bytes": 38764976,
+     "sha256": "030ae77a4b4055d3739a84c1facba8c39eb67c5f16d61d2529510a9e61c311de"
+    }
+   ],
+   "category": "detail",
+   "blurb": "More photographic pictures from the fast FLUX model.",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 357,
+   "likes": 24,
+   "note": "Version 2.3.",
+   "author": "hugovntr"
+  },
+  {
+   "id": "schnell-simple-vector",
+   "name": "Simple Vector",
+   "models": [
+    "tpl-flux1-schnell"
+   ],
+   "repo": "furaidosu/flux-lora-simple-vector",
+   "revision": "201c6ef21bdb7a2b2afa7134e72e1edacdaf9a23",
+   "files": [
+    {
+     "path": "simplevector.safetensors",
+     "bytes": 153322400,
+     "sha256": "caccd9e1603c2fe5db355c9c5554dbc40de90e24f4087b3ad7a7b8f6c6b33fdf"
+    }
+   ],
+   "category": "design",
+   "blurb": "Flat vector illustrations with simple shapes.",
+   "trigger": "v3ct0r, vector",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "Apache-2.0",
+    "commercial": "yes"
+   },
+   "downloads": 383,
+   "likes": 15,
+   "preview": "https://huggingface.co/furaidosu/flux-lora-simple-vector/resolve/201c6ef21bdb7a2b2afa7134e72e1edacdaf9a23/images/example_3sni63iot.png",
+   "author": "furaidosu"
+  },
+  {
+   "id": "schnell-face-realism",
+   "name": "Face Realism",
+   "models": [
+    "tpl-flux1-schnell"
+   ],
+   "repo": "prithivMLmods/Canopus-LoRA-Flux-FaceRealism",
+   "revision": "4eda8ba56ceaac22dee09ceb07aa5cb224d0f379",
+   "files": [
+    {
+     "path": "Canopus-LoRA-Flux-FaceRealism.safetensors",
+     "bytes": 612746040,
+     "sha256": "14435462ee04a831e7851b3de1a51eddb6e4783d173028b7329c2582285366be"
+    }
+   ],
+   "category": "detail",
+   "blurb": "More natural, detailed faces.",
+   "trigger": "face realism",
+   "strength": 1,
+   "range": [
+    0,
+    1.5
+   ],
+   "licence": {
+    "name": "CreativeML OpenRAIL-M",
+    "commercial": "yes"
+   },
+   "downloads": 875,
+   "likes": 79,
+   "preview": "https://huggingface.co/prithivMLmods/Canopus-LoRA-Flux-FaceRealism/resolve/4eda8ba56ceaac22dee09ceb07aa5cb224d0f379/images/11.png",
+   "author": "prithivMLmods"
+  }
+ ],
+ "bases": {
+  "tpl-flux1-dev": [
+   "black-forest-labs/FLUX.1-dev",
+   "black-forest-labs/FLUX.1-Kontext-dev"
+  ],
+  "tpl-flux1-krea": [
+   "black-forest-labs/FLUX.1-Krea-dev",
+   "black-forest-labs/FLUX.1-dev"
+  ],
+  "tpl-sdxl": [
+   "stabilityai/stable-diffusion-xl-base-1.0"
+  ],
+  "flux3-klein": [
+   "black-forest-labs/flux-3-image-klein",
+   "black-forest-labs/flux-3-image-klein-base"
+  ],
+  "flux2-klein-4b": [
+   "black-forest-labs/FLUX.2-klein-4B",
+   "black-forest-labs/FLUX.2-klein-base-4B"
+  ],
+  "tpl-flux2-klein-9b": [
+   "black-forest-labs/FLUX.2-klein-base-9B",
+   "black-forest-labs/FLUX.2-klein-9B"
+  ],
+  "tpl-flux2-klein-9b-edit": [
+   "black-forest-labs/FLUX.2-klein-9B",
+   "black-forest-labs/FLUX.2-klein-base-9B",
+   "black-forest-labs/FLUX.2-klein-9b-kv"
+  ],
+  "tpl-flux2-dev": [
+   "black-forest-labs/FLUX.2-dev"
+  ],
+  "tpl-flux1-schnell": [
+   "black-forest-labs/FLUX.1-schnell"
+  ],
+  "tpl-chroma": [
+   "lodestones/Chroma1-HD",
+   "lodestones/Chroma",
+   "lodestones/Chroma1-Base"
+  ],
+  "tpl-krea-2": [
+   "krea/Krea-2-Turbo",
+   "krea/Krea-2-Raw"
+  ],
+  "tpl-ideogram-4": [
+   "ideogram-ai/ideogram-4-fp8"
+  ],
+  "tpl-moss-image": [
+   "OpenMOSS-Team/MOSS-Image-SFT",
+   "OpenMOSS-Team/MOSS-Image-Base"
+  ],
+  "tpl-hidream-i1": [
+   "HiDream-ai/HiDream-I1-Full",
+   "HiDream-ai/HiDream-I1-Dev"
+  ],
+  "tpl-hidream-o1": [
+   "HiDream-ai/HiDream-O1-Image",
+   "HiDream-ai/HiDream-O1-Image-Dev"
+  ],
+  "tpl-hidream-e1": [
+   "HiDream-ai/HiDream-E1-Full",
+   "HiDream-ai/HiDream-E1-1"
+  ],
+  "tpl-kandinsky-5": [
+   "kandinskylab/Kandinsky-5.0-T2I-Lite"
+  ],
+  "tpl-pixeldit": [
+   "nvidia/PixelDiT-1300M-1024px"
+  ],
+  "tpl-qwen-image": [
+   "Qwen/Qwen-Image"
+  ],
+  "tpl-qwen-image-2512": [
+   "Qwen/Qwen-Image-2512",
+   "Qwen/Qwen-Image"
+  ],
+  "tpl-qwen-image-edit-2511": [
+   "Qwen/Qwen-Image-Edit-2511",
+   "Qwen/Qwen-Image-Edit-2509"
+  ],
+  "tpl-qwen-image-edit": [
+   "Qwen/Qwen-Image-Edit"
+  ],
+  "tpl-qwen-image-2.1": [
+   "Qwen/Qwen-Image-2.1",
+   "Qwen/Qwen-Image-2.1-Turbo"
+  ],
+  "z-image-turbo": [
+   "Tongyi-MAI/Z-Image-Turbo",
+   "Tongyi-MAI/Z-Image"
+  ],
+  "tpl-z-image": [
+   "Tongyi-MAI/Z-Image",
+   "Tongyi-MAI/Z-Image-Turbo"
+  ],
+  "tpl-netayume": [
+   "duongve/NetaYume-Lumina-Image-2.0",
+   "neta-art/Neta-Lumina",
+   "Alpha-VLLM/Lumina-Image-2.0"
+  ],
+  "tpl-omnigen2": [
+   "OmniGen2/OmniGen2"
+  ],
+  "tpl-ernie-image": [
+   "baidu/ERNIE-Image-Turbo",
+   "baidu/ERNIE-Image"
+  ],
+  "tpl-longcat-image": [
+   "meituan-longcat/LongCat-Image",
+   "meituan-longcat/LongCat-Image-Dev"
+  ],
+  "tpl-longcat-image-edit": [
+   "meituan-longcat/LongCat-Image-Edit",
+   "meituan-longcat/LongCat-Image-Edit-Turbo"
+  ],
+  "tpl-boogu": [
+   "Boogu/Boogu-Image-0.1-Turbo",
+   "Boogu/Boogu-Image-0.1-Base",
+   "Comfy-Org/Boogu-Image"
+  ],
+  "tpl-boogu-edit": [
+   "Boogu/Boogu-Image-0.1-Edit",
+   "Boogu/Boogu-Image-0.1-Edit-Turbo"
+  ],
+  "tpl-mage-flow": [
+   "microsoft/Mage-Flow"
+  ],
+  "tpl-mage-flow-edit": [
+   "microsoft/Mage-Flow-Edit",
+   "microsoft/Mage-Flow-Edit-Turbo"
+  ],
+  "tpl-lens": [
+   "microsoft/Lens"
+  ],
+  "tpl-ming-image": [
+   "inclusionAI/Ming-Image-0.1-Design"
+  ],
+  "tpl-joyai-edit": [
+   "jdopensource/JoyAI-Image-Edit",
+   "jdopensource/JoyAI-Image-Edit-Diffusers"
+  ],
+  "tpl-firered-edit": [
+   "FireRedTeam/FireRed-Image-Edit-1.1",
+   "FireRedTeam/FireRed-Image-Edit-1.0"
+  ],
+  "tpl-capybara": [
+   "Glanty/Capybara"
+  ],
+  "tpl-newbie": [
+   "NewBie-AI/NewBie-image-Exp0.1"
+  ],
+  "tpl-anima": [
+   "circlestone-labs/Anima"
+  ],
+  "tpl-wan2.2-14b-video": [
+   "Wan-AI/Wan2.2-I2V-A14B",
+   "Wan-AI/Wan2.2-T2V-A14B"
+  ],
+  "ltx-2.5": [
+   "Lightricks/LTX-2.5",
+   "Lightricks/LTX-2.3"
+  ],
+  "tpl-ltx-2.3-video": [
+   "Lightricks/LTX-2.3"
+  ],
+  "tpl-ltx-2-video": [
+   "Lightricks/LTX-2"
+  ],
+  "wan2.2-5b": [
+   "Wan-AI/Wan2.2-TI2V-5B",
+   "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
+  ],
+  "tpl-wan-vace-video": [
+   "Wan-AI/Wan2.1-T2V-14B",
+   "Wan-AI/Wan2.1-VACE-14B"
+  ],
+  "tpl-hunyuanvideo-1.5-video": [
+   "tencent/HunyuanVideo-1.5"
+  ],
+  "tpl-kandinsky-5-video": [
+   "kandinskylab/Kandinsky-5.0-T2V-Lite-sft-5s",
+   "kandinskylab/Kandinsky-5.0-I2V-Lite-5s"
+  ],
+  "tpl-causal-forcing-video": [
+   "zhuhz22/Causal-Forcing"
+  ],
+  "tpl-capybara-video": [],
+  "tpl-minimax-h3-video": [
+   "MiniMaxAI/MiniMax-H3"
+  ],
+  "tpl-chronoedit": [
+   "nvidia/ChronoEdit-14B-Diffusers"
+  ],
+  "tpl-bernini-r": [
+   "ByteDance/Bernini-R"
+  ],
+  "scail-2": [],
+  "ltx-2.5-ripple": []
+ }
+}

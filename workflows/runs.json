@@ -1,0 +1,63 @@
+[
+  {
+    "id": "2S2lIR2puy-7QI",
+    "name": "image-flux3-klein",
+    "label": "FLUX 3 Klein, Draft"
+  },
+  {
+    "id": "8rYjaRAZqEyYr4",
+    "name": "image-qwen-image-2.1",
+    "label": "Qwen-Image 2.1 Turbo, Draft"
+  },
+  {
+    "id": "0FBdMMUOWlyL6-",
+    "name": "video-ltx-2.5-t2v",
+    "label": "LTX-2.5, words to clip (2 s, 720p, distilled + 2× latent upscale)"
+  },
+  {
+    "id": "AlCcLQGWNNn9sc",
+    "name": "video-ltx-2.5-i2v",
+    "label": "LTX-2.5, picture to clip (2 s, 720p)"
+  },
+  {
+    "id": "ruTQ9ROTy02lxK",
+    "name": "swap-ltx-2.5-inpaint",
+    "labels": [
+      "SAM 3.1 finds and tracks who's swapped, forward and back",
+      "FLUX 3 Klein redraws the frame with the new person (try 1)",
+      "FLUX 3 Klein redraws the frame (try 2)",
+      "FLUX 3 Klein redraws the frame (try 3)",
+      "LTX-2.5 + Lightricks' in/outpainting IC-LoRA carry the redraw through the clip inside SAM's outline"
+    ]
+  },
+  {
+    "id": "Tex8KBNm1qUAys",
+    "name": "director-flux3-klein",
+    "label": "FLUX 3 Klein shoots the blocked scene (two cast members)"
+  },
+  {
+    "id": "UAkMUEk-E8MY98",
+    "name": "angles-flux3-klein",
+    "label": "FLUX 3 Klein re-shoots from 30° right, 15° high"
+  },
+  {
+    "id": "QhizJZoQqJfbky",
+    "name": "relight-flux3-klein",
+    "label": "FLUX 3 Klein relights (warm key, upper right)"
+  },
+  {
+    "id": "d7XiOTUiRpTkMG",
+    "name": "retouch-flux3-klein",
+    "label": "FLUX 3 Klein changes one marked part"
+  },
+  {
+    "id": "fRjz71EX735Rjk",
+    "name": "upscale-nomos2-hq",
+    "label": "Nomos2 HQ, 2×"
+  },
+  {
+    "id": "GR-s1aJOtYBQCd",
+    "name": "upscale-real-esrgan-x4",
+    "label": "Real-ESRGAN, 4×"
+  }
+]

@@ -1,0 +1,121 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux3-image-klein-int8-convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_4b_int8_convrot.safetensors",
+      "type": "flux3",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "Re-shoot this exact photo from a new camera position. Only the camera moves; nothing in the scene changes.\n\nThe camera orbits 30° to the right around the main subject, rises and looks down at the subject from about 15° above (a high angle) with the lens about 3 m above the ground and keeps the same distance. Everything that faced the original camera is now seen in a three-quarter view, turned toward the left edge of the frame, and the sides of things that faced the right edge of the original picture now face the camera. The background shifts with real parallax: it slides to the right, so scenery from the left side of the original picture moves in behind the subject. We see more of the tops of things and more of the ground, and the horizon sits higher in the frame or leaves it. Fill newly revealed areas consistently with the scene.\n\nKeep the same people with the same identity, faces, hair, pose, expression and clothing, and the same objects, materials, colors and place. Lights stay fixed in the scene, so light and shadows fall at a new angle relative to the camera; don't relight. Same lens look and photo quality.\n\nThe viewpoint change must be unmistakable: never return the original angle, never mirror or flip the picture, and never turn the people instead of moving the camera. No text, borders or watermarks.",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "crackio/start-mvu09gp6-ufvb.png"
+    }
+  },
+  "6": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "4",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "ReferenceMultiLatent",
+    "inputs": {
+      "resolution": "resize",
+      "resolution.megapixels": 0.35,
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "6",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "images.image0": [
+        "5",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 188812816533375,
+      "steps": 16,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "7",
+        0
+      ],
+      "negative": [
+        "7",
+        1
+      ],
+      "latent_image": [
+        "7",
+        2
+      ]
+    }
+  },
+  "9": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "8",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "9",
+        0
+      ],
+      "filename_prefix": "crackio/flux3-klein"
+    }
+  }
+}
