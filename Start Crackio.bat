@@ -3,6 +3,8 @@ setlocal
 title Crackio
 cd /d "%~dp0"
 if "%CRACKIO_PORT%"=="" set "CRACKIO_PORT=3211"
+rem Only this computer can open Crackio. Set CRACKIO_HOST=0.0.0.0 to open it to your network (it has no login).
+if "%CRACKIO_HOST%"=="" set "CRACKIO_HOST=127.0.0.1"
 set "COREPACK_ENABLE_DOWNLOAD_PROMPT=0"
 
 echo.
@@ -41,7 +43,7 @@ echo   Starting Crackio at http://localhost:%CRACKIO_PORT%
 echo   Your browser opens by itself. Keep this window open while you use Crackio: closing it stops Crackio.
 echo.
 start "" /b node scripts\launch\open-when-ready.mjs http://localhost:%CRACKIO_PORT%
-call %PNPM% start -p %CRACKIO_PORT%
+call %PNPM% start -p %CRACKIO_PORT% -H %CRACKIO_HOST%
 echo.
 echo   Crackio stopped.
 pause

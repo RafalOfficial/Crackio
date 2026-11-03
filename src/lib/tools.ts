@@ -10,6 +10,8 @@ import {
   Sun,
   Users,
   Video,
+  AudioLines,
+  Speech,
 } from "lucide-react";
 
 export type ToolSlug =
@@ -22,7 +24,9 @@ export type ToolSlug =
   | "motion"
   | "recast"
   | "upscale"
-  | "storyboard";
+  | "storyboard"
+  | "voice"
+  | "lipsync";
 
 export type Tool = {
   slug: ToolSlug;
@@ -38,7 +42,7 @@ export type Tool = {
   /** White glyph image for the tool's app icon: public/icons/<slug>.png (scripts/assets/icons.mjs). */
   glyph: string;
   media: string;
-  output: "image" | "video" | "character";
+  output: "image" | "video" | "character" | "audio";
   badge?: "Core" | "New" | "Video" | "Beta";
   href: string;
 };
@@ -168,6 +172,32 @@ export const TOOLS: Tool[] = ([
     output: "image",
     badge: "New",
     href: "/tools/storyboard",
+  },
+  {
+    slug: "voice",
+    name: "Voice",
+    summary: "Type a line, pick who says it: speech on your own GPU, in your voice or one you describe.",
+    description:
+      "Write what should be said, with a laugh, a sigh or a whisper where you want them, and pick a voice: one of Crackio's, yours from a short recording, or a new one described in words. Fish Audio Drama 3 acts it out on your own GPU, in about 80 languages.",
+    hue: "var(--color-tool-voice)",
+    icon: AudioLines,
+    media: "/assets/tool-voice.webp",
+    output: "audio",
+    badge: "New",
+    href: "/tools/voice",
+  },
+  {
+    slug: "lipsync",
+    name: "Lip Sync",
+    summary: "Change what someone in a clip says: new words in their own voice, and only the mouth redrawn to say them.",
+    description:
+      "Drop a clip of someone talking and edit their words like text. The new words are said in their own voice (or one of yours), and LatentSync 1.6 redraws only the mouth, only where the words changed: every other frame, pixel and sound stays the clip's own.",
+    hue: "var(--color-tool-lipsync)",
+    icon: Speech,
+    media: "/assets/tool-lipsync.webp",
+    output: "video",
+    badge: "New",
+    href: "/tools/lipsync",
   },
 ] satisfies Omit<Tool, "glyph">[]).map((t) => ({ ...t, glyph: `/icons/${t.slug}.png` }));
 

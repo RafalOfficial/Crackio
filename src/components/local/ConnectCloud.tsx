@@ -8,7 +8,19 @@ import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/cn";
 
 type Step = { label: string; state: "doing" | "done" | "failed" | "skipped"; detail?: string };
-type Job = { id: string; state: "running" | "done" | "error"; steps: Step[]; error?: string; todo?: string; machine?: string; label?: string };
+type Job = {
+  id: string;
+  state: "running" | "done" | "error";
+  steps: Step[];
+  error?: string;
+  todo?: string;
+  /** Worth knowing once it's in (a small disk). */
+  note?: string;
+  machine?: string;
+  label?: string;
+  /** When it started (ms). */
+  at?: number;
+};
 type Box = {
   provider: "vast" | "runpod";
   id: string;
@@ -41,6 +53,15 @@ type Info = {
 const CLOUD_NAME = { vast: "vast.ai", runpod: "RunPod" } as const;
 /** How often the accounts are looked at while this is on screen: a box you rent shows up, and connects, by itself. */
 const LOOK_MS = 20_000;
+/** How often a box connecting shows its step. */
+const STEP_MS = 2500;
+
+/** "40 s", "3 min": how long a connect has run. */
+function since(at: number | undefined, now: number) {
+  if (!at) return "";
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  return s < 60 ? `${s} s` : `${Math.round(s / 60)} min`;
+}
 
 /**
  * A rented GPU in one step: paste its SSH command or ComfyUI link, or let your cloud account bring it (it shows up and
@@ -55,6 +76,9 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
   const [loadingBoxes, setLoadingBoxes] = useState(false);
   const [copied, setCopied] = useState(false);
   const poll = useRef<number | null>(null);
+  // Each box connecting, by its job: the row shows the step it's on and how long it has run.
+  const [rowJobs, setRowJobs] = useState<Record<string, Job>>({});
+  const [now, setNow] = useState(() => Date.now());
 
   const fetchInfo = useCallback(
     () =>
@@ -84,6 +108,39 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
     const id = window.setInterval(() => document.visibilityState === "visible" && void fetchInfo(), LOOK_MS);
     return () => window.clearInterval(id);
   }, [watching, fetchInfo]);
+
+  // The step each connecting box is on, looked at every few seconds (the jobs live in Crackio's memory: cheap); one that
+  // ends brings the list up to date at once.
+  const connectingIds = (info?.boxes ?? []).flatMap((b) => (b.connecting ? [b.connecting] : [])).join(",");
+  useEffect(() => {
+    if (!connectingIds) return;
+    const ids = connectingIds.split(",");
+    let gone = false;
+    const look = async () => {
+      if (document.visibilityState !== "visible") return;
+      const got = await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/local/cloud?job=${id}`, { cache: "no-store" })
+            .then((r) => (r.ok ? (r.json() as Promise<Job>) : null))
+            .catch(() => null),
+        ),
+      );
+      if (gone) return;
+      setNow(Date.now());
+      setRowJobs((prev) => {
+        const next = { ...prev };
+        for (const j of got) if (j) next[j.id] = j;
+        return next;
+      });
+      if (got.some((j) => j && j.state !== "running")) void fetchInfo();
+    };
+    void look();
+    const id = window.setInterval(() => void look(), STEP_MS);
+    return () => {
+      gone = true;
+      window.clearInterval(id);
+    };
+  }, [connectingIds, fetchInfo]);
 
   // A box connecting by itself shows its steps here, unless another connect is shown.
   const autoJob = info?.boxes.find((b) => b.connecting)?.connecting;
@@ -149,9 +206,10 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
           </p>
           <h2 className="mt-1 font-display text-[22px] uppercase leading-tight">Connect a rented GPU</h2>
           <p className="mt-1 max-w-[86ch] text-[13px] leading-relaxed text-fog">
-            Rent a GPU on vast.ai, RunPod or any cloud with its ComfyUI template, then paste its SSH command (or its ComfyUI link) here, or add your vast.ai or RunPod key in
-            Connections and it shows up by itself. Crackio finds the address, adds its bridge and restarts ComfyUI, usually within a minute. Models then install on it from this
-            page with your Hugging Face token, and every tool can run on it.
+            Rent a GPU on vast.ai, RunPod or any cloud, on any template (ComfyUI, PyTorch, CUDA or plain Ubuntu), then paste its SSH command (or its ComfyUI link) here, or add
+            your vast.ai or RunPod key under Settings → Accounts and it shows up by itself. Crackio logs in and adds its bridge: about a minute on a ComfyUI template; on any
+            other it installs ComfyUI and PyTorch for the card first, 5 to 10 minutes. Then set tools up on it under Settings → Tools. Rent 70 GB of disk or more: ComfyUI
+            takes 7, and video models 20 to 40 each.
           </p>
         </div>
       </div>
@@ -175,7 +233,19 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
                       · {CLOUD_NAME[b.provider]} · {b.label} · {b.state}
                       {typeof b.price === "number" ? ` · $${b.price.toFixed(2)}/h` : ""}
                     </span>
-                    {!b.ready && b.detail ? <span className="mt-0.5 block truncate text-[12px] text-haze">{b.detail}</span> : null}
+                    {b.connecting && rowJobs[b.connecting]
+                      ? (() => {
+                          const cur = rowJobs[b.connecting].steps.findLast((x) => x.state === "doing") ?? rowJobs[b.connecting].steps.at(-1);
+                          return cur ? (
+                            <span className="mt-0.5 block truncate text-[12px] text-fog" title={cur.detail ? `${cur.label} · ${cur.detail}` : cur.label}>
+                              {cur.label}
+                              {cur.detail ? <span className="text-haze"> · {cur.detail}</span> : null}
+                            </span>
+                          ) : null;
+                        })()
+                      : !b.ready && b.detail
+                        ? <span className="mt-0.5 block truncate text-[12px] text-haze">{b.detail}</span>
+                        : null}
                     {b.problem ? <span className="mt-0.5 block text-[12px] text-tally">Didn&rsquo;t connect: {b.problem}</span> : null}
                   </span>
                   {b.connected ? (
@@ -188,7 +258,8 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
                       className="press inline-flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[12.5px] font-semibold text-fog hover:text-paper"
                       title="Show its steps"
                     >
-                      <LoaderCircle size={13} className="animate-spin text-spike" /> Connecting…
+                      <LoaderCircle size={13} className="animate-spin text-spike" /> Setting up
+                      {rowJobs[b.connecting]?.at ? <span className="tabular text-haze">· {since(rowJobs[b.connecting].at, now)}</span> : "…"}
                     </button>
                   ) : (
                     <button
@@ -253,8 +324,8 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
           {!accounts.length ? (
             <p className="text-[12.5px] text-haze">
               Or add your vast.ai or RunPod key in{" "}
-              <Link href="/settings/connections" className="font-semibold text-fog underline-offset-2 hover:underline">
-                Connections
+              <Link href="/settings/accounts#rent" className="font-semibold text-fog underline-offset-2 hover:underline">
+                Accounts
               </Link>{" "}
               to pick your GPUs here.
             </p>
@@ -291,7 +362,15 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
           ))}
           {job.todo ? <li className="mt-1 text-[12.5px] font-semibold text-tungsten">{job.todo}</li> : null}
           {job.state === "error" ? <li className="mt-1 text-[12.5px] text-tally">{job.error}</li> : null}
-          {job.state === "done" ? <li className="mt-1 text-[12.5px] font-semibold text-chroma">{job.label} is ready: pick it above to install models on it.</li> : null}
+          {job.state === "done" ? (
+            <li className="mt-1 text-[12.5px] font-semibold text-chroma">
+              {job.label} is in.{" "}
+              <Link href={`/settings/tools${job.machine ? `?machine=${encodeURIComponent(job.machine)}` : ""}`} className="underline-offset-2 hover:underline">
+                Set its tools up
+              </Link>
+            </li>
+          ) : null}
+          {job.note ? <li className="mt-1 text-[12.5px] text-tungsten">{job.note}</li> : null}
         </ol>
       ) : null}
 

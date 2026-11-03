@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { urlToPath } from "@/lib/server/media";
-import { cutout, estimateDepth, subjectMask, visionStatus } from "@/lib/server/vision";
+import { cutout, estimateDepth, estimateGeometry, subjectMask, visionStatus } from "@/lib/server/vision";
 import { readSubject } from "@/lib/server/director";
 import { demoMediaDenied, demoOwnCopy } from "@/lib/demo/media";
 import { demoOwner } from "@/lib/demo/owner";
@@ -12,8 +12,9 @@ export async function GET() {
 }
 
 /**
- * `{ task: "depth" | "cutout" | "mask" | "read", url }` for an image Crackio stores (an upload, a result or a bundled
- * asset). "read" asks a vision model what a cast picture shows (null without one).
+ * `{ task: "depth" | "geometry" | "cutout" | "mask" | "read", url }` for an image Crackio stores (an upload, a result or
+ * a bundled asset). "geometry" is depth in meters with the lens (Angles); "read" asks a vision model what a cast picture
+ * shows (null without one).
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { task?: string; url?: string } | null;
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
   if (media && (await demoMediaDenied(request, media.split("/")))) return Response.json({ error: "Send the URL of an image Crackio stores." }, { status: 404 });
   try {
     if (body!.task === "depth") return Response.json(await estimateDepth(file));
+    if (body!.task === "geometry") return Response.json(await estimateGeometry(file));
     if (body!.task === "cutout") {
       const cut = await cutout(file, body!.url!);
       // On the live demo, the code that asked gets a copy of its own (a cut-out's name is shared by its photo).

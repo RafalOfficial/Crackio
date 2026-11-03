@@ -59,10 +59,53 @@ async function post<T>(body: unknown): Promise<T> {
   return data;
 }
 
-function thingsOf(image: string) {
+/** The things in a picture as the server finds them (one JSON line each time there's another), and then all of them. */
+async function streamed(image: string, onSome: (things: Thing[]) => void): Promise<ThingsAnswer> {
+  const res = await fetch("/api/detect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image, stream: true }) });
+  if (!res.ok || !res.body) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? "Couldn't look at the picture.");
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let last: ThingsAnswer = { things: [] };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let cut: number;
+    while ((cut = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, cut).trim();
+      buffer = buffer.slice(cut + 1);
+      if (!line) continue;
+      const answer = JSON.parse(line) as ThingsAnswer & { done?: boolean };
+      last = { things: answer.things ?? [], error: answer.error };
+      if (!answer.done) onSome(last.things);
+    }
+  }
+  return last;
+}
+
+// While a picture is being looked at, the things found so far: a second look at it (a remount) starts from them.
+const partial = new Map<string, { things: Thing[]; listeners: Set<(things: Thing[]) => void> }>();
+
+function thingsOf(image: string, onSome?: (things: Thing[]) => void) {
   let p = thingsCache.get(image);
+  const live = partial.get(image);
+  if (live && onSome) {
+    live.listeners.add(onSome);
+    if (live.things.length) onSome(live.things);
+  }
   if (!p) {
-    p = post<ThingsAnswer>({ image }).catch((err: Error) => ({ things: [], error: err.message }));
+    const watch = { things: [] as Thing[], listeners: new Set(onSome ? [onSome] : []) };
+    partial.set(image, watch);
+    p = streamed(image, (things) => {
+      watch.things = things;
+      for (const l of watch.listeners) l(things);
+    })
+      .catch((err: Error) => ({ things: [], error: err.message }))
+      .finally(() => partial.delete(image));
     thingsCache.set(image, p);
     // A failed look is tried again next time.
     void p.then((a) => a.error && !a.things.length && thingsCache.delete(image));
@@ -133,12 +176,21 @@ export function useThings(image: string | null, eager = EAGER) {
     current.current = image;
     if (!image) return;
     let alive = true;
+    // Things found so far keep what was already asked of them (their parts) when the list grows; the first ones can be
+    // clicked while the rest are still being found.
+    const grown = (s: { things: Found[] }, list: Thing[]): Found[] =>
+      list.map((t) => {
+        const had = s.things.find((x) => x.id === t.id);
+        return had ? { ...had, ...t, parts: had.parts, partsState: had.partsState } : { ...t, parts: null, partsState: "idle" };
+      });
     void Promise.resolve().then(() => alive && setState({ image, status: "loading", things: [] }));
-    void thingsOf(image).then((a) => {
+    void thingsOf(image, (some) => alive && setState((s) => ({ image, status: "loading", things: grown(s.image === image ? s : { things: [] }, some) }))).then((a) => {
       if (!alive) return;
-      const things: Found[] = a.things.map((t) => ({ ...t, parts: null, partsState: "idle" }));
-      setState({ image, status: a.error && !things.length ? "error" : "ready", things, error: a.error });
-      for (const t of things.slice(0, eager)) load(image, t, false);
+      setState((s) => {
+        const things = grown(s.image === image ? s : { things: [] }, a.things);
+        return { image, status: a.error && !things.length ? "error" : "ready", things, error: a.error };
+      });
+      for (const t of a.things.slice(0, eager)) load(image, t, false);
     });
     return () => {
       alive = false;

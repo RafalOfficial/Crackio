@@ -10,17 +10,19 @@ import type { InferenceSession, Tensor } from "onnxruntime-node";
 import { DATA_DIR, UPLOADS_DIR } from "./paths";
 
 /**
- * Director's eyes: two small open models that run on this computer.
+ * Director's eyes: small open models that run on this computer.
  *  - depth: Depth Anything V2 Small (Apache-2.0) turns a photo into a depth map, so a location
  *    photo becomes a 3D set the camera can move through.
  *  - cutout: BiRefNet lite at 512px (MIT) lifts a person or object off its background.
+ *  - geometry: Microsoft's MoGe-2 ViT-S (MIT) measures the photo's 3D shape in meters and the lens
+ *    it was taken with, for Angles' camera moves (see `estimateGeometry`).
  * Weights are downloaded once into data/models (or CRACKIO_MODELS_DIR), pinned to a revision
  * and checked against their SHA-256. On Windows they run on the GPU through DirectML.
  */
 const MODELS_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.CRACKIO_MODELS_DIR || path.join(DATA_DIR, "models"));
 const CACHE_DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "vision");
 
-export type VisionModelId = "depth" | "cutout";
+export type VisionModelId = "depth" | "cutout" | "geometry";
 
 const MODELS: Record<VisionModelId, { file: string; url: string; sha256: string; bytes: number }> = {
   depth: {
@@ -34,6 +36,12 @@ const MODELS: Record<VisionModelId, { file: string; url: string; sha256: string;
     url: "https://huggingface.co/studioludens/birefnet-lite-512/resolve/962e67969ec6acec9c19fab76acee4f5e22e990c/onnx/model.onnx",
     sha256: "1cb0fb360dadd15af77c639085d77a9df67db0c64315560c3de005f676345ac2",
     bytes: 191_877_254,
+  },
+  geometry: {
+    file: "moge-2-vits-normal.onnx",
+    url: "https://huggingface.co/Ruicheng/moge-2-vits-normal-onnx/resolve/e50ffda41565591092adea54c6ac83d6212e1e23/model.onnx",
+    sha256: "24eacb5dc7a2c54c7bc98f7de085ffbed79ad006ea5b664c2c2cdc02ff3a52f0",
+    bytes: 140_852_051,
   },
 };
 /** Bump to invalidate cached results when pre/post-processing changes. */
@@ -52,12 +60,25 @@ const state: VisionState = (g.__crackioVision ??= {
   status: {
     depth: { state: "missing", received: 0, total: MODELS.depth.bytes },
     cutout: { state: "missing", received: 0, total: MODELS.cutout.bytes },
+    geometry: { state: "missing", received: 0, total: MODELS.geometry.bytes },
   },
   sessions: {},
 });
+// A server started before the geometry model existed keeps its state across hot reloads.
+state.status.geometry ??= { state: "missing", received: 0, total: MODELS.geometry.bytes };
 
 export function visionStatus() {
   return state.status;
+}
+
+/**
+ * Which of these small models are on disk already, and how big each is (Settings → Tools: they download by themselves on
+ * first use). `visionStatus()` tracks what's loaded, which starts at "missing" after every server start, files or not.
+ */
+export async function visionOnDisk(): Promise<Record<VisionModelId, { present: boolean; bytes: number }>> {
+  const ids = Object.keys(MODELS) as VisionModelId[];
+  const present = await Promise.all(ids.map((id) => exists(path.join(/*turbopackIgnore: true*/ MODELS_DIR, MODELS[id].file))));
+  return Object.fromEntries(ids.map((id, i) => [id, { present: present[i], bytes: MODELS[id].bytes }])) as Record<VisionModelId, { present: boolean; bytes: number }>;
 }
 
 async function exists(file: string) {
@@ -144,13 +165,19 @@ function session(id: VisionModelId) {
   return (state.sessions[id] ??= load(id));
 }
 
-/** One inference at a time per model (DirectML requires it, and it keeps memory flat). */
-async function infer(id: VisionModelId, feeds: (s: InferenceSession) => Record<string, Tensor>) {
+/** One inference at a time per model (DirectML requires it, and it keeps memory flat). Every output, by name. */
+async function inferAll(id: VisionModelId, feeds: (s: InferenceSession) => Record<string, Tensor>) {
   const loaded = await session(id);
   const run = loaded.queue.then(() => loaded.session.run(feeds(loaded.session)));
   loaded.queue = run.catch(() => undefined);
-  const out = await run;
-  return out[loaded.session.outputNames[0]] as Tensor;
+  return (await run) as Record<string, Tensor>;
+}
+
+/** The model's first output. */
+async function infer(id: VisionModelId, feeds: (s: InferenceSession) => Record<string, Tensor>) {
+  const loaded = await session(id);
+  const out = await inferAll(id, feeds);
+  return out[loaded.session.outputNames[0]];
 }
 
 const MEAN = [0.485, 0.456, 0.406];
@@ -219,6 +246,175 @@ export async function estimateDepth(file: string): Promise<DepthResult> {
 
 function decodeDepth(buf: Buffer): DepthResult {
   return { width: buf.readUInt32LE(0), height: buf.readUInt32LE(4), data: buf.subarray(8).toString("base64") };
+}
+
+export type GeometryResult = DepthResult & {
+  /** Vertical field of view of the lens that took the photo, in degrees (measured, not guessed). */
+  fov: number;
+  /** Distances along the view axis in meters: `data` is disparity between them, so 1 = `near` and 0 = `far`. */
+  near: number;
+  far: number;
+  /** Share of the picture that is sky, or too far or too plain to measure: it sits at `far`. */
+  sky: number;
+};
+
+/**
+ * MoGe's focal length and depth shift (its points are only known up to a shift along the view axis): the shift whose
+ * points, divided by depth, line up best with their pixels, and the focal that lines them up (a least-squares fit, as
+ * MoGe's own `recover_focal_shift`), on a 64×64 sample of the measured pixels. `uv` are view-plane coordinates whose
+ * corners sit at ±(width, height) / diagonal; the focal comes back relative to half the diagonal.
+ */
+function focalShift(points: Float32Array, valid: Uint8Array, width: number, height: number) {
+  const aspect = width / height;
+  const diag = Math.hypot(aspect, 1);
+  const spanX = ((aspect / diag) * (width - 1)) / width;
+  const spanY = ((1 / diag) * (height - 1)) / height;
+  const u: number[] = [], v: number[] = [], x: number[] = [], y: number[] = [], z: number[] = [];
+  for (let j = 0; j < 64; j++) {
+    for (let i = 0; i < 64; i++) {
+      const px = Math.min(width - 1, Math.floor((i * width) / 64));
+      const py = Math.min(height - 1, Math.floor((j * height) / 64));
+      const k = py * width + px;
+      if (!valid[k]) continue;
+      u.push(-spanX + (2 * spanX * px) / Math.max(1, width - 1));
+      v.push(-spanY + (2 * spanY * py) / Math.max(1, height - 1));
+      x.push(points[k * 3]);
+      y.push(points[k * 3 + 1]);
+      z.push(points[k * 3 + 2]);
+    }
+  }
+  if (z.length < 16) return null;
+  const fit = (shift: number) => {
+    let num = 0, den = 0;
+    for (let n = 0; n < z.length; n++) {
+      const d = z[n] + shift;
+      num += (x[n] * u[n] + y[n] * v[n]) / d;
+      den += (x[n] * x[n] + y[n] * y[n]) / (d * d);
+    }
+    const focal = num / den;
+    let error = 0;
+    for (let n = 0; n < z.length; n++) {
+      const d = z[n] + shift;
+      error += (focal * (x[n] / d) - u[n]) ** 2 + (focal * (y[n] / d) - v[n]) ** 2;
+    }
+    return { focal, error };
+  };
+  // Every point must stay in front of the camera; a coarse scan, then a golden-section search around its best.
+  const lo = -Math.min(...z) + 1e-4;
+  const hi = lo + 10 * Math.max(1e-3, Math.max(...z) - Math.min(...z)) + 10;
+  let best = { shift: lo, error: Infinity };
+  for (let k = 0; k <= 400; k++) {
+    const shift = lo + (hi - lo) * (k / 400) ** 3;
+    const { error } = fit(shift);
+    if (error < best.error) best = { shift, error };
+  }
+  let a = Math.max(lo, best.shift - (hi - lo) / 40);
+  let b = Math.min(hi, best.shift + (hi - lo) / 40);
+  for (let it = 0; it < 80; it++) {
+    const m1 = a + (b - a) * 0.382;
+    const m2 = a + (b - a) * 0.618;
+    if (fit(m1).error < fit(m2).error) b = m2;
+    else a = m1;
+  }
+  const shift = (a + b) / 2;
+  return { shift, focal: fit(shift).focal, diag };
+}
+
+/**
+ * The photo's 3D shape for Angles, from MoGe-2: depth in meters, the lens's field of view, and what is sky (or too far
+ * to measure). Encoded as Director's depth maps are (disparity, 1 = near) so the same 3D set code builds it, with the
+ * near and far distances that make the disparity exact in meters. The sky goes well past the farthest thing measured,
+ * so turning the camera turns it the way a real sky turns (it barely shifts). Depth Anything only orders depths, and
+ * Angles guessed a 32 mm lens; with the real lens and distances the orbit sees the scene in its true proportions.
+ */
+export async function estimateGeometry(file: string): Promise<GeometryResult> {
+  const key = await cacheKey(file, "geometry");
+  const cached = path.join(/*turbopackIgnore: true*/ CACHE_DIR, `${key}.geometry`);
+  const hit = await fs.readFile(cached).catch(() => null);
+  if (hit) return decodeGeometry(hit);
+
+  const meta = await sharp(file, { failOn: "none" }).metadata();
+  const w0 = meta.width ?? 518;
+  const h0 = meta.height ?? 518;
+  const scale = 518 / Math.max(w0, h0);
+  const width = Math.max(14, Math.round((w0 * scale) / 14) * 14);
+  const height = Math.max(14, Math.round((h0 * scale) / 14) * 14);
+  const ort = await import("onnxruntime-node");
+  const { data: rgb } = await sharp(file, { failOn: "none" })
+    .flatten({ background: "#7f7f7f" })
+    .resize(width, height, { fit: "fill", kernel: "cubic" })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const plane = width * height;
+  const image = new Float32Array(3 * plane);
+  for (let i = 0; i < plane; i++) for (let c = 0; c < 3; c++) image[c * plane + i] = rgb[i * 3 + c] / 255;
+  // Tokens set the detail it works at (MoGe-2 takes 1200 to 3600): 1800 keeps a photo near 3 s on a small GPU.
+  const out = await inferAll("geometry", () => ({
+    image: new ort.Tensor("float32", image, [1, 3, height, width]),
+    num_tokens: new ort.Tensor("int64", BigInt64Array.from([BigInt(1800)]), []),
+  }));
+  const [, oh, ow] = out.points.dims as number[];
+  const points = out.points.data as Float32Array;
+  const mask = out.mask.data as Float32Array;
+  const metric = (out.scale.data as Float32Array)[0];
+  const valid = new Uint8Array(ow * oh);
+  for (let k = 0; k < valid.length; k++) valid[k] = mask[k] > 0.5 ? 1 : 0;
+
+  const solved = focalShift(points, valid, ow, oh);
+  const aspect = ow / oh;
+  // A failed solve falls back to a 60° wide lens, as MoGe does.
+  const diag = Math.hypot(aspect, 1);
+  const focal = solved && Number.isFinite(solved.focal) && solved.focal > 0 ? solved.focal : aspect / diag / Math.tan(Math.PI / 6);
+  const shift = solved?.shift ?? 0;
+  const fy = (focal / 2) * diag;
+  const fov = Math.min(110, Math.max(12, (2 * Math.atan(0.5 / fy) * 180) / Math.PI));
+
+  const meters = new Float32Array(ow * oh);
+  const seen: number[] = [];
+  for (let k = 0; k < meters.length; k++) {
+    const d = (points[k * 3 + 2] + shift) * (Number.isFinite(metric) && metric > 0 ? metric : 1);
+    if (valid[k] && d > 0) {
+      meters[k] = d;
+      if ((k & 3) === 0) seen.push(d);
+    } else valid[k] = 0;
+  }
+  if (seen.length < 32) throw new Error("Couldn't measure this picture in 3D.");
+  seen.sort((p, q) => p - q);
+  const near = Math.max(1e-3, seen[Math.floor(seen.length * 0.002)]);
+  const farthest = seen[seen.length - 1];
+  let skyCount = 0;
+  for (let k = 0; k < valid.length; k++) if (!valid[k]) skyCount++;
+  const sky = skyCount / valid.length;
+  // With sky in the picture it sits far beyond the farthest thing measured; without, the far end is that thing.
+  const far = Math.min(near * 4000, sky > 0.005 ? Math.max(farthest * 4, near * 60) : farthest * 1.02);
+  const buf = Buffer.alloc(24 + ow * oh * 2);
+  buf.writeUInt32LE(ow, 0);
+  buf.writeUInt32LE(oh, 4);
+  buf.writeFloatLE(fov, 8);
+  buf.writeFloatLE(near, 12);
+  buf.writeFloatLE(far, 16);
+  buf.writeFloatLE(sky, 20);
+  for (let k = 0; k < ow * oh; k++) {
+    const d = valid[k] ? Math.min(far, Math.max(near, meters[k])) : far;
+    const disparity = (near / d - near / far) / (1 - near / far);
+    buf.writeUInt16LE(Math.round(Math.min(1, Math.max(0, disparity)) * 65535), 24 + k * 2);
+  }
+  await fs.mkdir(CACHE_DIR, { recursive: true });
+  await fs.writeFile(cached, buf).catch(() => undefined);
+  return decodeGeometry(buf);
+}
+
+function decodeGeometry(buf: Buffer): GeometryResult {
+  return {
+    width: buf.readUInt32LE(0),
+    height: buf.readUInt32LE(4),
+    fov: buf.readFloatLE(8),
+    near: buf.readFloatLE(12),
+    far: buf.readFloatLE(16),
+    sky: buf.readFloatLE(20),
+    data: buf.subarray(24).toString("base64"),
+  };
 }
 
 export type MaskResult = { width: number; height: number; /** One byte per pixel, 255 = subject; all zero when nothing stands out. */ data: string };

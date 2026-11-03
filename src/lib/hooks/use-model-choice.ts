@@ -50,10 +50,11 @@ function subscribe(changed: () => void) {
 
 /**
  * `[model, choose]`, like useState: "auto" while nothing is chosen. Switching `kind` or `task` brings back that job's choice.
- * `first` replaces the kind's pre-fill order (the Director's own models), or turns it off.
+ * `first` replaces the kind's pre-fill order (the Director's own models), or turns it off. `own` gives a tool a choice of
+ * its own (Angles: Qwen Angles first), kept apart from the job's shared one and from the kind's last pick.
  */
-export function useModelChoice(kind: ModelKind, task?: ModelTask, opts: { first?: readonly string[] | false } = {}) {
-  const own = keyOf(kind, task);
+export function useModelChoice(kind: ModelKind, task?: ModelTask, opts: { first?: readonly string[] | false; own?: string } = {}) {
+  const own = opts.own ? `${keyOf(kind, task)}:${opts.own}` : keyOf(kind, task);
   const any = keyOf(kind);
   const [picked, setPicked] = useState<Record<string, string>>({});
   const last = useSyncExternalStore(subscribe, () => read(own), () => null);
@@ -74,17 +75,20 @@ export function useModelChoice(kind: ModelKind, task?: ModelTask, opts: { first?
   // was there all along. The server checks the model anyway.
   const waiting = !models.length && Boolean(last) && last !== "auto";
   const first = opts.first === false ? undefined : (opts.first ?? FIRST[kind] ?? []).find((id) => usable(id));
-  const model = picked[own] ?? (waiting ? last! : usable(last) ? last : usable(lastOfKind) ? lastOfKind : usable(saved) ? saved : (first ?? "auto"));
+  // A tool with a choice of its own starts on its own first model, not on whatever the kind last used elsewhere.
+  const fallback = opts.own ? (first ?? (usable(lastOfKind) ? lastOfKind : usable(saved) ? saved : "auto")) : usable(lastOfKind) ? lastOfKind : usable(saved) ? saved : (first ?? "auto");
+  const model = picked[own] ?? (waiting ? last! : usable(last) ? last : fallback);
+  const shared = !opts.own;
 
   const choose = useCallback(
     (id: string) => {
       setPicked((p) => ({ ...p, [own]: id }));
       if (id === "auto") return;
       remember(own, id);
-      remember(any, id);
+      if (shared) remember(any, id);
       window.dispatchEvent(new Event(CHANGED));
     },
-    [own, any],
+    [own, any, shared],
   );
   return [model, choose] as const;
 }

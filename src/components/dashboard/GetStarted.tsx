@@ -17,10 +17,10 @@ export function GetStarted() {
 
   const steps = [
     {
-      title: "Connect a plan",
-      body: "Sign in with ChatGPT or Grok to use the subscription you already pay for, or add a Comfy key.",
+      title: "Set up Crackio",
+      body: "Set this computer up for its graphics card, connect a rented GPU, or add a Comfy key for hosted models.",
       done: usable.length > 0,
-      href: "/settings/connections",
+      href: "/settings",
       cta: "Open Connections",
     },
     {

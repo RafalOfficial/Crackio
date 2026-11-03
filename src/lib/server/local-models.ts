@@ -844,6 +844,12 @@ async function installHere(modelId: string, variantId: string) {
   const have = new Set(status.installed);
   const busy = new Set(status.downloads.filter((d) => ACTIVE.includes(d.state)).map((d) => `${d.folder}/${d.filename}`));
   const missing = variant.files.filter((f) => !have.has(`${f.folder}/${f.name}`) && !busy.has(`${f.folder}/${f.name}`));
+  // Room first, by the same verdict Settings → Storage gives (the drive each file goes to, spare space kept, your limit
+  // for this machine). Imported here: storage reads this module. A check that can't run never blocks the install.
+  if (missing.length) {
+    const fit = await import("./storage").then((m) => m.planInstall(currentTarget().id, missing.map((f) => ({ folder: f.folder, bytes: f.bytes })))).catch(() => null);
+    if (fit && !fit.ok && fit.reason) throw new LocalError(`${fit.reason} Free some space, or pick another download folder, in Settings → Storage.`, 507);
+  }
   const token = await hfToken();
   const restart = variant.requires?.customNodes?.length ? await ensureNodes(variant.requires.customNodes) : false;
   if (status.bridge) {
@@ -924,7 +930,7 @@ export async function installFile(file: LocalFile, targetId?: string) {
   const target = await targetById(targetId);
   return withTarget(target, async () => {
     const { status } = await targetStatus(currentTarget(), await computer());
-    if (!status.connected) throw new LocalError(`${target.label} isn't answering. Start its ComfyUI (or check it on the Local page) first.`);
+    if (!status.connected) throw new LocalError(`${target.label} isn't answering. Start its ComfyUI (or check it in Settings → Machines) first.`);
     const key = `${file.folder}/${file.name}`;
     if (status.installed.includes(key)) return { started: 0, exists: true };
     if (status.downloads.some((d) => ACTIVE.includes(d.state) && `${d.folder}/${d.filename}` === key)) return { started: 0 };
@@ -994,7 +1000,7 @@ async function resolve(url: string, token: string) {
       auth = "";
       continue;
     }
-    if (res.status === 401 || res.status === 403) throw new Error("This model is gated: accept its licence on Hugging Face and add your token in Connections.");
+    if (res.status === 401 || res.status === 403) throw new Error("This model is gated: accept its licence on Hugging Face and add your token in Settings → Accounts.");
     if (!res.ok) throw new Error(`${res.status} from ${new URL(next).hostname}`);
     return { cdn: next, size: size || Number(res.headers.get("content-length") ?? 0), sha };
   }

@@ -191,9 +191,9 @@ export function ComfyView() {
             title="No ComfyUI is running"
             body={
               <>
-                Start ComfyUI on this computer, or connect another machine or a rented GPU on the{" "}
-                <Link href="/local" className="font-semibold text-fog underline-offset-2 hover:underline">
-                  Local page
+                Start ComfyUI on this computer, or connect another machine or a rented GPU in{" "}
+                <Link href="/settings/machines?add=1" className="font-semibold text-fog underline-offset-2 hover:underline">
+                  Settings → Machines
                 </Link>
                 .
               </>

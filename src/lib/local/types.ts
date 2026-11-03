@@ -20,6 +20,8 @@ export type ModelFolder =
   | "model_patches"
   | "vae_approx"
   | "frame_interpolation"
+  /** Whisper and other speech encoders (ComfyUI's AudioEncoderLoader): HuMo hears speech through Whisper large v3. */
+  | "audio_encoders"
   /** FlashVSR+'s own folder (models/FlashVSR; the Crackio bridge 1.5+ and its node both add it). */
   | "FlashVSR";
 
@@ -134,8 +136,10 @@ export type LocalModel = {
   variants: LocalVariant[];
   /** Crackio's model id once its tools can run it (`local:…`). */
   crackio?: string;
-  /** Its Hugging Face repo makes you accept its terms first (and installs need your token). */
-  gated?: { repo: string };
+  /** Made for one tool only (its slug: "angles"): offered in that tool's Get models whatever its tasks, and in no other's. */
+  tool?: string;
+  /** Its Hugging Face repo makes you accept its terms first (and installs need your token); `also`: a pack's other gated repos. */
+  gated?: { repo: string; also?: string[] };
   /** Hand-tuned recipe in Crackio, or run from ComfyUI's official template. */
   source?: "curated" | "template";
   /** Newest release date among its templates (YYYY-MM-DD). */

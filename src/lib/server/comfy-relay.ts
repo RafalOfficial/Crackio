@@ -5,6 +5,7 @@ import https from "node:https";
 import net from "node:net";
 import tls from "node:tls";
 import { targetById } from "./comfy-targets";
+import { ourHost } from "./our-host";
 import { readRecipe } from "./recipes";
 
 /**
@@ -19,7 +20,7 @@ import { readRecipe } from "./recipes";
 
 type Relay = { server: http.Server; port: number; version?: number };
 /** Bumped when the relay itself changes: one started by older code (it outlives a code reload) is closed and started again. */
-const VERSION = 3;
+const VERSION = 4; // 4: refuses other websites (refused())
 const g = globalThis as unknown as { __crackioComfyRelays?: Map<string, Promise<Relay>>; __crackioFollowScript?: string };
 const relays = (g.__crackioComfyRelays ??= new Map());
 
@@ -67,6 +68,23 @@ async function start(machine: string, host: string): Promise<Relay> {
   throw new Error("No free port for the ComfyUI relay.");
 }
 
+/**
+ * Only Crackio's own frame drives a relay. The relay drops Origin before ComfyUI sees it (ComfyUI refuses a page whose
+ * Origin isn't its own host) and adds the machine's token, so it checks Origin itself: a request from another website (its
+ * Origin isn't the relay's own address) or under another site's name (DNS rebinding) is refused. Scripts send no Origin.
+ */
+function refused(req: http.IncomingMessage) {
+  const host = req.headers.host;
+  if (!ourHost(host)) return true;
+  const origin = req.headers.origin;
+  if (origin === undefined) return false;
+  try {
+    return new URL(origin).host !== host;
+  } catch {
+    return true;
+  }
+}
+
 /** Headers for the machine: its own Host, its token, no Origin (ComfyUI refuses a page whose Origin isn't its own host). */
 function upstreamHeaders(req: http.IncomingMessage, base: URL, token: string | undefined) {
   const headers: http.OutgoingHttpHeaders = { ...req.headers, host: base.host };
@@ -77,6 +95,10 @@ function upstreamHeaders(req: http.IncomingMessage, base: URL, token: string | u
 }
 
 async function forward(machine: string, req: http.IncomingMessage, res: http.ServerResponse) {
+  if (refused(req)) {
+    res.writeHead(403, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+    return void res.end("Only Crackio's own ComfyUI page can use this.");
+  }
   const t = await targetById(machine).catch(() => null);
   if (!t || t.id !== machine) return unavailable(res, "That machine isn't one of Crackio's any more.");
   // Never relayed: its "ComfyUI" runs paid RunPod jobs, and a relay can listen beyond this computer.
@@ -139,6 +161,7 @@ async function recipeGraph(path: string, res: http.ServerResponse) {
 
 /** A websocket (ComfyUI's live progress): the handshake goes to the machine with its token, then bytes flow both ways. */
 async function tunnel(machine: string, req: http.IncomingMessage, socket: net.Socket, head: Buffer) {
+  if (refused(req)) return socket.destroy();
   const t = await targetById(machine).catch(() => null);
   if (!t || t.id !== machine || t.metered || t.serverless) return socket.destroy();
   const base = new URL(t.url);

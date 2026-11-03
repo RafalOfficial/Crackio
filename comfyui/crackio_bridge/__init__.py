@@ -14,10 +14,30 @@ Routes under /crackio:
   POST /crackio/nodes/install        {name} clone one of those into custom_nodes and install its packages (only the
                                      missing ones: nothing already installed changes version)
   POST /crackio/restart              restart ComfyUI in place, so new nodes load
+  /crackio/storage...                where models are and how much they take, the folder downloads go to, cleaning up
+                                     (storage.py, 1.10)
   /crackio/pool...                   one model split across two computers' GPUs (pool.py, with its node
                                      "Crackio Pool Loader (GGUF)")
 
-Nodes for small GPUs (small.py): "Crackio Window Attention" (after the first step each frame of a SCAIL-2 clip attends
+LFM3-VL (lfm3.py): Liquid AI's 1.9B vision-language model as the node "LFM3-VL (Liquid AI)", with Crackio's
+fine-tunes (LoRA) on top; its files go in models/lfm3, its config and code ship in lfm3_vl/.
+
+Voice (voice.py): speech from text ("Crackio Voice") and text from speech ("Crackio Transcribe") through audio.cpp
+(Apache-2.0): Fish Audio Drama 3, VoxCPM2, Supertonic 3 and Qwen3-ASR from models/audiocpp, with routes under
+/crackio/voice to install the engine for this machine and to stop it.
+
+Lip Sync (lipsync.py): a video's mouth redrawn to new speech, only in the frames that change and only round the mouth
+("Crackio Lip Sync": LatentSync 1.6, faces from MediaPipe), run by lipsync_worker.py in a process of its own; routes
+under /crackio/lipsync install its engine.
+
+Storage (storage.py): the model folders with their sizes and drives, unfinished downloads, ComfyUI's input and output;
+a folder chosen in Crackio's Settings → Storage that every download goes to (<it>/<model folder>, looked in first), and
+this machine's id (GET /crackio/info), which stays the same when a rented box reconnects at another address.
+
+compat.py fills gaps in the Python ComfyUI runs on before any job does: os.memfd_create for Pythons built without it
+(conda's, as on vast.ai), which ComfyUI's memory manager needs for every Qwen-Image 2.1 job.
+
+Nodes for small GPUs (small.py):"Crackio Window Attention" (after the first step each frame of a SCAIL-2 clip attends
 to its neighbours, about a third of the attention work), "Crackio FP16 On Old GPUs" and "Crackio Resample Frames".
 
 Downloads come in 16 parallel byte ranges (one connection to Hugging Face's CDN often tops out at a few MB/s), three
@@ -43,17 +63,42 @@ import folder_paths
 from aiohttp import web
 from server import PromptServer
 
-VERSION = "1.6.0"
+VERSION = "1.10.3"
 WORKERS = 16
 CHUNK = 64 * 1024 * 1024
 HOSTS = ("huggingface.co", "hf.co", "github.com", "objects.githubusercontent.com", "modelscope.cn", "civitai.com")
 EXTENSIONS = (".safetensors", ".gguf", ".pt", ".pth", ".bin", ".ckpt", ".onnx", ".sft")
 NAME = re.compile(r"^[\w.\-+ ()\[\]]{1,200}$")
 
+from . import compat  # noqa: F401  (first: what it adds to Python is in place before any job runs)
 from . import mac, pool, small
+from . import storage  # before voice and lipsync: the download folder they follow is read as it loads
 
-NODE_CLASS_MAPPINGS = {**pool.NODE_CLASS_MAPPINGS, **small.NODE_CLASS_MAPPINGS, **mac.NODE_CLASS_MAPPINGS}
-NODE_DISPLAY_NAME_MAPPINGS = {**pool.NODE_DISPLAY_NAME_MAPPINGS, **small.NODE_DISPLAY_NAME_MAPPINGS, **mac.NODE_DISPLAY_NAME_MAPPINGS}
+try:
+    from . import lfm3
+except Exception as e:  # LFM3-VL is extra: the bridge works without it
+    lfm3 = None
+    print(f"[crackio_bridge] LFM3-VL node not loaded: {e}")
+
+try:
+    from . import lfm3_setup  # noqa: F401  (routes: what LFM3-VL needs here, and transformers brought up to it)
+except Exception as e:  # answers even where the LFM3-VL node can't load: that's what it's for
+    print(f"[crackio_bridge] LFM3-VL setup routes not loaded: {e}")
+
+try:
+    from . import voice
+except Exception as e:  # Voice is extra too
+    voice = None
+    print(f"[crackio_bridge] Voice nodes not loaded: {e}")
+
+try:
+    from . import lipsync
+except Exception as e:  # and Lip Sync
+    lipsync = None
+    print(f"[crackio_bridge] Lip Sync node not loaded: {e}")
+
+NODE_CLASS_MAPPINGS = {**pool.NODE_CLASS_MAPPINGS, **small.NODE_CLASS_MAPPINGS, **mac.NODE_CLASS_MAPPINGS, **(lfm3.NODE_CLASS_MAPPINGS if lfm3 else {}), **(voice.NODE_CLASS_MAPPINGS if voice else {}), **(lipsync.NODE_CLASS_MAPPINGS if lipsync else {})}
+NODE_DISPLAY_NAME_MAPPINGS = {**pool.NODE_DISPLAY_NAME_MAPPINGS, **small.NODE_DISPLAY_NAME_MAPPINGS, **mac.NODE_DISPLAY_NAME_MAPPINGS, **(lfm3.NODE_DISPLAY_NAME_MAPPINGS if lfm3 else {}), **(voice.NODE_DISPLAY_NAME_MAPPINGS if voice else {}), **(lipsync.NODE_DISPLAY_NAME_MAPPINGS if lipsync else {})}
 mac.start()
 
 # Custom nodes Crackio's recipes use, by the name Crackio asks for: where they come from, and a node that proves
@@ -77,6 +122,13 @@ KNOWN_NODES = {
 # FlashVSR+'s model folder, known before its node is, so its files can download first (the node adds the same path).
 if "FlashVSR" not in folder_paths.folder_names_and_paths:
     folder_paths.add_model_folder_path("FlashVSR", os.path.join(folder_paths.models_dir, "FlashVSR"))
+
+# The download folder chosen in Crackio's Settings → Storage (storage.py), if any, first for every model folder: now that
+# the bridge's own folders are known, and again once every custom node has loaded.
+try:
+    storage.start()
+except Exception as e:  # a damaged storage.json never keeps the bridge from loading
+    print(f"[crackio_bridge] storage: {e}")
 
 
 class CrackioFlashVSRTriton:
@@ -160,14 +212,20 @@ def _gpus():
 async def info(request):
     import psutil
 
-    try:
-        disk = shutil.disk_usage(folder_paths.models_dir)
-        free, total = disk.free, disk.total
-    except Exception:
-        free = total = None
+    # Free disk where downloads go: the chosen download folder's drive, else the models folder's.
+    if storage.root():
+        free, total = storage.usage(storage.root())
+    else:
+        try:
+            disk = shutil.disk_usage(folder_paths.models_dir)
+            free, total = disk.free, disk.total
+        except Exception:
+            free = total = None
     return web.json_response(
         {
             "version": VERSION,
+            "machine_id": storage.machine_id(),
+            "download_root": storage.root(),
             "os": {"system": platform.system(), "release": platform.release(), "machine": platform.machine()},
             "cpu": {"model": _cpu_model(), "threads": os.cpu_count()},
             "ram_total": psutil.virtual_memory().total,
@@ -254,15 +312,36 @@ def _resolve(url, token):
     raise IOError("too many redirects")
 
 
-def _target_dir(folder):
+def _target_path(folder):
+    """Where a download into `folder` goes: <download folder>/<folder> while one is chosen (storage.py), else the folder
+    named like its type inside models/, else its first path."""
     paths = folder_paths.get_folder_paths(folder)
     if not paths:
         raise ValueError(f"unknown model folder {folder}")
+    chosen = storage.target(folder)
+    if chosen:
+        return chosen
     # The folder named like its type (models/diffusion_models before the legacy models/unet).
     for p in paths:
-        if os.path.basename(os.path.normpath(p)) == folder and os.path.commonpath([os.path.abspath(p), os.path.abspath(folder_paths.models_dir)]) == os.path.abspath(folder_paths.models_dir):
+        try:
+            inside = os.path.commonpath([os.path.abspath(p), os.path.abspath(folder_paths.models_dir)]) == os.path.abspath(folder_paths.models_dir)
+        except ValueError:  # on another drive (extra_model_paths.yaml): not inside models/
+            inside = False
+        if os.path.basename(os.path.normpath(p)) == folder and inside:
             return p
     return paths[0]
+
+
+def _target_dir(folder):
+    path = _target_path(folder)
+    if path == storage.target(folder):
+        # The download folder: made, and one ComfyUI looks in (a folder a custom node added after the bridge loaded).
+        try:
+            os.makedirs(path, exist_ok=True)
+        except OSError as e:
+            raise ValueError(f"the download folder {path} can't be used: {e.strerror or e}")
+        storage.ensure(folder, path)
+    return path
 
 
 def _sha256(path):
@@ -385,13 +464,15 @@ async def download(request):
     host = urlparse(url).hostname or ""
     if urlparse(url).scheme != "https" or not any(host == h or host.endswith("." + h) for h in HOSTS):
         return web.json_response({"error": "Only https links from Hugging Face, GitHub, ModelScope or Civitai."}, status=400)
-    if not NAME.match(filename) or not filename.lower().endswith(EXTENSIONS):
+    # LFM3-VL's tokenizer is a .json file (data, never run).
+    if not NAME.match(filename) or not filename.lower().endswith(EXTENSIONS + ((".json",) if folder == "lfm3" else ())):
         return web.json_response({"error": "That isn't a model file name."}, status=400)
     try:
         target = os.path.join(_target_dir(folder), filename)
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=400)
-    if os.path.exists(target):
+    # With a download folder chosen, a file already in another of the folder's paths (from before) isn't fetched again.
+    if os.path.exists(target) or (storage.root() and folder_paths.get_full_path(folder, filename)):
         return web.json_response({"id": None, "state": "done", "exists": True})
     with _lock:
         for d in _downloads.values():
@@ -451,9 +532,12 @@ async def files(request):
         for p in paths:
             if not os.path.isdir(p):
                 continue
-            for root, _, fs in os.walk(p, followlinks=True):
+            for root, dirs, fs in os.walk(p, followlinks=True):
+                if folder == "lfm3":  # not the hidden folder lfm3.py loads from (links to the same files, its config)
+                    dirs[:] = [d for d in dirs if not d.startswith(".")]
                 for f in fs:
-                    if f.lower().endswith(EXTENSIONS):
+                    # LFM3-VL's tokenizer is a .json file, one of its two.
+                    if f.lower().endswith(EXTENSIONS + ((".json",) if folder == "lfm3" else ())):
                         names.add(os.path.relpath(os.path.join(root, f), p).replace(os.sep, "/"))
         if names:
             out[folder] = sorted(names)

@@ -132,7 +132,7 @@ export function SetupComfy({ onChange, className }: SetupComfyProps) {
 
       {s.share && s.lanUrl ? (
         <p className="rounded-[12px] bg-white/[0.03] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-haze">
-          On your other computer, open Crackio&rsquo;s Local page and add <code className="text-paper">{s.lanUrl}</code> under &ldquo;Use another computer&rdquo;. Its jobs then
+          On your other computer, open Crackio&rsquo;s Settings → Machines → Add a computer and add <code className="text-paper">{s.lanUrl}</code> under &ldquo;A computer on your network&rdquo;. Its jobs then
           run here when this machine has the model. Windows may ask once to let Python through its firewall: allow it on private networks.
         </p>
       ) : null}

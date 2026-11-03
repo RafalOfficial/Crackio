@@ -3,7 +3,8 @@ import { z } from "zod";
 import { saveGeneration } from "@/lib/server/db";
 import { runner } from "@/lib/server/runner";
 import { saveFileUpload, saveUpload, urlToPath } from "@/lib/server/media";
-import { ClipError, prepareClip } from "@/lib/server/clip";
+import { ClipError, prepareClip, swapRate } from "@/lib/server/clip";
+import { probe } from "@/lib/motion/ffmpeg";
 import fs from "node:fs/promises";
 import { getCharacter, sheetViews } from "@/lib/server/cast";
 import { withSubjectMatte } from "@/lib/server/vision";
@@ -20,6 +21,8 @@ import { ASPECTS, type AspectId } from "@/lib/shot";
 import type { Generation, ReferenceRef } from "@/lib/generations/types";
 import { demoJob } from "@/lib/demo/gate";
 import { priceGeneration, priceSwap } from "@/lib/demo/prices";
+import { swapChecks } from "@/lib/server/swap-checker";
+import type { EngineError } from "@/lib/engines/types";
 
 const Point = z.object({ t: z.number().min(0).max(36_000), x: z.number().min(0).max(1), y: z.number().min(0).max(1) });
 
@@ -59,8 +62,14 @@ const Body = z.object({
       aspectValue: z.string().max(40).optional(),
       /** LTX-2.5 Ripple: each pass finished by LTX's ×2 latent upscaler, on the clip at up to 1080p. */
       sharp: z.boolean().optional(),
-      /** LTX-2.5 Ripple, each step switchable (benchmarks): the best frame, the zoomed redraw, takes, the paste-back. */
-      ripple: z.object({ best: z.boolean(), zoom: z.boolean(), keep: z.boolean(), tries: z.number().int().min(1).max(4), v1: z.boolean() }).partial().optional(),
+      /**
+       * LTX-2.5 Ripple, each step switchable (benchmarks): the best frame, the zoomed redraw, takes, the paste-back, the
+       * redraws every ~4 s (refresh), the blur over the swapped people in the clip Ripple copies from (soften), and
+       * laying the swap onto a bigger clip at its own size (finish).
+       */
+      ripple: z.object({ best: z.boolean(), zoom: z.boolean(), keep: z.boolean(), tries: z.number().int().min(1).max(4), v1: z.boolean(), refresh: z.boolean(), soften: z.union([z.boolean(), z.number().min(1).max(32)]), finish: z.boolean() }).partial().optional(),
+      /** One machine for this job (benchmarks), whatever Run on says: the user's Run on is everyone's. */
+      machine: z.string().max(80).optional(),
     })
     .default({}),
   /** The prompt as you edited it on the page (otherwise it's written here). */
@@ -106,6 +115,10 @@ export async function POST(request: Request) {
     const m = (await listModels()).find((x) => x.id === body.model);
     if (!m?.available) return Response.json({ error: `${m?.name ?? "This model"} can't run here: ${m?.reason ?? "ComfyUI isn't answering"}.` }, { status: 400 });
   }
+  // A Ripple swap's drawings are checked by who was picked under Checks (the Swap page's setting): it must be able to,
+  // before anything starts.
+  const checks = ripple ? await swapChecks().catch((err: EngineError) => err) : null;
+  if (checks instanceof Error) return Response.json({ error: checks.message, hint: checks.hint }, { status: 400 });
   const custom = isCustomId(body.model) ? await customModel("video", body.model).catch(() => null) : null;
   if (isCustomId(body.model)) {
     if (!custom) return Response.json({ error: "Unknown model." }, { status: 400 });
@@ -197,7 +210,7 @@ export async function POST(request: Request) {
   if (t.writer && prompt.includes("{script}")) {
     const blanks = (t.fields ?? []).map((f) => `${f.label}: ${(body.fields[f.id] ?? "").trim() || f.examples[0]}`).join("\n");
     const script = await askText({ instructions: t.writer, text: blanks, effort: "low", timeoutMs: 60_000 }).catch(() => null);
-    if (!script) return Response.json({ error: "No text model answered to write the script. Add a Comfy key in Connections, or install a text model on the Local page." }, { status: 502 });
+    if (!script) return Response.json({ error: "No text model answered to write the script. Add a Comfy key in Settings → Accounts, or set up a text model in Settings → Tools." }, { status: 502 });
     prompt = prompt.replace("{script}", script.trim());
   }
   const names = fills.map((f) => f.name ?? f.slot.label).join(" & ");
@@ -215,13 +228,23 @@ export async function POST(request: Request) {
     // On the template's clip, a model that takes less than all of it gets the part you picked (or the template's best part).
     const start = body.clip ? body.clip.start : (t.base?.seconds ?? 0) > maxSeconds ? (body.start ?? t.base?.focus ?? 0) : 0;
     let clip: Awaited<ReturnType<typeof prepareClip>>;
+    // Ripple's swap laid onto the clip at its own size, when that's bigger than the copy it's made in (runner).
+    let finish: Awaited<ReturnType<typeof prepareClip>> | null = null;
     try {
       // A clip shorter than the model takes is held on its last frame, and the result is cut back to its length.
       // Your own ComfyUI makes the swapped people inside a 720p clip (its resolution sets how much detail they get) and
       // pastes them back onto it.
       // Ripple's sharp mode finishes at up to 1080p, so it gets the clip at that size.
       const box = local && !(ripple && body.options.sharp) ? 1280 : 1920;
-      clip = await prepareClip(file, { start, maxSeconds, minSeconds, pad: true, box, fps: profile.fps, model: custom?.name });
+      // Ripple makes it at the clip's own frame rate (up to 30 a second, evened out: swapRate).
+      const own = ripple ? await probe(file).catch(() => null) : null;
+      const fps = own ? swapRate(own.fps, Math.min(maxSeconds, (own.duration ?? maxSeconds) - start)) : profile.fps;
+      const cut = { start, maxSeconds, minSeconds, pad: true, fps, steady: ripple, model: custom?.name };
+      // Ripple lays the people it made onto that 720p copy (layOnto). A bigger clip is also cut at its own size (up to
+      // 1080p), and they're laid onto that after the run, so everything else keeps the clip's own sharpness.
+      const info = ripple && box < 1920 && body.options.ripple?.finish !== false ? own : null;
+      const bigger = Boolean(info && Math.max(info.width ?? 0, info.height ?? 0) > box);
+      [clip, finish] = await Promise.all([prepareClip(file, { ...cut, box }), bigger ? prepareClip(file, { ...cut, box: 1920 }) : null]);
     } catch (err) {
       return Response.json({ error: (err as Error).message }, { status: err instanceof ClipError ? err.status : 422 });
     }
@@ -245,6 +268,7 @@ export async function POST(request: Request) {
         kind: "video",
         refine: false,
         videoUrl: clip.url,
+        ...(finish ? { finishUrl: finish.url } : {}),
         sourceUrl: source,
         start: clip.start,
         length: clip.length,
@@ -254,6 +278,7 @@ export async function POST(request: Request) {
         options: {
           ...((body.options.resolution ?? profile.resolution) ? { resolution: body.options.resolution ?? profile.resolution } : {}),
           ...(local ? { duration: clip.length } : {}),
+          ...(local && body.options.machine ? { machine: body.options.machine } : {}),
           // SCAIL-2 finds each character in its reference picture by what it is ("a pumpkin-headed scarecrow"), not only "human",
           // and sees each one from more sides when there are more views.
           // and is given each character drawn in the pose of the person it replaces (where a picture model can).
@@ -265,6 +290,7 @@ export async function POST(request: Request) {
                   ...(local ? { subjects: fills.map((f) => f.noun), views, pose: true, targets: fills.map((f) => f.target ?? f.slot.target) } : {}),
                   ...(ripple
                     ? {
+                        checker: checks && checks.checker !== "basic" ? checks.checker : "auto",
                         looks: fills.map((f) => f.traits || f.look),
                         wearing: fills.map((f) => (f.outfit === "trend" && f.slot.outfit?.trend ? f.slot.outfit.trend : f.wearing)),
                         kinds: fills.map((f) => f.slot.kind),
@@ -281,6 +307,7 @@ export async function POST(request: Request) {
                         })(),
                         ...(body.options.sharp ? { sharp: true } : {}),
                         ...body.options.ripple,
+                        ...(finish ? { finish: true } : {}),
                       }
                     : {}),
                 },

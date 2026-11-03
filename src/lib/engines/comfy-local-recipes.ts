@@ -16,6 +16,10 @@ import { nativeMp, templateGraph, templateIO, templateModels } from "@/lib/serve
 import { detail, fill, fillFor, freeLatent, growImages, grownRoom, growsImages, isLink, maskLatent, redrawLatent, settle, stockAttention, type ApiGraph } from "./comfy-local-templates";
 import type { LocalModel, TemplateMode } from "@/lib/local/types";
 import { EngineError, type EngineJob, type EngineReference } from "./types";
+import { ANY_ANGLE } from "@/lib/angles/prompt";
+import { logSwapCheck } from "@/lib/server/swap-log";
+import { keepPasteMask } from "@/lib/server/paste-masks";
+import { swapRate } from "@/lib/server/clip";
 
 /**
  * One ComfyUI workflow per local model, in ComfyUI's API format, with the job's inputs filled in.
@@ -797,7 +801,17 @@ const RIPPLE = {
   lora: "LTX25_Ripple_v11.safetensors",
   // Its author's setting: higher carries the edit further, lower changes less of the rest.
   strength: 1.35,
+  /**
+   * Its author runs 8. The user first picked 6 (2026-11-01: almost the same as 8 on Pigeongoo), then 8 with PyTorch's
+   * attention (2026-11-03): side by side on truck × Freya (same drawings and seed) against 6 with INT8 attention, 12, 15,
+   * and LTX's dev model at 30 steps with CFG 3.5 (38 min), it looked best. The LTX step takes 4.4 min instead of 2.5.
+   */
   steps: 8,
+  /**
+   * ComfyUI's INT8 attention (comfy-kitchen) when a job asks for it (`extra.attention: "int8"`): 15 s at 720p sampled
+   * in 116 s instead of 241 s on the 5090, alike by SSIM (0.990), but the user's pick is PyTorch's (above).
+   */
+  attention: "comfy kitchen attention",
   /** Frames a pass makes from the first frame (5 s at 24 fps, 8n + 1); a longer clip continues from each pass's last frame. */
   segment: 121,
   /**
@@ -813,20 +827,46 @@ const RIPPLE = {
    * there, matched to the first redraw, and given to LTX as a keyframe of the same pass, so the model keeps the character
    * as drawn and moves into it on its own: nothing is blended. Before, at 10 s Pigeongoo jumped to smaller eyes, a thin
    * chain and new hair (a second pass from the first's drifted last frame), and crossfading into fresh passes showed a
-   * see-through head and hair for the length of the blend.
+   * see-through head and hair for the length of the blend. `every`, `window` and `edge` count frames at 24 a second.
+   * Strength 0.6: at full strength LTX bent her hair to each new drawing in the frames before it (truck × Freya: swings
+   * where the driver sat still). Same drawings and seed, 0.6 halved those (42 → 22 frames at 30 fps, 20 → 12 at 24) with
+   * the same faces on truck × Freya and talk × Marco; at 2, each drawing's details spread across the clip (a can in her
+   * hand 4 s early, her face to the camera where he looked down).
    */
-  keys: { every: 96, window: 24, edge: 24, strength: 1 },
+  keys: { every: 96, window: 24, edge: 24, strength: 0.6 },
+  /**
+   * The people swapped for a character, blurred in the clip Ripple copies from (to 1/`soften` and back, inside their
+   * outlines grown by `grow` px at the look's 640): Ripple traced the original's face from it, and Freya in the truck
+   * aged into the old driver within a second of each drawing. Blurred, she stayed herself for all 15 s, her mouth and
+   * hands still moving with his; the first drawing and the keyframes stay sharp. 1/8 and 1/16 looked alike.
+   */
+  soften: 8,
+  grow: 6,
+  /**
+   * Their mouths blurred less (to 1/`mouth`, grown by `mouthGrow` px at 640), found by SAM 3.1 in each frame: at 1/8
+   * Marco barely moved his lips to the freestyle the rapper shouts through; at 1/4 everywhere they moved, but Freya in
+   * the truck aged into the driver again.
+   */
+  mouth: 3,
+  mouthGrow: 10,
   prompt:
     "Use the reference video for motion, timing, camera movement, composition, and unchanged scene content, while consistently propagating the visual edit established in the first frame throughout the video.",
   negative: "blurry, low resolution, ugly, garbled mess, compression artifacts, glitch, stop motion, still image, pixelated, robotic voice, oversaturated",
   /** Picture models that hand an edited frame back exactly where it was (Grok's edits drift and rescale: Ripple carries that as a jump). */
   editors: ["local:flux3-klein"],
-  /**
-   * The vision model for the looks at each drawing (the pose in words, which take is best): Gemini 3.5 Flash with a Comfy
-   * API key (all four pictures of a look: the frame, two takes, the character), else Qwen3-VL 4B on your own GPU (FLUX 3
-   * Klein's text encoder; it reads them as one labelled sheet). One of the two is required (see canLook).
-   */
-  lookers: ["comfy:google/gemini-3.5-flash", "local:text"],
+};
+
+/**
+ * The text models that check a swap's drawings, in the order they're asked (server/swap-checker, picked on the Swap
+ * page): `judges` for which take is best (SWAP_CHECK; Crackio's judge, LFM3-VL fine-tuned on swap takes, reads one take
+ * at a time), `lookers` for the pose in words and changes in words.
+ */
+type Checks = {
+  judges: string[];
+  lookers: string[];
+  strictness?: keyof typeof JUDGE_PASS;
+  /** What the judge gave the clip's first drawing (its surest take), for its keyframes' bar (bestTake): one per job. */
+  anchorSure?: number;
 };
 
 type Size = { width: number; height: number };
@@ -974,8 +1014,11 @@ function unionOf(masks: Buffer[][], size: Size) {
  * backward on the clip played in reverse; and everyone SAM 3.1 finds in each frame (`others`, one outline a frame), so a
  * swap can keep its hands off the people around. `count` is the clip's frames as ComfyUI read them. Null when there's no
  * look or a subject is nowhere.
+ * Everyone is found in every frame only when every frame needs them (`everyone`: the clip's people put back around the
+ * swap); otherwise `othersAt` finds them in the frames that are redrawn, one at a time. On the truck clip at the 5090,
+ * finding people in all 358 frames took 38 of the look's 54 s.
  */
-async function rippleLook(tools: RecipeTools, clip: string, reversed: string, count: number, W: number, H: number, subjects: Pick[][]) {
+async function rippleLook(tools: RecipeTools, clip: string, reversed: string, count: number, W: number, H: number, subjects: Pick[][], everyone: boolean, mouths = false, fps = LTX.fps) {
   if (!tools.probe) return null;
   const g = new Graph();
   const sam = g.add("CheckpointLoaderSimple", { ckpt_name: SCAIL.sam });
@@ -992,7 +1035,7 @@ async function rippleLook(tools: RecipeTools, clip: string, reversed: string, co
         object_indices: "0",
       })),
     }));
-  const clicked = subjects.map((points) => Math.min(count - 1, Math.round(points[0].t * LTX.fps)));
+  const clicked = subjects.map((points) => Math.min(count - 1, Math.round(points[0].t * fps)));
   const parts: Link[] = [];
   for (const [k, points] of subjects.entries()) {
     const c = clicked[k];
@@ -1012,15 +1055,23 @@ async function rippleLook(tools: RecipeTools, clip: string, reversed: string, co
   }
   // Everyone in each frame (up to 24 people, found by name), then any ball they play with (Özil: the grandma's ball went
   // with her when she was redrawn), 90 frames at a time.
-  for (const text of ["person:24", "ball:4"]) {
+  for (const text of everyone ? OTHERS : []) {
     const named = at(g.add("CLIPTextEncode", { text, clip: at(sam, 1) }));
     for (let from = 0; from < count; from += 90) {
       const found = g.add("SAM3_Detect", { model: at(sam), image: at(g.add("ImageFromBatch", { image: ahead, batch_index: from, length: Math.min(90, count - from) })), conditioning: named, threshold: 0.45, refine_iterations: 0, individual_masks: false });
       parts.push(at(g.add("MaskToImage", { mask: at(found, 0) })));
     }
   }
+  // Every mouth in each frame (`mouths`), for the people swapped: kept sharper in what Ripple copies (RIPPLE.mouth).
+  if (mouths) {
+    const named = at(g.add("CLIPTextEncode", { text: "mouth", clip: at(sam, 1) }));
+    for (let from = 0; from < count; from += 90) {
+      const found = g.add("SAM3_Detect", { model: at(sam), image: at(g.add("ImageFromBatch", { image: ahead, batch_index: from, length: Math.min(90, count - from) })), conditioning: named, threshold: 0.3, refine_iterations: 0, individual_masks: false });
+      parts.push(at(g.add("MaskToImage", { mask: at(found, 0) })));
+    }
+  }
   // One animated picture for a single download.
-  g.add("SaveAnimatedWEBP", { images: at(g.add("BatchImagesNode", Object.fromEntries(parts.map((p, k) => [`images.image${k}`, p])))), filename_prefix: "crackio/ripple-look", fps: LTX.fps, lossless: true, quality: 100, method: "fastest" });
+  g.add("SaveAnimatedWEBP", { images: at(g.add("BatchImagesNode", Object.fromEntries(parts.map((p, k) => [`images.image${k}`, p])))), filename_prefix: "crackio/ripple-look", fps, lossless: true, quality: 100, method: "fastest" });
   const [webp] = await tools.probe(g.nodes);
   if (!webp) return null;
   const read = sharp(webp, { animated: true, limitInputPixels: false });
@@ -1030,13 +1081,14 @@ async function rippleLook(tools: RecipeTools, clip: string, reversed: string, co
   // The WebP keeps a run of identical frames as one longer frame (Özil: 22 frames with her out of sight came back as
   // one, the look was thrown away and the swap ran on the whole frame): one page a frame again, by how long each shows.
   const per = small.width * small.height;
-  const unit = Math.trunc(1000 / LTX.fps);
+  const unit = Math.trunc(1000 / fps);
   const pages: Buffer[] = [];
   for (let p = 0; p < Math.floor(data.length / per); p++) {
     for (let n = Math.max(1, Math.round((delay?.[p] ?? unit) / unit)); n > 0; n--) pages.push(data.subarray(p * per, (p + 1) * per));
   }
-  // Each subject: its frames ahead and behind (the clicked one twice); then everyone, a frame each; then the balls.
-  const frameCount = (pages.length - subjects.length) / (subjects.length + 2);
+  // Each subject: its frames ahead and behind (the clicked one twice); then everyone, a frame each; then the balls; then
+  // the mouths.
+  const frameCount = (pages.length - subjects.length) / (subjects.length + (everyone ? 2 : 0) + (mouths ? 1 : 0));
   if (!Number.isInteger(frameCount) || frameCount < Math.max(9, count - 2) || frameCount > count) return null;
   const masks = subjects.map((_, k) => {
     const c = Math.min(clicked[k], frameCount - 1);
@@ -1052,14 +1104,67 @@ async function rippleLook(tools: RecipeTools, clip: string, reversed: string, co
   // new one).
   const base = subjects.length * (frameCount + 1);
   const picked = unionOf(masks, small);
-  const others = Array.from({ length: frameCount }, (_, f) => {
-    const people = withoutSubjects(pages[base + f], picked[f], small);
-    const balls = pages[base + frameCount + f];
+  const othersOf = (f: number, found: Buffer, balls: Buffer) => {
+    const people = withoutSubjects(found, picked[f], small);
     const out = Buffer.alloc(per);
     for (let i = 0; i < per; i++) out[i] = people[i] >= 128 ? 255 : balls[i] >= 128 ? 160 : 0;
     return out;
-  });
-  return { masks, others, small, count: frameCount };
+  };
+  const others = everyone ? Array.from({ length: frameCount }, (_, f) => othersOf(f, pages[base + f], pages[base + frameCount + f])) : null;
+  // The mouths inside what was picked only (SAM 3.1 also finds the people's around: the rapper's friends behind him).
+  const mouthBase = base + (everyone ? 2 * frameCount : 0);
+  const mouthsOf = mouths
+    ? Array.from({ length: frameCount }, (_, f) => {
+        const out = Buffer.alloc(per);
+        const found = pages[mouthBase + f];
+        for (let i = 0; i < per; i++) out[i] = found[i] >= 128 && picked[f][i] >= 128 ? 255 : 0;
+        return out;
+      })
+    : null;
+  // Everyone else in one frame (`picture`, that frame at any size): from the look, or found there once.
+  const asked = new Map<number, Promise<Buffer | undefined>>();
+  const othersAt = (f: number, picture: Buffer): Promise<Buffer | undefined> => {
+    if (others) return Promise.resolve(others[f]);
+    if (!asked.has(f)) {
+      asked.set(
+        f,
+        peopleIn(tools, picture, small)
+          .then((found) => (found ? othersOf(f, found.people, found.balls) : undefined))
+          .catch((err) => {
+            if (tools.signal.aborted) throw err;
+            console.warn("[ripple] finding the people around failed:", (err as Error).message);
+            return undefined;
+          }),
+      );
+    }
+    return asked.get(f)!;
+  };
+  return { masks, others, othersAt, small, count: frameCount, mouths: mouthsOf };
+}
+
+/** What SAM 3.1 looks for besides the subjects: everyone (up to 24 people), then any ball they play with. */
+const OTHERS = ["person:24", "ball:4"];
+
+/** Everyone SAM 3.1 finds in one picture, people and balls apart, at the look's size (one byte a pixel); null when it can't say. */
+async function peopleIn(tools: RecipeTools, picture: Buffer, small: Size) {
+  if (!tools.probe) return null;
+  const g = new Graph();
+  const sam = g.add("CheckpointLoaderSimple", { ckpt_name: SCAIL.sam });
+  const sized = await sharp(picture).resize(small.width, small.height, { fit: "fill" }).removeAlpha().png().toBuffer();
+  const image = at(g.add("LoadImage", { image: (await tools.uploadData(sized, `ripple-people-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.png`)).name }));
+  const found = OTHERS.map((text) =>
+    at(g.add("MaskToImage", { mask: at(g.add("SAM3_Detect", { model: at(sam), image, conditioning: at(g.add("CLIPTextEncode", { text, clip: at(sam, 1) })), threshold: 0.45, refine_iterations: 0, individual_masks: false }), 0) })),
+  );
+  g.add("SaveImage", { images: at(g.add("BatchImagesNode", Object.fromEntries(found.map((p, k) => [`images.image${k}`, p])))), filename_prefix: "crackio/ripple-people" });
+  const pictures = await tools.probe(g.nodes);
+  if (pictures.length !== OTHERS.length) return null;
+  const [people, balls] = await Promise.all(
+    pictures.map(async (p) => {
+      const { data, info } = await sharp(p).extractChannel(0).raw().toBuffer({ resolveWithObject: true });
+      return info.width === small.width && info.height === small.height ? data : null;
+    }),
+  );
+  return people && balls ? { people, balls } : null;
 }
 
 /**
@@ -1171,13 +1276,13 @@ async function backwards(file: string, dir: string, signal: AbortSignal) {
   return out;
 }
 
-/** Masks in a given order as a small lossless clip (white on black at 24 fps), for the graph to load. */
-async function maskClip(masks: Buffer[], order: number[], size: Size, file: string, signal: AbortSignal) {
+/** Masks in a given order as a small lossless clip (white on black at the clip's `fps`), for the graph to load. */
+async function maskClip(masks: Buffer[], order: number[], size: Size, file: string, signal: AbortSignal, fps: number = LTX.fps) {
   const raw = `${file}.gray`;
   const blank = Buffer.alloc(size.width * size.height);
   await fs.writeFile(raw, Buffer.concat(order.map((f) => masks[f] ?? blank)));
   const run = await runFfmpeg(
-    ["-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", `${size.width}x${size.height}`, "-r", String(LTX.fps), "-i", raw, "-c:v", "libx264", "-qp", "0", "-pix_fmt", "yuv420p", file],
+    ["-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", `${size.width}x${size.height}`, "-r", String(fps), "-i", raw, "-c:v", "libx264", "-qp", "0", "-pix_fmt", "yuv420p", file],
     { signal, timeoutMs: 2 * 60_000 },
   );
   await fs.rm(raw, { force: true });
@@ -1213,10 +1318,55 @@ Pick the take where the one named below is most fully replaced by the one in the
 Answer with JSON only: {"best": the take's image number, "replaced": true or false for that take, "pose": true or false (that take keeps the original's body position, limbs and what they hold or touch), "left": "what is still wrong in that take, in a few words"}`;
 
 /**
- * The best of the takes, read by a vision model next to the original and the character: which take shows the new one
- * most fully in place, and whether even that one still shows the original. Null when no vision model answers.
+ * When Crackio's swap judge (LFM3-VL, v9) passes a take, by the strictness picked on the Swap page: its chance that the
+ * take is fully the new one (`replaced`) at least `once` for one look (the whole frame, or a redraw that is a close-up
+ * already), or `twice` averaged over the whole frame and a close look (closeUps), and its chance that the pose was kept
+ * at least `pose`. Measured on the user's held-out picks (two looks): strict 0.55 caught 177 of 188 bad takes and passed
+ * 35 of 64 good ones; normal 0.47, 174 and 39; lenient 0.30, 165 and 47. Lenient is the user's standard ("acceptable
+ * passes": a swap with small flaws is kept; redraws that dropped good keyframes cost the Ozil swap ~7 minutes).
  */
-async function bestTake(frame: string, takes: Buffer[], picture: string, who: string, costume: string, dir: string, signal: AbortSignal) {
+const JUDGE_PASS = {
+  strict: { once: 0.6, twice: 0.55, pose: 0.5 },
+  normal: { once: 0.55, twice: 0.47, pose: 0.5 },
+  lenient: { once: 0.35, twice: 0.3, pose: 0.5 },
+};
+
+/** A keyframe's bar for the judge's `replaced` (bestTake): only takes it is all but sure of are dropped. */
+const KEYFRAME_BAR = 0.05;
+
+type Verdict = { best?: unknown; replaced?: unknown; pose?: unknown; left?: unknown };
+
+/**
+ * The frame and each take cut around a subject's box (`near`, in the frame's pixels; a quarter of its size around it)
+ * and enlarged to 1024 px on the long side, so a face and hands are more than a few pixels. Each picture is cut at its
+ * own size, a take being drawn at a size of its own.
+ */
+async function closeUps(frame: string, files: string[], near: Box, dir: string) {
+  const { width: W = 0, height: H = 0 } = await sharp(frame).metadata();
+  if (!W || !H) return null;
+  const pad = 0.25 * Math.max(near.w, near.h);
+  const [x0, y0] = [Math.max(0, near.x - pad) / W, Math.max(0, near.y - pad) / H];
+  const [x1, y1] = [Math.min(W, near.x + near.w + pad) / W, Math.min(H, near.y + near.h + pad) / H];
+  const cut = async (file: string, name: string) => {
+    const { width: w = 0, height: h = 0 } = await sharp(file).metadata();
+    const [left, top] = [Math.round(x0 * w), Math.round(y0 * h)];
+    const area = { left, top, width: Math.min(w - left, Math.round(x1 * w) - left), height: Math.min(h - top, Math.round(y1 * h) - top) };
+    if (area.width < 16 || area.height < 16) return null;
+    const out = path.join(dir, name);
+    await sharp(file).extract(area).resize({ width: 1024, height: 1024, fit: "inside" }).png().toFile(out);
+    return out;
+  };
+  const [close, ...takes] = await Promise.all([cut(frame, "close-frame.png"), ...files.map((f, k) => cut(f, `close-take-${k}.png`))]);
+  return close && takes.every(Boolean) ? { frame: close, takes: takes as string[] } : null;
+}
+
+/**
+ * The best of a redraw's takes, read by a vision model next to the original and the character: which take shows the new
+ * one most fully in place in the original's pose, and whether even that one still shows the original; null when no vision
+ * model answers. `extra`: the subject's box on the whole frame (for the judge's close look), and the redraw's words and
+ * pose read, kept with the check in the swap log.
+ */
+async function bestTake(frame: string, takes: Buffer[], picture: string, who: string, costume: string, dir: string, signal: AbortSignal, checks: Checks, extra: { near?: Box | null; prompt?: string; pose?: string; keyframe?: boolean; changed?: number[] } = {}) {
   const files = await Promise.all(
     takes.map(async (take, k) => {
       const file = path.join(dir, `take-${k}.png`);
@@ -1225,7 +1375,80 @@ async function bestTake(frame: string, takes: Buffer[], picture: string, who: st
     }),
   );
   // Loaded here: the text models' module reaches the engines, which load these recipes.
-  const { askText } = await import("@/lib/engines/refine");
+  const [{ askText }, { lfm3Machine }] = await Promise.all([import("@/lib/engines/refine"), import("@/lib/engines/comfy-text")]);
+  // Crackio's own judge reads one take at a time (a keyframe's single take too). Asked about two at once, judge v5 passed
+  // every pair where both takes were bad (0 of 105 of the user's; the stock poses in crackio-22's swaps); one at a time,
+  // v8 fails 95 of 105.
+  const judgeAt = checks.judges[0] === "local:lfm3-judge" ? await lfm3Machine("judge").catch(() => null) : null;
+  if (judgeAt) {
+    await queueClear(judgeAt, signal);
+    // Each take looked at whole and, given the subject's box, close up; the judge's odds from both looks averaged.
+    const close = extra.near ? await closeUps(frame, files, extra.near, dir).catch(() => null) : null;
+    const look = (original: string, take: string) => {
+      let odds: Record<string, number> | undefined;
+      return askText({
+        instructions: SWAP_CHECK,
+        text: `Replaced: ${who}.${costume ? ` Costume asked for: ${costume}.` : ""} Takes: image 2.`,
+        references: [
+          { path: original, label: "the original frame" },
+          { path: take, label: "take 1" },
+          { path: picture, label: "who or what should now be there" },
+        ],
+        imageEdge: 1024,
+        detail: "high",
+        prefer: [checks.judges[0]!],
+        odds: { keys: ["replaced", "pose"], got: (o) => (odds = o) },
+        signal,
+        timeoutMs: 60_000,
+      })
+        .then((a) => ({ verdict: a ? jsonObject<Verdict>(a) : null, odds }))
+        .catch(() => ({ verdict: null, odds: undefined }));
+    };
+    const each = await Promise.all(files.map((f, k) => Promise.all([look(frame, f), ...(close ? [look(close.frame, close.takes[k]!)] : [])])));
+    if (each.every(([whole]) => typeof whole!.verdict?.replaced === "boolean")) {
+      // A take passes when the judge is sure enough that it's fully the new one, in the original's pose (its plain yes and
+      // no where a look gave no odds). The surest passing take is kept; else the surest one: the first was kept before,
+      // and on Freya's swap that was a take the picture model handed back unchanged (sure 0.00, the other 0.08), so the
+      // whole clip ran from the original man.
+      type Looks = (typeof each)[number];
+      const mean = (looks: Looks, key: string) => (looks.every((l) => l.odds?.[key] !== undefined) ? looks.reduce((sum, l) => sum + l.odds![key]!, 0) / looks.length : undefined);
+      const verdict = (looks: Looks) => looks[0]!.verdict!;
+      const bars = JUDGE_PASS[checks.strictness ?? "lenient"];
+      const sure = each.map((looks) => mean(looks, "replaced") ?? (verdict(looks).replaced === true ? 1 : 0));
+      // A keyframe passes at KEYFRAME_BAR, still only in the original's pose: above it, v9's odds on people are noise.
+      // At the full bar, Ozil's good keyframes (0.05-0.29) were dropped and drawn again in vain (14 drawings, 7.6 min);
+      // at half of what the first drawing got, truck × Freya (0.311) still threw out 4 of 5 good ones at 0.08-0.15 and
+      // she aged between them. Takes handed back unchanged score 0.001.
+      // Nor above what the judge gave the first drawing (the whole clip is made from it), down to 0.01: on clips it can't
+      // read, it gave clean drawings 0.02-0.05 (truck × Freya's first one 0.018, talk × Marco's 0.042), and the flat bar
+      // dropped truck × Freya's last keyframe, two clean Freyas at 0.023 and 0.017, so its last 5 s ran unguided and her
+      // hair flicked where the driver sat still. The 9 keyframes in the swap logs this lets in were all clean swaps; at 0.6
+      // of the first drawing's, 15 more came in, one a Freya with a bob and the driver's fist on the door.
+      const base = close ? bars.twice : bars.once;
+      const bar = extra.keyframe ? Math.min(base, KEYFRAME_BAR, Math.max(0.01, checks.anchorSure ?? KEYFRAME_BAR)) : base;
+      const posed = each.map((looks) => (mean(looks, "pose") ?? (verdict(looks).pose === false ? 0 : 1)) >= bars.pose);
+      const pass = sure.map((p, k) => p >= bar && posed[k]);
+      const best = pass.reduce((b, ok, k) => (ok && (b < 0 || sure[k]! > sure[b]!) ? k : b), -1);
+      // None passed: the take that changed most of its subject's box, among those in the pose (all when none is). The
+      // surest was kept before, and on people v9's odds under the bar are noise: talk × Freya, it gave the original
+      // rapper with a blonde wig 0.018 and two clean Freyas 0.008 and 0.014, so the clip ran from the wig (80% of the
+      // frame as it was, against 67% for a clean Freya).
+      const changed = extra.changed?.length === takes.length ? extra.changed : null;
+      const among = posed.some(Boolean) ? posed : posed.map(() => true);
+      const k = best >= 0 ? best : changed ? changed.reduce((b, c, j) => (among[j] && (b < 0 || c > changed[b]!) ? j : b), -1) : sure.reduce((b, p, j) => (p! > sure[b]! ? j : b), 0);
+      // The keyframes' bar comes from the first drawing actually kept, not the surest take: the truck kept a clean
+      // Freya the judge gave 0.074 while another take had 0.234, so a bar of 0.117 threw out 4 of 5 good keyframes
+      // (0.08-0.11) and she aged between the one left.
+      if (!extra.keyframe) checks.anchorSure = sure[k];
+      const r = verdict(each[k]!);
+      await logSwapCheck(frame, files, picture, {
+        who, costume, prompt: extra.prompt, pose: extra.pose, checker: checks.judges[0]!, bar, keyframe: Boolean(extra.keyframe), anchorSure: checks.anchorSure ?? null,
+        takes: each.map((looks, j) => ({ looks: looks.map((l) => ({ verdict: l.verdict, odds: l.odds })), sure: sure[j], pass: pass[j]! })),
+        chosen: k, passed: best >= 0,
+      });
+      return { take: k, replaced: best >= 0, pose: posed[k]!, left: typeof r.left === "string" ? r.left.trim() : "" };
+    }
+  }
   const answer = await askText({
     instructions: SWAP_CHECK,
     text: `Replaced: ${who}.${costume ? ` Costume asked for: ${costume}.` : ""} Takes: ${files.map((_, k) => `image ${k + 2}`).join(", ")}.`,
@@ -1236,14 +1459,19 @@ async function bestTake(frame: string, takes: Buffer[], picture: string, who: st
     ],
     imageEdge: 1024,
     detail: "high",
-    prefer: RIPPLE.lookers,
+    prefer: checks.judges,
     signal,
     timeoutMs: 60_000,
   }).catch(() => null);
-  const read = answer ? jsonObject<{ best?: unknown; replaced?: unknown; pose?: unknown; left?: unknown }>(answer) : null;
+  const read = answer ? jsonObject<Verdict>(answer) : null;
   if (typeof read?.replaced !== "boolean") return null;
-  const k = typeof read.best === "number" ? Math.round(read.best) - 2 : 0;
-  return { take: Math.min(takes.length - 1, Math.max(0, k)), replaced: read.replaced, pose: read.pose !== false, left: typeof read.left === "string" ? read.left.trim() : "" };
+  const k = Math.min(takes.length - 1, Math.max(0, typeof read.best === "number" ? Math.round(read.best) - 2 : 0));
+  await logSwapCheck(frame, files, picture, {
+    who, costume, prompt: extra.prompt, pose: extra.pose, checker: checks.judges.join(" > "),
+    takes: files.map((_, j) => ({ looks: j === k ? [{ verdict: read }] : [], pass: j === k && read.replaced === true && read.pose !== false })),
+    chosen: k, passed: read.replaced === true && read.pose !== false,
+  });
+  return { take: k, replaced: read.replaced, pose: read.pose !== false, left: typeof read.left === "string" ? read.left.trim() : "" };
 }
 
 /**
@@ -1254,7 +1482,7 @@ async function bestTake(frame: string, takes: Buffer[], picture: string, who: st
  * when even that one still shows the original, it draws once more. Without pictures the job's words are the change
  * ("make the car red"). The edit goes back where it came from, over the frame (a zoomed part with feathered edges).
  */
-async function rippleRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: number, H: number, focus: Box | null = null, tries = 1): Promise<Buffer> {
+async function rippleRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: number, H: number, checks: Checks, focus: Box | null = null, tries = 1): Promise<Buffer> {
   const firstUrl = job.options?.extra?.firstFrame;
   const given = typeof firstUrl === "string" ? urlToPath(firstUrl) : null;
   if (given) return sharp(await fs.readFile(given)).resize(W, H, { fit: "fill" }).removeAlpha().png().toBuffer();
@@ -1292,7 +1520,7 @@ async function rippleRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W
     ? [
         `Image 1 is ${what}.`,
         ...parts,
-        "Each takes exactly the pose, size and place in the frame of what it replaces: the same turn of the body and head, the same arms, hands and legs, holding and touching what it touched; a vehicle or object keeps the same angle, perspective and shadow.",
+        "Each takes exactly the pose, size and place in the frame of what it replaces: the same turn of the body and head, the same arms, hands and legs, holding and touching what it touched, and the same expression, the mouth open or closed just as wide; a vehicle or object keeps the same angle, perspective and shadow.",
         keep,
       ].join(" ")
     : `Image 1 is ${what}. ${change.replace(/[.\s]+$/, "")}. ${keep}`;
@@ -1308,14 +1536,14 @@ async function rippleRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W
     const takes = (await Promise.all(Array.from({ length: Math.max(1, tries) }, () => draw(prompt)))).filter((take): take is Buffer => Boolean(take));
     edited = takes[0] ?? null;
     // Checked by a vision model when one is connected: the best take kept, and drawn once more when it still shows the original.
-    const seen = takes.length && pictures.length ? await bestTake(file, takes, pictures[0], whom.join(" and "), costumes.join("; "), dir, tools.signal) : null;
+    const seen = takes.length && pictures.length ? await bestTake(file, takes, pictures[0], whom.join(" and "), costumes.join("; "), dir, tools.signal, checks, { prompt }) : null;
     if (seen) {
       edited = takes[seen.take];
       if (!seen.replaced) {
         // One more take, told what was left, then the better of it and the best so far.
         tools.note?.(`The redrawn frame still showed ${seen.left || "the original"}: drawing it again`);
         const again = await draw(`${prompt} The last try left ${seen.left || "the original person's face and hair"} in place: change that too.`);
-        const better = again ? await bestTake(file, [edited, again], pictures[0], whom.join(" and "), costumes.join("; "), dir, tools.signal) : null;
+        const better = again ? await bestTake(file, [edited, again], pictures[0], whom.join(" and "), costumes.join("; "), dir, tools.signal, checks, { prompt }) : null;
         if (again) edited = better ? [edited, again][better.take] : again;
       }
     }
@@ -1350,7 +1578,7 @@ Pick the take that makes the change asked for below most completely and convinci
 Answer with JSON only: {"best": the take's image number, "done": true or false for that take, "left": "what still isn't as asked, in a few words"}`;
 
 /** The best of the takes of a change in words, read by a vision model next to the original. Null when none answers. */
-async function bestEdit(frame: string, takes: Buffer[], asked: string, dir: string, signal: AbortSignal) {
+async function bestEdit(frame: string, takes: Buffer[], asked: string, dir: string, signal: AbortSignal, checks: Checks) {
   const files = await Promise.all(
     takes.map(async (take, k) => {
       const file = path.join(dir, `edit-${k}.png`);
@@ -1365,7 +1593,7 @@ async function bestEdit(frame: string, takes: Buffer[], asked: string, dir: stri
     references: [{ path: frame, label: "the original frame" }, ...files.map((f, k) => ({ path: f, label: `take ${k + 1}` }))],
     imageEdge: 1024,
     detail: "high",
-    prefer: RIPPLE.lookers,
+    prefer: checks.lookers,
     signal,
     timeoutMs: 60_000,
   }).catch(() => null);
@@ -1382,9 +1610,9 @@ const POSE = `Image 1 is part of a frame from a video. Describe the exact body p
  * tend to draw it standing as on the sheet (Özil: the grandma mid-kick became Pigeongoo standing with the ball gone, and
  * Ripple froze him there and made up a player beside him). Empty when no vision model answers.
  */
-async function poseOf(file: string, who: string, signal: AbortSignal) {
+async function poseOf(file: string, who: string, signal: AbortSignal, checks: Checks) {
   const { askText } = await import("@/lib/engines/refine");
-  const answer = await askText({ instructions: POSE, text: `The one: ${who}.`, references: [{ path: file, label: "the picture" }], imageEdge: 768, prefer: RIPPLE.lookers, signal, timeoutMs: 30_000 }).catch(() => null);
+  const answer = await askText({ instructions: POSE, text: `The one: ${who}.`, references: [{ path: file, label: "the picture" }], imageEdge: 768, prefer: checks.lookers, signal, timeoutMs: 30_000 }).catch(() => null);
   return answer?.trim().replace(/^["'\s]+|["'\s]+$/g, "").slice(0, 320) ?? "";
 }
 
@@ -1392,8 +1620,12 @@ async function poseOf(file: string, who: string, signal: AbortSignal) {
  * Who it is by their looks alone, without where they are or what they're doing: "the man in the beige cardigan" from
  * "… raising his hand in the center of the frame" (at 13 s it was the other one raising his hand, and he got the pigeon).
  */
-const bareWho = (what: string) =>
-  what.split(/,\s*who\b|\s+who\s|\s+at the\s|\s+on the (?:left|right)\b|\s+in the (?:left|right|middle|centre|center)\b|\s+(?:standing|sitting|playing|raising|dancing|leaning|holding|looking|pointing|walking|running|jumping|singing|talking|smiling|freestyling|hopping|spinning|kneeling|lying|typing|gesturing|waving|clapping|filming|grooving|bouncing|knocking|skipping)\b/i)[0].trim() || what;
+const bareWho = (what: string) => {
+  const head = what.split(/,\s*who\b|\s+who\s|\s+at the\s|\s+on the (?:left|right)\b|\s+in the (?:left|right|middle|centre|center)\b|\s+(?:standing|sitting|playing|raising|dancing|leaning|holding|looking|pointing|walking|running|jumping|singing|talking|smiling|freestyling|hopping|spinning|kneeling|lying|typing|gesturing|waving|clapping|filming|grooving|bouncing|knocking|skipping)\b/i)[0].trim();
+  // "the smiling man…": a word the split takes for what they're doing describes them, and only "the" was left (the
+  // judge was asked whether "the" had been replaced): then the words without their place.
+  return head.split(/\s+/).length >= 2 ? head : what.replace(PLACE_WORDS, "").trim() || what;
+};
 
 /**
  * How much of the frame outside `box` (grown by a quarter) a redraw changed: a keyframe's change drawn onto someone
@@ -1414,6 +1646,29 @@ async function changedOutside(before: Buffer, after: Buffer, box: Box, W: number
   return outside ? changed / outside : 0;
 }
 
+/**
+ * How much of `box` (the subject, grown by a quarter; the whole picture without one) a redraw changed. Next to nothing
+ * when the picture model handed the frame back as it was: FLUX 3 Klein did on Freya's keyframes (the whole take 3 levels
+ * from the frame), which the judge then had to turn down and a retry draw again.
+ */
+async function changedInside(before: Buffer, after: Buffer, box: Box | null, W: number, H: number) {
+  const [w, h] = [160, Math.max(1, Math.round((160 * H) / W))];
+  const [a, b] = await Promise.all([before, after].map((p) => sharp(p).removeAlpha().resize(w, h, { fit: "fill" }).greyscale().raw().toBuffer()));
+  const area = box ?? { x: 0, y: 0, w: W, h: H };
+  const [gx, gy] = box ? [area.w * 0.25, area.h * 0.25] : [0, 0];
+  const [x0, x1, y0, y1] = [Math.max(0, ((area.x - gx) * w) / W), Math.min(w, ((area.x + area.w + gx) * w) / W), Math.max(0, ((area.y - gy) * h) / H), Math.min(h, ((area.y + area.h + gy) * h) / H)];
+  let [inside, changed] = [0, 0];
+  for (let y = Math.floor(y0); y < y1; y++)
+    for (let x = Math.floor(x0); x < x1; x++) {
+      inside++;
+      if (Math.abs(a[y * w + x] - b[y * w + x]) > 40) changed++;
+    }
+  return inside ? changed / inside : 0;
+}
+
+/** A take that changed less than this share of its subject's box was handed back as it was. */
+const REDRAWN = 0.04;
+
 /** Where it is, in a subject's name ("on the right", "in the left side of the frame (x 62–100%…)"): wrong in a close-up. */
 const PLACE_WORDS = /,?\s*(?:(?:on|at|in|to)\s+the\s+(?:far\s+)?(?:left|right|middle|center|centre|top|bottom|front|back|background|foreground)(?:\s+(?:side|edge|half|corner))?(?:\s+of\s+the\s+(?:frame|picture|image|shot))?|\(x [^)]*\))/gi;
 
@@ -1431,9 +1686,31 @@ function editSentence(e: Edit, who: string, shown: string[]) {
   const lead = `${Who} becomes the ${noun} shown in ${shown.join(" and ")}`;
   if (e.kind && e.kind !== "person" && e.kind !== "face") return `${lead}${look}, at exactly the same angle, perspective, size and place, with the same shadow.`;
   const clothes = e.wearing ? `wearing ${e.wearing.replace(/[.\s]+$/, "")}` : "dressed head to toe in the outfit from those pictures (top, trousers or skirt, legs and shoes)";
+  // Hands and feet named in the character's own words: Pigeongoo kept the dancer's white sneakers over his bare pink
+  // feet, and people's hands came back human on creatures.
+  const said = `${e.look ?? ""}, ${e.wearing ?? ""}`.split(/[,;]|\s+and\s+/).map((s) => s.trim().replace(/[.\s]+$/, "")).filter(Boolean);
+  const hands = said.find((s) => /\b(hands?|paws?|claws?|talons?|fingers|gloves?|mittens?)\b/i.test(s));
+  const feet = said.find((s) => s !== hands && /\b(feet|foot|barefoot|shoes?|sneakers?|trainers?|boots?|heels?|sandals?|loafers?|slippers?|hooves|paws?|talons?)\b/i.test(s));
+  const limbs = `${hands ? ` Its hands are its own: ${hands}.` : ""}${feet ? ` On its feet: ${feet}, not the original's shoes.` : ""}`;
   // Hands in view: a scarecrow drawn with straw over its hands had nothing for the video to move (Alors on Danse: the
   // keyboard player's hands stayed still while the original's played).
-  return `${lead}, with that one's own face, head, hair, skin, hands and build${look}, ${clothes}. Nothing of the original person's face, hair, hands, wig, headwear or clothes stays, not a skirt, legging or shoe. It takes exactly the pose, size and place of the one it replaces: the same turn of the body and head, the same arms, hands and legs, holding and touching what they touched. Its hands stay in plain view wherever the original's are, never hidden by sleeves, cuffs, straw or fur.`;
+  return `${lead}, with that one's own face, head, hair, skin, hands and build${look}, ${clothes}.${limbs} Nothing of the original person's face, hair, hands, wig, headwear or clothes stays, not a skirt, legging or shoe. It takes exactly the pose, size and place of the one it replaces: the same turn of the body and head, the same arms, hands and legs, holding and touching what they touched, and the same face in that moment: the same expression, the mouth open or closed just as wide (mid-word, smiling, laughing), the eyes looking the same way. Its hands stay in plain view wherever the original's are, never hidden by sleeves, cuffs, straw or fur.`;
+}
+
+/**
+ * Until the judge's ComfyUI has nothing in line or running, for at most `ms`. Beside a redraw on its GPU (a swap's
+ * keyframes are drawn all at once), each answer took 12-26 s instead of ~2: the bridge moves the judge off the card
+ * for every prompt, and the two then share it.
+ */
+async function queueClear(target: { url: string; token?: string }, signal: AbortSignal, ms = 45_000) {
+  const headers = target.token ? { Authorization: `Bearer ${target.token}` } : undefined;
+  for (const until = Date.now() + ms; Date.now() < until && !signal.aborted; ) {
+    const q = await fetch(`${target.url}/queue`, { headers, signal, cache: "no-store" })
+      .then((r) => r.json() as Promise<{ queue_running?: unknown[]; queue_pending?: unknown[] }>)
+      .catch(() => null);
+    if (!q || (!q.queue_running?.length && !q.queue_pending?.length)) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
 }
 
 /**
@@ -1446,7 +1723,7 @@ async function redrawPart(
   frame: Buffer,
   W: number,
   H: number,
-  ask: { sentence: string; pictures: string[]; who: string; costume: string; focus: Box | null; guard: Buffer | null; stage: string; keep?: string; pose?: boolean; strict?: boolean },
+  ask: { sentence: string; pictures: string[]; who: string; costume: string; focus: Box | null; near?: Box | null; guard: Buffer | null; stage: string; keep?: string; pose?: boolean; strict?: boolean; checks: Checks },
   tries: number,
 ) {
   const { focus } = ask;
@@ -1456,18 +1733,37 @@ async function redrawPart(
   try {
     const file = path.join(dir, "frame.png");
     await fs.writeFile(file, focus ? await sharp(frame).extract({ left: part.x, top: part.y, width: part.w, height: part.h }).png().toBuffer() : frame);
-    const pose = ask.pose ? await poseOf(file, ask.who, tools.signal) : "";
+    const pose = ask.pose ? await poseOf(file, ask.who, tools.signal, ask.checks) : "";
     const held = pose ? ` Their exact position, kept as it is: ${pose.replace(/[.\s]+$/, "")}.` : "";
     const prompt = `Image 1 is ${focus ? "a close-up of part of a frame from a video" : "a frame from a video"}. ${ask.sentence}${held} ${keep}`;
     const shape = ASPECTS.reduce((best, a) => (Math.abs(Math.log(a.w / a.h / (part.w / part.h))) < Math.abs(Math.log(best.w / best.h / (part.w / part.h))) ? a : best)).id;
     const draw = (words: string) => tools.edit!(words, [file, ...ask.pictures], shape, { prefer: RIPPLE.editors, stage: ask.stage });
     // All at once: each queues on the GPU while the others' pictures travel.
-    const takes = (await Promise.all(Array.from({ length: Math.max(1, tries) }, () => draw(prompt)))).filter((take): take is Buffer => Boolean(take));
-    if (!takes.length) throw new EngineError("No picture model is connected to redraw the clip's frame.", "Install FLUX 3 Klein on the Local page, or connect one.");
+    const drawn = (await Promise.all(Array.from({ length: Math.max(1, tries) }, () => draw(prompt)))).filter((take): take is Buffer => Boolean(take));
+    if (!drawn.length) throw new EngineError("No picture model is connected to redraw the clip's frame.", "Install FLUX 3 Klein on the Local page, or connect one.");
+    // A take handed back as it was is dropped before any check and drawn once more: the judge only ever turned those
+    // down, and a retry then compared them against the next one.
+    const before = await fs.readFile(file);
+    const redrawn = async (take: Buffer | null) => Boolean(take) && (await changedInside(before, take!, focus ? null : (ask.near ?? null), part.w, part.h)) >= REDRAWN;
+    let takes: Buffer[] = [];
+    for (const take of drawn) if (await redrawn(take)) takes.push(take);
+    // A keyframe handed back unchanged isn't drawn again: the picture model's refusals don't hang on the seed (six seeds
+    // of two Özil keyframes, the player small among others, came back as the same unchanged frame), and the clip has
+    // its first drawing either way.
+    if (!takes.length && ask.strict) throw new EngineError("The picture model handed the keyframe back unchanged.");
+    if (!takes.length) {
+      tools.note?.("The picture model handed the frame back unchanged: drawing it again");
+      const fresh = await draw(prompt);
+      takes = fresh && (await redrawn(fresh)) ? [fresh] : drawn;
+    }
     // A character is judged against its picture; a change in words against the words.
     const judge = async (list: Buffer[]) => {
-      if (!ask.pictures.length) return bestEdit(file, list, ask.sentence, dir, tools.signal);
-      const seen = await bestTake(file, list, ask.pictures[0], ask.who, ask.costume, dir, tools.signal);
+      if (!ask.pictures.length) return bestEdit(file, list, ask.sentence, dir, tools.signal, ask.checks);
+      // A close look at the subject too, from its box on the whole frame (a zoomed redraw is a close-up already); how much
+      // of that box each take changed, for when the judge passes none.
+      const near = focus ? null : (ask.near ?? null);
+      const changed = await Promise.all(list.map((take) => changedInside(before, take, near, part.w, part.h)));
+      const seen = await bestTake(file, list, ask.pictures[0], ask.who, ask.costume, dir, tools.signal, ask.checks, { near, prompt, pose, keyframe: Boolean(ask.strict), changed });
       return seen && { take: seen.take, done: seen.replaced && seen.pose, left: seen.left || (seen.pose ? "" : "the pose") };
     };
     let edited = takes[0];
@@ -1477,7 +1773,8 @@ async function redrawPart(
       edited = takes[seen.take];
       if (!seen.done) {
         tools.note?.(`The redrawn frame still showed ${seen.left || "the original"}: drawing it again`);
-        const again = await draw(`${prompt} The last try got this wrong: ${seen.left || "part of the original was left"}. Fix that, in exactly the original's pose.`);
+        const fresh = await draw(`${prompt} The last try got this wrong: ${seen.left || "part of the original was left"}. Fix that, in exactly the original's pose.`);
+        const again = (await redrawn(fresh)) ? fresh : null;
         const better = again ? await judge([edited, again]) : null;
         if (again) edited = better ? [edited, again][better.take] : again;
         confirmed = Boolean(better?.done);
@@ -1498,7 +1795,7 @@ async function redrawPart(
  * (`boxes`: each subject's box on this frame), and kept off everyone else (`guards`): removals first, then characters,
  * then changes in words; a new background (`background`, words) last, over the whole frame.
  */
-async function editRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: number, H: number, edits: Edit[], boxes: (Box | null)[], guards: (Buffer | null)[], tries: number, background: string, match?: string | (string | undefined)[], light = false) {
+async function editRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: number, H: number, edits: Edit[], boxes: (Box | null)[], guards: (Buffer | null)[], tries: number, background: string, checks: Checks, match?: string | (string | undefined)[], light = false) {
   if (!tools.edit) throw new EngineError("No picture model is connected to redraw the clip's frame.", "Install FLUX 3 Klein on the Local page, or connect one.");
   const extra = job.options?.extra ?? {};
   const views = (Array.isArray(extra.views) ? (extra.views as unknown[]) : []).map((l) => (Array.isArray(l) ? l : []).flatMap((u) => (typeof u === "string" ? (urlToPath(u) ?? []) : [])));
@@ -1515,7 +1812,10 @@ async function editRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: 
     // exactly like it.
     const earlier = Array.isArray(match) ? match[k] : match;
     const pictures = earlier ? [...own, earlier] : own;
-    const same = earlier ? ` It looks exactly as in image ${pictures.length + 1}, the same ${e.to === "cast" ? "character" : "change"} a moment earlier in this clip: the same face, colours, clothes and details.` : "";
+    // Its looks only: the pose is image 1's (given the earlier one's pose, keyframes came back in it).
+    const same = earlier
+      ? ` It looks exactly as in image ${pictures.length + 1}, the same ${e.to === "cast" ? "character" : "change"} a moment earlier in this clip: the same face, colours, clothes and details${e.to === "cast" ? ", but not its pose: the body, arms and hands take the pose of the one in image 1" : ""}.`
+      : "";
     const sentence = `${editSentence(e, who, own.map((_, i) => `image ${i + 2}`))}${same}`;
     tools.note?.(`${e.to === "remove" ? "Removing" : "Changing"} ${who}${focus ? ", up close" : ""}`);
     const before = current;
@@ -1524,7 +1824,7 @@ async function editRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: 
       current,
       W,
       H,
-      { sentence, pictures, who, costume: e.to === "cast" && e.wearing ? `${who} → wearing ${e.wearing}` : "", focus, guard: guards[k] ?? null, stage: focus ? "Redrawing the subject up close" : "Redrawing the frame", pose: e.to === "cast", strict: light },
+      { sentence, pictures, who, costume: e.to === "cast" && e.wearing ? `${who} → wearing ${e.wearing}` : "", focus, near: boxes[k] ?? null, guard: guards[k] ?? null, stage: focus ? "Redrawing the subject up close" : "Redrawing the frame", pose: e.to === "cast", strict: light, checks },
       tries,
     );
     if (light && boxes[k] && (await changedOutside(before, current, boxes[k]!, W, H)) > 0.04) throw new EngineError(`The redraw changed more than ${who}.`);
@@ -1532,18 +1832,18 @@ async function editRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: 
   if (background) {
     tools.note?.("Changing the background");
     const sentence = `Replace the background with ${background.replace(/[.\s]+$/, "")}: everything behind the people and things in front becomes that, from the same camera angle and framing, while every person and thing in front stays exactly as it is, in the same place, pose, size and light.`;
-    current = await redrawPart(tools, current, W, H, { sentence, pictures: [], who: "the background", costume: "", focus: null, guard: null, stage: "Redrawing the background", keep: "Keep the framing and any text over the picture as they are." }, tries);
+    current = await redrawPart(tools, current, W, H, { sentence, pictures: [], who: "the background", costume: "", focus: null, guard: null, stage: "Redrawing the background", keep: "Keep the framing and any text over the picture as they are.", checks }, tries);
   }
   return current;
 }
 
-/** The clip at LTX's 24 fps (a new file in a folder of its own), or the clip itself when it already is. */
-async function at24fps(file: string, fps: number | undefined, signal: AbortSignal) {
-  if (fps && Math.abs(fps - LTX.fps) < 0.05) return { file, done: async () => {} };
+/** The clip at `rate` frames a second (a new file in a folder of its own), or the clip itself when it already is. */
+async function atRate(file: string, fps: number | undefined, rate: number, signal: AbortSignal) {
+  if (fps && Math.abs(fps - rate) < 0.05) return { file, done: async () => {} };
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-ripple-"));
   const out = path.join(dir, "clip.mp4");
-  const run = await runFfmpeg(["-hide_banner", "-loglevel", "error", "-y", "-i", file, "-vf", `fps=${LTX.fps}`, "-an", "-c:v", "libx264", "-crf", "14", "-pix_fmt", "yuv420p", out], { signal, timeoutMs: 5 * 60_000 });
-  if (run.code !== 0) throw new EngineError("Couldn't turn the clip into 24 fps for LTX-2.5.");
+  const run = await runFfmpeg(["-hide_banner", "-loglevel", "error", "-y", "-i", file, "-vf", `fps=${rate}`, "-an", "-c:v", "libx264", "-crf", "14", "-pix_fmt", "yuv420p", out], { signal, timeoutMs: 5 * 60_000 });
+  if (run.code !== 0) throw new EngineError(`Couldn't turn the clip into ${rate} fps for LTX-2.5.`);
   return { file: out, done: () => fs.rm(dir, { recursive: true, force: true }).catch(() => {}) };
 }
 
@@ -1559,7 +1859,26 @@ function reversedFrames(g: Graph, images: Link, n: number): Link {
   return batch(groups);
 }
 
-type RippleModels = { model: Link; cond: string; vae: Link; audioVae: Link; upscaler: Link | null; steps: number; keyStrength: number };
+type RippleModels = { model: Link; cond: string; vae: Link; audioVae: Link; upscaler: Link | null; steps: number; keyStrength: number; tile: number; soften: number; fps: number };
+
+/**
+ * A guide whose clip frames (`rest`, at `size`) are blurred where `outlines` (white on black, one a frame) has the people
+ * swapped (RIPPLE.soften): shrunk to 1/soften and grown back there, the outlines grown a little; `start` stays as it is.
+ * Grown back inside the composite (resize_source): a full-size blurred copy of every frame, held each way, took the box
+ * past its 125 GB on Özil (two ways from a middle frame) and ComfyUI was killed.
+ */
+function softGuide(g: Graph, start: Link, rest: Link, outlines: Link, size: Size, soften: number, mouths?: Link) {
+  const shrunk = (by: number) => ({ width: Math.max(16, Math.round(size.width / by)), height: Math.max(16, Math.round(size.height / by)) });
+  const blurred = at(g.add("ImageScale", { image: rest, upscale_method: "area", ...shrunk(soften), crop: "disabled" }));
+  const where = at(g.add("GrowMask", { mask: at(g.add("ImageToMask", { image: outlines, channel: "red" })), expand: RIPPLE.grow, tapered_corners: true }));
+  let soft = at(g.add("ImageCompositeMasked", { destination: rest, source: blurred, x: 0, y: 0, resize_source: true, mask: where }));
+  if (mouths) {
+    const mild = at(g.add("ImageScale", { image: rest, upscale_method: "area", ...shrunk(RIPPLE.mouth), crop: "disabled" }));
+    const mouth = at(g.add("GrowMask", { mask: at(g.add("ImageToMask", { image: mouths, channel: "red" })), expand: RIPPLE.mouthGrow, tapered_corners: true }));
+    soft = at(g.add("ImageCompositeMasked", { destination: soft, source: mild, x: 0, y: 0, resize_source: true, mask: mouth }));
+  }
+  return at(g.add("BatchImagesNode", { "images.image0": start, "images.image1": soft }));
+}
 
 /**
  * Ripple over `count` frames of `frames` (at `size`, the last frame held at least 16 frames longer), from `anchor`
@@ -1567,7 +1886,7 @@ type RippleModels = { model: Link; cond: string; vae: Link; audioVae: Link; upsc
  * With an upscaler (sharp), each pass is made at half size and LTX's ×2 latent upscaler takes it to `size` for 3 more
  * steps against the same guide, as LTX-2.5's own two-stage workflows do. The made frames, at `size`.
  */
-function ripplePasses(g: Graph, m: RippleModels, frames: Link, anchor: Link, count: number, size: Size, segment: number, masks?: (string | null)[], zone?: Link, keys?: Key[]): Link {
+function ripplePasses(g: Graph, m: RippleModels, frames: Link, anchor: Link, count: number, size: Size, segment: number, masks?: (string | null)[], zone?: Link, keys?: Key[], soft?: Link, mouths?: Link): Link {
   const half = m.upscaler ? { width: size.width / 2, height: size.height / 2 } : size;
   const sized = (image: Link, s: Size) => (s === size ? image : at(g.add("ImageScale", { image, upscale_method: "area", ...s, crop: "disabled" })));
   const step = segment - 1;
@@ -1595,7 +1914,10 @@ function ripplePasses(g: Graph, m: RippleModels, frames: Link, anchor: Link, cou
     const guide = zone
       ? painted(from, length)
       : at(g.add("BatchImagesNode", { "images.image0": start, "images.image1": at(g.add("ImageFromBatch", { image: frames, batch_index: from + 1, length: length - 1 })) }));
-    const silence = at(g.add("LTXVEmptyLatentAudio", { frames_number: length, frame_rate: LTX.fps, batch_size: 1, audio_vae: m.audioVae }));
+    // What Ripple copies from: the same with the swapped people blurred (RIPPLE.soften); a masked pass's latent still
+    // starts from the guide itself.
+    const copied = soft && !zone ? softGuide(g, start, at(g.add("ImageFromBatch", { image: frames, batch_index: from + 1, length: length - 1 })), at(g.add("ImageFromBatch", { image: soft, batch_index: from + 1, length: length - 1 })), size, m.soften, mouths ? at(g.add("ImageFromBatch", { image: mouths, batch_index: from + 1, length: length - 1 })) : undefined) : guide;
+    const silence = at(g.add("LTXVEmptyLatentAudio", { frames_number: length, frame_rate: Math.round(m.fps), batch_size: 1, audio_vae: m.audioVae }));
     const sample = (positive: Link, negative: Link, latent: Link, audio: Link, sigmas: Link) =>
       g.add("LTXVSeparateAVLatent", {
         av_latent: at(g.add("SamplerCustomAdvanced", {
@@ -1622,7 +1944,7 @@ function ripplePasses(g: Graph, m: RippleModels, frames: Link, anchor: Link, cou
         : zone
           ? at(g.add("LTXVImgToVideoInplace", { vae: m.vae, image: sized(start, half), latent: empty, strength: last ? 1 : INPAINT.start, bypass: false }))
           : (kept ?? empty),
-      image: sized(guide, half),
+      image: sized(copied, half),
       frame_idx: 0,
       strength: 1,
     });
@@ -1651,14 +1973,14 @@ function ripplePasses(g: Graph, m: RippleModels, frames: Link, anchor: Link, cou
         negative: at(video, 1),
         vae: m.vae,
         latent: at(g.add("LTXVLatentUpsampler", { samples: at(video, 2), upscale_model: m.upscaler, vae: m.vae })),
-        image: guide,
+        image: copied,
         frame_idx: 0,
         strength: 1,
       });
       const second = sample(at(regided, 0), at(regided, 1), at(regided, 2), at(first, 1), at(g.add("ManualSigmas", { sigmas: LTX.stage2 })));
       video = g.add("LTXVCropGuides", { positive: at(regided, 0), negative: at(regided, 1), latent: at(second, 0) });
     }
-    const made = at(g.add("VAEDecodeTiled", { samples: at(video, 2), vae: m.vae, tile_size: 512, overlap: 64, temporal_size: 64, temporal_overlap: 16 }));
+    const made = at(g.add("VAEDecodeTiled", { samples: at(video, 2), vae: m.vae, tile_size: m.tile, overlap: m.tile / 8, temporal_size: 64, temporal_overlap: 16 }));
     if (plain && last && output) {
       // Continued: the frames it kept are the last pass's own, already in; the rest follows on.
       output = at(g.add("BatchImagesNode", { "images.image0": output, "images.image1": at(g.add("ImageFromBatch", { image: made, batch_index: RIPPLE.hold, length: length - RIPPLE.hold })) }));
@@ -1689,6 +2011,21 @@ function restorePeople(g: Graph, made: Link, frames: Link, outline: Link, others
   const back = at(g.add("MaskComposite", { destination: people, source: own, x: 0, y: 0, operation: "subtract" }));
   const soft = blur(at(g.add("ThresholdMask", { mask: blur(back, 7, 2), value: 0.1 })), 9, 3);
   return at(g.add("ImageCompositeMasked", { destination: here, source: frames, x: 0, y: 0, resize_source: false, mask: soft }));
+}
+
+/**
+ * The made frames laid onto the clip's own frames (W×H, the clip's full size) only around what was swapped: its outline
+ * grown by about `reach` and softened, so everything else stays the original footage at its own resolution (the made
+ * frames are drawn at 720p, softer than the clip, and LTX redraws the whole frame).
+ */
+function layOnto(g: Graph, made: Link, frames: Link, outline: Link, W: number, H: number, reach: number): Link {
+  const here = at(g.add("ImageScale", { image: made, upscale_method: "lanczos", width: W, height: H, crop: "disabled" }));
+  const mask = (image: Link) => at(g.add("ImageToMask", { image, channel: "red" }));
+  const blur = (m: Link, radius: number, sigma: number) => mask(at(g.add("ImageBlur", { image: at(g.add("MaskToImage", { mask: m })), blur_radius: radius, sigma })));
+  const picked = at(g.add("ThresholdMask", { mask: mask(at(g.add("ImageScale", { image: outline, upscale_method: "bilinear", width: W, height: H, crop: "disabled" }))), value: 0.5 }));
+  const own = at(g.add("ThresholdMask", { mask: blur(picked, 31, Math.max(1, Math.min(10, reach * 0.06))), value: 0.025 }));
+  const soft = blur(own, 15, 5);
+  return at(g.add("ImageCompositeMasked", { destination: frames, source: here, x: 0, y: 0, resize_source: false, mask: soft }));
 }
 
 /**
@@ -1815,7 +2152,8 @@ function reachOf(masks: Buffer[], size: Size, H: number) {
  * Swap with LTX-2.5 and WepeNerd's Ripple IC-LoRA ("first frame, all frames"): one frame is redrawn with your
  * characters in place (rippleRedraw), and Ripple carries that change through the clip, which guides every frame (in
  * tests a dancer, a talking man and a falling car kept their moves, mouth, place and captions). The guide is the clip
- * with its first frame swapped for the edit; LTX-2.5 distilled, 8 steps, CFG 1, Ripple at 1.35, as its author runs it.
+ * with its first frame swapped for the edit; LTX-2.5 distilled, CFG 1, Ripple at 1.35 as its author runs it, in 6 steps
+ * with INT8 attention (RIPPLE).
  *
  * With a click on the subject (`extra.picks`), SAM 3.1 outlines it through the whole clip first. The frame where it
  * shows biggest is redrawn (several takes, the best kept; zoomed in around it only with `extra.zoom`), and Ripple runs
@@ -1829,14 +2167,6 @@ function reachOf(masks: Buffer[], size: Size, H: number) {
  * Without a click: the first frame is redrawn and Ripple runs forward from it. Long ways get keyframes: the character
  * redrawn again about every 4 s on a calm frame, which LTX moves into within the same pass (RIPPLE.keys).
  */
-/** Whether a swap's drawings can be checked: Gemini 3.5 Flash through a Comfy key, or a picture-reading Qwen on a ComfyUI. */
-async function canLook() {
-  // Loaded here: the text models' modules reach the engines, which load these recipes.
-  const [{ listModels }, { localLlm }] = await Promise.all([import("@/lib/models/resolve"), import("@/lib/engines/comfy-text")]);
-  if ((await listModels()).some((m) => m.id === RIPPLE.lookers[0] && m.available)) return true;
-  return Boolean(await localLlm(true).catch(() => null));
-}
-
 const RIPPLE_SWAP: Recipe = {
   id: "ltx-2.5-ripple",
   name: "LTX-2.5 Ripple swap",
@@ -1849,17 +2179,28 @@ const RIPPLE_SWAP: Recipe = {
   async build(job, tools) {
     if (!job.source) throw new EngineError("Pick a clip to swap something in.");
     if (tools.pool) throw new EngineError("LTX-2.5 Ripple runs on one GPU with about 24 GB.", "Run it on a bigger card (Advanced → Run on).");
-    // Every drawing is checked (pose, outfit, the right one changed): never swapped unchecked.
-    if (!(await canLook())) throw new EngineError("Swap needs a model to check its drawings.", "Install FLUX 3 Klein on the Local page (its Qwen3-VL 4B checks them on your GPU), or add a Comfy API key in Connections.");
+    const extra = job.options?.extra ?? {};
+    // Every drawing is checked (pose, outfit, the right one changed), by who was picked under Checks: never swapped
+    // unchecked. Loaded here: the text models' modules reach the engines, which load these recipes.
+    const checks = await (await import("@/lib/server/swap-checker")).swapChecks(extra.checker, extra.strictness);
+    tools.note?.(`Checking each drawing with ${checks.label}`);
+    // Comparisons: `extra.editor` (a picture model) redraws the frames first, before RIPPLE.editors.
+    if (typeof extra.editor === "string" && tools.edit) {
+      const [edit, editors] = [tools.edit, [extra.editor, ...RIPPLE.editors]];
+      tools = { ...tools, edit: (prompt, pictures, aspect, opts) => edit(prompt, pictures, aspect, { ...opts, prefer: editors }) };
+    }
     const info = await probe(job.source.path).catch(() => null);
     if (!info?.duration || !info.width || !info.height) throw new EngineError("Couldn't read the clip.");
     const [W, H] = [info.width, info.height];
-    const extra = job.options?.extra ?? {};
     const sharp2 = extra.sharp === true;
     // Sharp: LTX's ×2 latent upscaler finishes each pass at the clip's own size (up to about 2 MP); else about 0.9 MP.
     const size = sharp2 ? { width: snap(Math.min(W, Math.sqrt(2.1e6 * (W / H))), 64), height: snap(Math.min(H, Math.sqrt(2.1e6 / (W / H))), 64) } : rippleSize(W / H, job.options?.resolution);
-    // LTX makes 24 frames a second: the clip's own frames at that rate, up to 20 s.
-    let count = Math.max(9, Math.min(20 * LTX.fps + 1, Math.round(info.duration * LTX.fps)));
+    // LTX makes the clip's own frames, at its own rate up to 30 a second (the Swap and Templates cut it so: swapRate),
+    // else at its usual 24, up to 20 s.
+    const fps = swapRate(info.fps, info.duration);
+    let count = Math.max(9, Math.min(20 * fps + 1, Math.round(info.duration * fps)));
+    // The keyframes about every 4 s at any rate (RIPPLE.keys counts frames at 24 a second).
+    const keyGaps = { every: Math.round((RIPPLE.keys.every * fps) / LTX.fps), window: Math.round((RIPPLE.keys.window * fps) / LTX.fps), edge: Math.round((RIPPLE.keys.edge * fps) / LTX.fps) };
     // Who or what was clicked: each change's own subject (the Swap area), or one subject from Templates' clicks.
     const picks = picksOf(job);
     const listed = editsOf(job);
@@ -1870,7 +2211,7 @@ const RIPPLE_SWAP: Recipe = {
     // Two takes for each subject: a look compares two (Grok takes 4 pictures; with three takes the character's own
     // picture was the one left out), and a wrong pose or outfit is drawn once more.
     const tries = typeof extra.tries === "number" ? Math.min(4, Math.max(1, Math.round(extra.tries))) : subjects.length ? 2 : 1;
-    const clip24 = await at24fps(job.source.path, info.fps, tools.signal);
+    const clipped = await atRate(job.source.path, info.fps, fps, tools.signal);
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-ripple-"));
     let clipName: string;
     let backName: string | null = null;
@@ -1880,13 +2221,22 @@ const RIPPLE_SWAP: Recipe = {
     // Ripple made only around what you picked (a noise mask per pass), each way; null where it makes the whole frame.
     let noise: { ahead: (string | null)[]; behind: (string | null)[] } | null = null;
     let keys: { ahead: Key[]; behind: Key[] } = { ahead: [], behind: [] };
+    // The outlines of the people swapped for a character, each way, for the blur in what Ripple copies (RIPPLE.soften).
+    let soft: { ahead: string | null; behind: string | null; mouthsAhead: string | null; mouthsBehind: string | null } | null = null;
+    // Everything swapped, each way, for laying the made frames onto the clip's own (layOnto).
+    let paste: { ahead: string | null; behind: string | null; reach: number } | null = null;
     try {
-      clipName = (await tools.upload(clip24.file, "clip")).name;
+      // The clip goes up while its reversed copy is made: one after the other, they held the first GPU step back.
+      const [up, back] = await Promise.all([tools.upload(clipped.file, "clip"), subjects.length ? backwards(clipped.file, dir, tools.signal) : Promise.resolve(null)]);
+      clipName = up.name;
       // What you clicked, outlined through the clip; its best frame (unless `extra.best` is false: the clicked one).
-      const back = subjects.length ? await backwards(clip24.file, dir, tools.signal) : null;
       if (back) backName = (await tools.upload(back, "clip-back")).name;
+      // Everyone in every frame only where the clip's people are put back around the swap (below).
+      const everyone = extra.keep === true || extra.latentMask === true || extra.inpaint === true;
+      // The mouths too where people are swapped for a character and blurred in what Ripple copies (RIPPLE.mouth).
+      const mouths = extra.soften !== false && extra.mouth !== false && !background && edits.some((e) => e.to === "cast" && (!e.kind || e.kind === "person" || e.kind === "face"));
       const lookOnce = (reversed: string) =>
-        rippleLook(tools, clipName, reversed, count, W, H, subjects).catch((err) => {
+        rippleLook(tools, clipName, reversed, count, W, H, subjects, everyone, mouths, fps).catch((err) => {
           console.warn("[ripple] SAM 3.1 look failed:", (err as Error).message);
           return null;
         });
@@ -1897,10 +2247,10 @@ const RIPPLE_SWAP: Recipe = {
       const look = backName && !v1 ? ((await lookOnce(backName)) ?? (await lookOnce(backName))) : null;
       if (subjects.length && !look && !v1) throw new EngineError("SAM 3.1 couldn't follow what you picked through the clip.", "Click right on it, on a frame where it shows clearly, and try again.");
       if (look) count = look.count;
-      const clicked = Math.min(count - 1, Math.round((subjects[0]?.[0].t ?? 0) * LTX.fps));
+      const clicked = Math.min(count - 1, Math.round((subjects[0]?.[0].t ?? 0) * fps));
       const best = look ? (extra.best === false ? { frame: clicked, boxes: look.masks.map((list) => maskBox(list[clicked], look.small)?.box ?? null) } : bestFrame(look.masks, look.small)) : null;
       anchorAt = look && best ? best.frame : 0;
-      const frame = await frameNo(clip24.file, anchorAt, W, H, tools.signal);
+      const frame = await frameNo(clipped.file, anchorAt, W, H, tools.signal);
       const [sx, sy] = look ? [W / look.small.width, H / look.small.height] : [1, 1];
       const boxes = (best?.boxes ?? []).map((b) => (b ? { x: b.x * sx, y: b.y * sy, w: b.w * sx, h: b.h * sy } : null));
       const why = extra.best === false ? "where you clicked" : subjects.length > 1 ? "where they show best" : "where it shows biggest";
@@ -1912,33 +2262,37 @@ const RIPPLE_SWAP: Recipe = {
         // A template's one character, nothing clicked: the same redraw (its pose read first, the whole outfit, three
         // takes judged), on the first frame.
         tools.note?.("Redrawing the first frame");
-        first = await editRedraw(job, tools, frame, W, H, edits, [], [], 3, background);
+        first = await editRedraw(job, tools, frame, W, H, edits, [], [], 3, background, checks);
       } else if (edits.length && look) {
         tools.note?.(`Redrawing frame ${anchorAt} of ${count}, ${why}`);
         // Each change kept off everyone else in the frame, and off the other subjects.
         const here = look.masks.map((list) => list[anchorAt]);
-        const guards = await Promise.all(edits.map((_, k) => guardAt(k, here, look.others[anchorAt], look.small, W, H)));
-        first = await editRedraw(job, tools, frame, W, H, edits, boxes, guards, tries, background);
+        const around = await look.othersAt(anchorAt, frame);
+        const guards = await Promise.all(edits.map((_, k) => guardAt(k, here, around, look.small, W, H)));
+        first = await editRedraw(job, tools, frame, W, H, edits, boxes, guards, tries, background, checks);
       } else {
         const focus = boxes[0] && extra.zoom === true ? zoomBox(boxes[0], W, H) : null;
         tools.note?.(look ? `Redrawing frame ${anchorAt} of ${count}, ${why}${focus ? ", up close" : ""}` : "Redrawing the first frame");
-        first = await rippleRedraw(job, tools, frame, W, H, focus, v1 ? 2 : tries);
+        first = await rippleRedraw(job, tools, frame, W, H, checks, focus, v1 ? 2 : tries);
       }
       // Keyframes: on a long way the character is redrawn again about every 4 s, on a calm frame where it shows, matched
       // to the first (not for a new background, which each redraw would draw differently, or sharp mode).
       const most = Math.max(count - anchorAt, anchorAt + 1);
-      if (edits.length && !sharp2 && !v1 && !background && extra.refresh !== false && most > RIPPLE.keys.every + RIPPLE.keys.edge - RIPPLE.keys.window) {
+      if (edits.length && !sharp2 && !v1 && !background && extra.refresh !== false && most > keyGaps.every + keyGaps.edge - keyGaps.window) {
         const firstFile = path.join(dir, "first.png");
         await fs.writeFile(firstFile, first);
         // Each character's own part of the first drawing (its box and a fifth more around it): the whole frame had the
         // picture model copy the other character into the scene (Alors on Danse: a second Pigeongoo behind the one
-        // leaning into the camera, who was then drawn away).
+        // leaning into the camera, who was then drawn away). A person's only down to the shoulders: shown whole, the
+        // picture model copied the first drawing's pose too (the truck clip: every keyframe redrawn with its hand on the
+        // wheel, where the driver had a hand at his mouth or both at his chest).
         const matches = await Promise.all(
-          edits.map(async (_, k) => {
+          edits.map(async (e, k) => {
             const b = boxes[k];
             if (!b) return firstFile;
-            const [left, top] = [Math.max(0, Math.floor(b.x - b.w * 0.2)), Math.max(0, Math.floor(b.y - b.h * 0.2))];
-            const [width, height] = [Math.min(W - left, Math.ceil(b.w * 1.4)), Math.min(H - top, Math.ceil(b.h * 1.4))];
+            const person = e.to === "cast" && (!e.kind || e.kind === "person" || e.kind === "face");
+            const [left, top] = [Math.max(0, Math.floor(b.x - b.w * (person ? 0.1 : 0.2))), Math.max(0, Math.floor(b.y - b.h * (person ? 0.1 : 0.2)))];
+            const [width, height] = [Math.min(W - left, Math.ceil(b.w * (person ? 1.2 : 1.4))), Math.min(H - top, Math.ceil(b.h * (person ? 0.5 : 1.4)))];
             if (width < 16 || height < 16) return firstFile;
             const file = path.join(dir, `first-${k}.png`);
             await fs.writeFile(file, await sharp(first).extract({ left, top, width, height }).png().toBuffer());
@@ -1946,28 +2300,31 @@ const RIPPLE_SWAP: Recipe = {
           }),
         );
         const [sx2, sy2] = look ? [W / look.small.width, H / look.small.height] : [1, 1];
-        const motion = await motionOf(clip24.file, tools.signal).catch(() => null);
+        const motion = await motionOf(clipped.file, tools.signal).catch(() => null);
         const firstAreas = look ? look.masks.map((list) => (list[anchorAt] ? (maskBox(list[anchorAt], look.small)?.area ?? 0) : 0)) : [];
         // Where each subject shows at least 40% of its usual size (not turned away, behind someone or out of the frame).
         const areas = look ? look.masks.map((list) => list.map((mask) => (mask ? (maskBox(mask, look.small)?.area ?? 0) : 0))) : null;
         const usual = areas?.map((list) => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)]);
         const make = async (n: number, toFrame: (k: number) => number): Promise<Key[]> => {
           const clipFrame = (k: number) => Math.min(count - 1, Math.max(0, toFrame(k)));
-          const frames = keyFrames(n, RIPPLE.keys, motion?.length ? (k) => motion[Math.min(motion.length - 1, clipFrame(k))] : undefined, areas ? (k) => areas.every((list, s) => list[clipFrame(k)] >= 0.4 * usual![s]) : undefined);
-          // All at once: each waits mostly on the vision checks, so together they take about as long as one.
+          const frames = keyFrames(n, keyGaps, motion?.length ? (k) => motion[Math.min(motion.length - 1, clipFrame(k))] : undefined, areas ? (k) => areas.every((list, s) => list[clipFrame(k)] >= 0.4 * usual![s]) : undefined);
+          // All at once: the redraws go through the GPU one after another, and Crackio's judge looks once they're done
+          // (bestTake waits for an empty queue), so together they take little more than their redraws. One after
+          // another, Özil's 4 keyframes took 2.7 min, each waiting on its own pose read, redraw and checks.
           const made = await Promise.all(
             frames.map(async (k): Promise<Key | null> => {
               const at = clipFrame(k);
-              const still = await frameNo(clip24.file, at, W, H, tools.signal);
+              const still = await frameNo(clipped.file, at, W, H, tools.signal);
               const boxes2 = look ? look.masks.map((list) => { const b = list[at] ? maskBox(list[at], look.small)?.box : null; return b ? { x: b.x * sx2, y: b.y * sy2, w: b.w * sx2, h: b.h * sy2 } : null; }) : [];
-              const guards2 = look ? await Promise.all(edits.map((_, e) => guardAt(e, look.masks.map((list) => list[at]), look.others[at], look.small, W, H))) : [];
+              const around = look ? await look.othersAt(at, still) : undefined;
+              const guards2 = look ? await Promise.all(edits.map((_, e) => guardAt(e, look.masks.map((list) => list[at]), around, look.small, W, H))) : [];
               // Each character's crop only where it's about as big as in the first drawing: much closer or farther, the
               // picture model copied the crop's framing (the one leaning into the camera came back at the laptop).
               const near = matches.map((m, e) => {
                 const [a0, a1] = [firstAreas[e] ?? 0, areas?.[e]?.[at] ?? 0];
                 return !areas || (a0 && a1 / a0 >= 0.6 && a1 / a0 <= 1.6) ? m : undefined;
               });
-              const drawn = await editRedraw(job, tools, still, W, H, edits, boxes2, guards2, 1, "", near, true).catch((err) => {
+              const drawn = await editRedraw(job, tools, still, W, H, edits, boxes2, guards2, 1, "", checks, near, true).catch((err) => {
                 if (tools.signal?.aborted) throw err;
                 console.warn("[ripple] keyframe redraw failed:", (err as Error).message);
                 return null;
@@ -1981,16 +2338,43 @@ const RIPPLE_SWAP: Recipe = {
         const [ahead, behind] = await Promise.all([count - anchorAt > 1 ? make(count - anchorAt, (k) => anchorAt + k) : [], anchorAt > 0 ? make(anchorAt + 1, (k) => anchorAt - k) : []]);
         keys = { ahead, behind };
       }
-      if (look && (extra.keep === true || extra.latentMask === true || extra.inpaint === true) && !background) {
+      // People swapped for a character (not a change in words, which keeps who it is, or things).
+      const people = look ? edits.flatMap((e, k) => (e.to === "cast" && (!e.kind || e.kind === "person" || e.kind === "face") && look.masks[k] ? [look.masks[k]] : [])) : [];
+      if (look && people.length && extra.soften !== false && !background) {
+        const union = unionOf(people, look.small);
+        const clipOf = async (masks: Buffer[], order: number[], name: string) => (await tools.upload(await maskClip(masks, order, look.small, path.join(dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
+        const [aheadOrder, behindOrder] = [Array.from({ length: count - anchorAt }, (_, i) => anchorAt + i), Array.from({ length: anchorAt + 1 }, (_, i) => anchorAt - i)];
+        // Only the swapped people's mouths (not a removed one's, which the look found too).
+        const mouths = look.mouths ? look.mouths.map((m, f) => Buffer.from(m.map((v, i) => (v && union[f]?.[i] >= 128 ? 255 : 0)))) : null;
+        soft = {
+          ahead: count - anchorAt > 1 ? await clipOf(union, aheadOrder, "soft-ahead") : null,
+          behind: anchorAt > 0 ? await clipOf(union, behindOrder, "soft-behind") : null,
+          mouthsAhead: mouths && count - anchorAt > 1 ? await clipOf(mouths, aheadOrder, "mouths-ahead") : null,
+          mouthsBehind: mouths && anchorAt > 0 ? await clipOf(mouths, behindOrder, "mouths-behind") : null,
+        };
+      }
+      // Everything swapped (all subjects), each way, to lay the made frames onto the clip's own around it only (layOnto):
+      // not where the whole frame changes (a new background) or the clip's people are put back already (extra.keep).
+      if (look && extra.paste !== false && !background && !everyone) {
+        const all = unionOf(look.masks, look.small);
+        const clipOf = async (order: number[], name: string) => (await tools.upload(await maskClip(all, order, look.small, path.join(dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
+        paste = {
+          ahead: count - anchorAt > 1 ? await clipOf(Array.from({ length: count - anchorAt }, (_, i) => anchorAt + i), "paste-ahead") : null,
+          behind: anchorAt > 0 ? await clipOf(Array.from({ length: anchorAt + 1 }, (_, i) => anchorAt - i), "paste-behind") : null,
+          reach: reachOf(all, look.small, H),
+        };
+      }
+      const others = look?.others;
+      if (look && others && (extra.keep === true || extra.latentMask === true || extra.inpaint === true) && !background) {
         const ahead = Array.from({ length: count - anchorAt }, (_, i) => anchorAt + i);
         const behind = Array.from({ length: anchorAt + 1 }, (_, i) => anchorAt - i);
         const union = unionOf(look.masks, look.small);
-        const clipOf = async (masks: Buffer[], order: number[], name: string) => (await tools.upload(await maskClip(masks, order, look.small, path.join(dir, `${name}.mp4`), tools.signal), "outline")).name;
+        const clipOf = async (masks: Buffer[], order: number[], name: string) => (await tools.upload(await maskClip(masks, order, look.small, path.join(dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
         outlines = {
           ahead: await clipOf(union, ahead, "ahead"),
           behind: anchorAt > 0 ? await clipOf(union, behind, "behind") : null,
-          othersAhead: await clipOf(look.others, ahead, "others-ahead"),
-          othersBehind: anchorAt > 0 ? await clipOf(look.others, behind, "others-behind") : null,
+          othersAhead: await clipOf(others, ahead, "others-ahead"),
+          othersBehind: anchorAt > 0 ? await clipOf(others, behind, "others-behind") : null,
           reach: reachOf(union, look.small, H),
         };
         if (!sharp2 && extra.latentMask === true) {
@@ -2000,7 +2384,7 @@ const RIPPLE_SWAP: Recipe = {
           const masksFor = async (order: number[], name: string) =>
             Promise.all(
               passesOf(order.length, RIPPLE.long).map(async (pass, p) => {
-                const file = await passMask(union, look.others, order, pass.from, pass.length, look.small, small, { width: size.width / 32, height: size.height / 32 }, path.join(dir, `${name}-${p}.mp4`), tools.signal);
+                const file = await passMask(union, others, order, pass.from, pass.length, look.small, small, { width: size.width / 32, height: size.height / 32 }, path.join(dir, `${name}-${p}.mp4`), tools.signal);
                 return (await tools.upload(file, "outline")).name;
               }),
             );
@@ -2008,8 +2392,15 @@ const RIPPLE_SWAP: Recipe = {
           tools.note?.(`Making the swap only within ${outlines.reach} px of what you picked; everyone else stays as filmed`);
         }
       }
+      // A clip bigger than this 720p copy (Templates prepared it at its own size too: extra.finish): the paste-back's
+      // outline in the clip's own frame order, for the runner to lay the made people onto it at that size (clip.finishAtSize).
+      if (look && paste && !outlines && extra.finish === true && !sharp2) {
+        const own = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-paste-"));
+        const order = Array.from({ length: count }, (_, i) => i);
+        keepPasteMask(job.source.path, { file: await maskClip(unionOf(look.masks, look.small), order, look.small, path.join(own, "paste.mp4"), tools.signal, fps), reach: paste.reach, height: H });
+      }
     } finally {
-      await clip24.done();
+      await clipped.done();
       await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
     }
 
@@ -2021,9 +2412,11 @@ const RIPPLE_SWAP: Recipe = {
     const lora = inpaint
       ? at(g.add("LoraLoaderModelOnly", { model: at(g.add(...unetLoader(f.model ?? LTX.unet))), lora_name: INPAINT.lora, strength_model: num(extra.strength, 0.3, 2.5, INPAINT.strength) }))
       : at(g.add("LoraLoaderModelOnly", { model: at(g.add(...unetLoader(f.model ?? LTX.unet))), lora_name: f.lora ?? RIPPLE.lora, strength_model: num(extra.strength, 0.3, 2.5, RIPPLE.strength) }));
+    // PyTorch's attention (the user's pick); `extra.attention: "int8"` takes ComfyUI's INT8 one where it has the node.
+    const tuned = extra.attention === "int8" && (await tools.hasNode?.("ModelAttentionBackend")) ? at(g.add("ModelAttentionBackend", { model: lora, attention: RIPPLE.attention })) : lora;
     // Fast mode: ComfyUI's EasyCache reuses a step's work when the next would barely change it.
     const cache = num(extra.cache, 0, 3, 0);
-    const model = cache > 0 ? at(g.add("EasyCache", { model: lora, reuse_threshold: cache, start_percent: 0.15, end_percent: 0.95, verbose: false })) : lora;
+    const model = cache > 0 ? at(g.add("EasyCache", { model: tuned, reuse_threshold: cache, start_percent: 0.15, end_percent: 0.95, verbose: false })) : tuned;
     const text = at(g.add("CLIPLoader", { clip_name: f.text ?? LTX.textEncoder, type: "ltxv", device: "default" }));
     const vae = at(g.add("VAELoader", { vae_name: f.vae ?? LTX.videoVae }));
     const audioVae = at(g.add("VAELoader", { vae_name: f.audio ?? LTX.audioVae }));
@@ -2033,9 +2426,11 @@ const RIPPLE_SWAP: Recipe = {
     const cond = g.add("LTXVConditioning", {
       positive: at(g.add("CLIPTextEncode", { text: words, clip: text })),
       negative: at(g.add("CLIPTextEncode", { text: RIPPLE.negative, clip: text })),
-      frame_rate: LTX.fps,
+      frame_rate: fps,
     });
-    const models: RippleModels = { model, cond, vae, audioVae, upscaler, steps: Math.round(num(extra.steps, 2, 16, RIPPLE.steps)), keyStrength: num(extra.keyStrength, 0, 1, RIPPLE.keys.strength) };
+    // The decode in bigger tiles where the card has room: 28 s → 23 s for 15 s at 720p on the 5090, the same frames.
+    const tile = (tools.vramGb ?? 0) >= 24 ? 768 : 512;
+    const models: RippleModels = { model, cond, vae, audioVae, upscaler, steps: Math.round(num(extra.steps, 2, 16, RIPPLE.steps)), keyStrength: num(extra.keyStrength, 0, 1, RIPPLE.keys.strength), tile, soften: num(extra.soften, 1, 32, RIPPLE.soften), fps };
     // Stretched, never cropped: the made frames go back onto the clip by the same stretch (a few percent at most).
     const sized = (image: Link) => at(g.add("ImageScale", { image, upscale_method: "lanczos", ...size, crop: "disabled" }));
     const loaded = (file: string) => at(g.add("GetVideoComponents", { video: at(g.add("LoadVideo", { file })) }), 0);
@@ -2051,25 +2446,26 @@ const RIPPLE_SWAP: Recipe = {
     } else {
       // Each way from the redrawn frame in one pass (5 s passes in sharp mode, which works at 2 MP).
       const segment = sharp2 ? RIPPLE.segment : RIPPLE.long;
-      const way = (frames: Link, from: number, n: number, outline: string | null, others: string | null, masks?: (string | null)[], wayKeys?: Key[]) => {
+      const way = (frames: Link, from: number, n: number, outline: string | null, others: string | null, masks?: (string | null)[], wayKeys?: Key[], softOutlines?: string | null, softMouths?: string | null, pasteOutline?: string | null) => {
         const part = at(g.add("ImageFromBatch", { image: frames, batch_index: from, length: n }));
         if (inpaint && outline) {
           const zone = zoneOf(g, held(loaded(outline), n), size, H, outlines?.reach ?? 48);
           return layIn(g, ripplePasses(g, models, held(sized(part), n), anchor, n, size, segment, undefined, zone), part, zone, W, H);
         }
-        const made = ripplePasses(g, models, held(sized(part), n), anchor, n, size, segment, masks, undefined, wayKeys);
+        const made = ripplePasses(g, models, held(sized(part), n), anchor, n, size, segment, masks, undefined, wayKeys, softOutlines ? held(loaded(softOutlines), n) : undefined, softOutlines && softMouths ? held(loaded(softMouths), n) : undefined);
         // Made within a mask, the frames are used whole: the model kept everyone else, and laying the clip's own pixels
         // back around it showed the VAE's slight colour shift as a rim.
         if (masks?.length) return made;
-        return outline && others ? restorePeople(g, made, part, loaded(outline), loaded(others), W, H, outlines?.reach ?? 48) : made;
+        if (outline && others) return restorePeople(g, made, part, loaded(outline), loaded(others), W, H, outlines?.reach ?? 48);
+        return pasteOutline && paste ? layOnto(g, made, part, at(g.add("ImageFromBatch", { image: loaded(pasteOutline), batch_index: 0, length: n })), W, H, paste.reach) : made;
       };
-      const ahead = count - anchorAt > 1 ? way(clipFrames, anchorAt, count - anchorAt, outlines?.ahead ?? null, outlines?.othersAhead ?? null, noise?.ahead, keys.ahead) : null;
+      const ahead = count - anchorAt > 1 ? way(clipFrames, anchorAt, count - anchorAt, outlines?.ahead ?? null, outlines?.othersAhead ?? null, noise?.ahead, keys.ahead, soft?.ahead, soft?.mouthsAhead, paste?.ahead) : null;
       // Backward: the clip played in reverse from the same frame, turned back the right way, without that frame twice.
-      const behind = anchorAt > 0 ? way(loaded(backName), count - 1 - anchorAt, anchorAt + 1, outlines?.behind ?? null, outlines?.othersBehind ?? null, noise?.behind, keys.behind) : null;
+      const behind = anchorAt > 0 ? way(loaded(backName), count - 1 - anchorAt, anchorAt + 1, outlines?.behind ?? null, outlines?.othersBehind ?? null, noise?.behind, keys.behind, soft?.behind, soft?.mouthsBehind, paste?.behind) : null;
       const before = behind ? at(g.add("ImageFromBatch", { image: reversedFrames(g, behind, anchorAt + 1), batch_index: 0, length: anchorAt })) : null;
       output = before && ahead ? at(g.add("BatchImagesNode", { "images.image0": before, "images.image1": ahead })) : (ahead ?? reversedFrames(g, behind!, anchorAt + 1));
     }
-    const video = g.add("CreateVideo", { images: output, fps: LTX.fps, bit_depth: 8, color_space: "sRGB", codec: "none" });
+    const video = g.add("CreateVideo", { images: output, fps, bit_depth: 8, color_space: "sRGB", codec: "none" });
     g.add("SaveVideo", { video: at(video), filename_prefix: "crackio/ltx-2.5-ripple", ...COMPACT_MP4 });
     return g.nodes;
   },
@@ -2246,6 +2642,65 @@ const QWEN_DIRECTOR: Recipe = {
       latent_image: at(g.add("EmptyLatentImage", { width, height, batch_size: count(job) })),
     });
     g.add("SaveImage", { images: at(g.add("VAEDecode", { samples: at(sampled), vae })), filename_prefix: "crackio/director" });
+    return g.nodes;
+  },
+};
+
+/**
+ * Angles' re-shoot (Qwen Angles): Qwen-Image 2.1 Turbo with two camera LoRAs. lilylilith's AnyAngle learned to take the
+ * camera from a rough 3D render and everything else from the real picture; gribbliest's QMA learned 96 named views
+ * (8 sides, 4 heights, 3 distances). Picture 1 is the photo (`job.references[0]`), picture 2 the photo's 3D set seen
+ * from the camera picked in Angles (`job.guide`); the words (lib/angles `anyAnglePrompt`) are AnyAngle's sentence and
+ * QMA's name for the view. The take is the photo's own shape.
+ *
+ * The A/B (Oct 2026, a dress on a salt flat, a bag on a desk, Lena in a studio, a canyon, a 4090): drawing over the 3D
+ * view (differential diffusion) with Qwen 2.1's ControlNet kept the photo's camera, copied the view's gaps or drew a
+ * second bag. AnyAngle alone followed the view (high shots, quarter and side views, top-down, wider and closer) and
+ * kept everyone's pose, but from behind it drew the front again: QMA (0.8, with its words) turns things around there,
+ * and only there, since in front of the subject it re-posed people toward the camera and softened the take. At 1 MP
+ * the takes kept a third of the photo's sharpness (variance of the Laplacian); drawn at about 2 MP, two thirds, for
+ * 25 s instead of 9. The full model (20 steps, CFG 3) copied the view's flaws more literally; T8's HiFi turbo LoRA and
+ * ausboss's Restore pass didn't sharpen it reliably.
+ */
+const QWEN_ANGLES: Recipe = {
+  id: "qwen-angles",
+  name: "Qwen Angles",
+  output: "image",
+  expectedMs: () => 25_000,
+  units: () => 2,
+  maxMp: 2.4,
+  maxEdge: 2048,
+  detailable: false,
+  async build(job, tools) {
+    if (!job.guide?.path || !job.references[0]) throw new EngineError("Qwen Angles re-shoots a photo from Angles' 3D view.", "Use it in Angles.");
+    const { width, height } = tools.size ?? imageSize(job);
+    const f = await filesFor("qwen-angles");
+    const g = new Graph();
+    const vae = at(g.add("VAELoader", { vae_name: f.vae ?? "qwen_image_2.1_vae_bf16.safetensors" }));
+    const clip = at(g.add(...clipLoader(f.text ?? "qwen3vl_8b_int8_convrot.safetensors", "qwen_image")));
+    let model = at(g.add("ModelAttentionBackend", { model: at(g.add(...unetLoader(f.model ?? "qwen_image_2.1_turbo_int8_convrot.safetensors"))), attention: "pytorch attention" }));
+    const strength = typeof job.options?.lora === "number" ? Math.max(0, Math.min(1.5, job.options.lora)) : 1;
+    model = at(g.add("LoraLoaderModelOnly", { model, lora_name: f.angles ?? "QI2.1_AnyAngle.safetensors", strength_model: strength }));
+    // Any other words (a job from before) get AnyAngle's sentence; QMA goes on only where its words are (the far side).
+    const prompt = job.prompt.startsWith(ANY_ANGLE) ? job.prompt : ANY_ANGLE;
+    if (prompt.includes("<qma>")) model = at(g.add("LoraLoaderModelOnly", { model, lora_name: f.views ?? "qwen-image-2.1-qma-camera-angles.safetensors", strength_model: 0.8 }));
+    model = at(g.add("QwenImage21Cache", { model, device: "auto", dtype: "default" }));
+    // The encoder brings both pictures to about resolution² pixels and makes the take picture 1's (the photo's) shape at
+    // that size: twice the pixels planned (2 MP for 1K), up to 1536² (the detail a re-shoot keeps grows with them).
+    const resolution = Math.min(1536, Math.max(768, Math.round((1.4 * Math.sqrt(width * height)) / 32) * 32));
+    const photo = at(g.add("LoadImage", { image: (await picture(job.references[0], tools, "angles-photo", 2048)).name }));
+    const view = at(g.add("LoadImage", { image: (await picture(job.guide, tools, "angles-view", 1536)).name }));
+    const encoded = g.add("TextEncodeQwenImage21", { prompt, negative_prompt: "", resolution, clip, vae, "images.image_1": photo, "images.image_2": view });
+    let latent = at(encoded, 2);
+    if (count(job) > 1) latent = at(g.add("RepeatLatentBatch", { samples: latent, amount: count(job) }));
+    const sampled = g.add("SamplerCustomAdvanced", {
+      noise: at(g.add("RandomNoise", { noise_seed: seed() })),
+      guider: at(g.add("CFGGuider", { cfg: 1, model, positive: at(encoded, 0), negative: at(encoded, 1) })),
+      sampler: at(g.add("KSamplerSelect", { sampler_name: "euler" })),
+      sigmas: at(g.add("ManualSigmas", { sigmas: QWEN_TURBO_SIGMAS })),
+      latent_image: latent,
+    });
+    g.add("SaveImage", { images: at(g.add("VAEDecode", { samples: at(sampled), vae })), filename_prefix: "crackio/angles" });
     return g.nodes;
   },
 };
@@ -2707,7 +3162,7 @@ const FLASHVSR: Recipe = {
   },
 };
 
-const RECIPES: Recipe[] = [LTX_VIDEO, SCAIL_SWAP, RIPPLE_SWAP, Z_IMAGE, Z_IMAGE_DIRECTOR, QWEN_DIRECTOR, KLEIN, FLUX3_KLEIN, SEEDVR2, SEEDVR2_7B, ESRGAN, NOMOS2_HQ, NOMOS_WEBPHOTO, FLASHVSR, WAN5B];
+const RECIPES: Recipe[] = [LTX_VIDEO, SCAIL_SWAP, RIPPLE_SWAP, Z_IMAGE, Z_IMAGE_DIRECTOR, QWEN_DIRECTOR, QWEN_ANGLES, KLEIN, FLUX3_KLEIN, SEEDVR2, SEEDVR2_7B, ESRGAN, NOMOS2_HQ, NOMOS_WEBPHOTO, FLASHVSR, WAN5B];
 
 /* ------------------------------------------------------------------ ComfyUI's official templates */
 

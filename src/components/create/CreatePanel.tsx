@@ -228,13 +228,13 @@ export function CreatePanel() {
       <div className="space-y-3 p-3">
         {noEngine ? (
           <p className="rounded-[12px] bg-tungsten/10 px-3.5 py-3 text-[13px] leading-relaxed text-tungsten shadow-[inset_0_0_0_1px_rgb(242_181_75/0.25)]">
-            No picture model yet. Install a free one on your GPU in{" "}
-            <Link href="/local" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
-              Local
+            No picture model yet. Set a free one up on your GPU in{" "}
+            <Link href="/settings/tools?tool=image" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
+              Settings → Tools
             </Link>{" "}
-            (ComfyUI), or add a Comfy key in{" "}
-            <Link href="/settings/connections" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
-              Connections
+            or add a Comfy key in{" "}
+            <Link href="/settings/accounts#comfy" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
+              Accounts
             </Link>
             .
           </p>

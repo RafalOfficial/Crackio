@@ -13,6 +13,7 @@ import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { RecDot } from "@/components/ui/Viewfinder";
 import { GeneratingField } from "@/components/ui/GeneratingField";
 import { ModelPicker } from "@/components/models/ModelPicker";
+import { GetToolModel } from "@/components/models/GetToolModel";
 import { CostLine, usePricing } from "@/components/models/CostLine";
 import { LocalTimeLine } from "@/components/models/LocalTimeLine";
 import { QualityPicker, hasQualityChoices, useOutputQuality } from "@/components/models/QualityPicker";
@@ -74,6 +75,8 @@ export function EditToolShell({
   ready = true,
   allowTakes = true,
   prefer,
+  ownChoice,
+  ownModel,
   task,
   edits,
   upscaleBy,
@@ -94,6 +97,10 @@ export function EditToolShell({
   allowTakes?: boolean;
   /** Models this tool's Auto tries first, after your saved default. */
   prefer?: string[];
+  /** A model choice of the tool's own (use-model-choice `own`), starting on its first ready `prefer`: Angles. */
+  ownChoice?: string;
+  /** An open model made for this tool, offered for your GPU while it isn't there (models/GetToolModel), and what it does. */
+  ownModel?: { id: string; why: string };
   /** The Custom tab's list, when it differs from the kind's (Retouch adds inpainting models). */
   task?: ModelTask;
   /** How many model calls one take makes (Retouch edits each change on its own), for the price. */
@@ -105,7 +112,7 @@ export function EditToolShell({
   const { models, defaults, loaded: modelsLoaded } = useModels();
   const [source, setSource] = useState<SourceImage | null>(null);
   // Your pick for this job; a different job (upscale vs reframe) has its own (hooks/use-model-choice).
-  const [model, setModel] = useModelChoice(kind, task ?? TASK[kind]);
+  const [model, setModel] = useModelChoice(kind, task ?? TASK[kind], ownChoice ? { own: ownChoice, first: prefer } : {});
   useModelParam(setModel);
   const [count, setCount] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -194,16 +201,17 @@ export function EditToolShell({
         <Panel className="flex flex-col">
           <PanelHeader title="Settings" />
           <div className="space-y-4 p-3">
-            <ModelPicker kind={kind} task={task ?? TASK[kind]} value={model} onChange={setModel} prefer={prefer} />
+            <ModelPicker kind={kind} task={task ?? TASK[kind]} tool={tool.slug} value={model} onChange={setModel} prefer={prefer} />
+            {ownModel ? <GetToolModel id={ownModel.id} why={ownModel.why} onReady={setModel} /> : null}
             {noModel ? (
               <p className="rounded-[12px] bg-tungsten/10 px-3.5 py-3 text-[13px] leading-relaxed text-tungsten shadow-[inset_0_0_0_1px_rgb(242_181_75/0.25)]">
-                {kind === "upscale" ? "Upscaling needs an upscale model." : "This tool needs a picture model."} Install a free one on your GPU in{" "}
-                <Link href="/local" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
-                  Local
+                {kind === "upscale" ? "Upscaling needs an upscale model." : "This tool needs a picture model."} Set a free one up on your GPU in{" "}
+                <Link href="/settings/tools" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
+                  Settings → Tools
                 </Link>{" "}
-                (ComfyUI), or add a Comfy key in{" "}
-                <Link href="/settings/connections" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
-                  Connections
+                or add a Comfy key in{" "}
+                <Link href="/settings/accounts#comfy" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
+                  Accounts
                 </Link>
                 .
               </p>

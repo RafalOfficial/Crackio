@@ -7,7 +7,11 @@ const Body = z.object({
   image: z.string().min(1).max(500),
   /** Ask for the parts of this thing instead of the things in the picture. */
   parent: z.object({ id: z.string().max(40), label: z.string().max(60), detail: z.string().max(160), box: BoxSchema }).optional(),
+  /** The things as they're found: one JSON line each time there's another ({things}), then the last ({things, done}). */
+  stream: z.boolean().optional(),
 });
+
+const NO_MODEL = "No text model answered, so nothing was found. Click anywhere to add a change.";
 
 /**
  * The things in a picture Crackio stores (an upload, a result, a frame), each with a box; or,
@@ -24,8 +28,24 @@ export async function POST(request: Request) {
       if (!out) return Response.json({ error: "Couldn't find its parts (no text model answered)." }, { status: 502 });
       return Response.json(out);
     }
+    if (parsed.data.stream) {
+      const encoder = new TextEncoder();
+      const lines = new ReadableStream({
+        async start(controller) {
+          const send = (value: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`));
+          try {
+            const out = await detectThings(file, request.signal, (things) => send({ things }));
+            send(out ? { ...out, done: true } : { things: [], done: true, error: NO_MODEL });
+          } catch (err) {
+            send({ things: [], done: true, error: (err as Error).message || "Couldn't look at the picture." });
+          }
+          controller.close();
+        },
+      });
+      return new Response(lines, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" } });
+    }
     const out = await detectThings(file, request.signal);
-    if (!out) return Response.json({ things: [], error: "No text model answered, so nothing was found. Click anywhere to add a change." });
+    if (!out) return Response.json({ things: [], error: NO_MODEL });
     return Response.json(out);
   } catch (err) {
     return Response.json({ error: (err as Error).message || "Couldn't look at the picture." }, { status: 500 });

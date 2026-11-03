@@ -11,9 +11,11 @@ import { DEMO } from "@/lib/demo/config";
 import { useShell } from "./shell-store";
 import { usePauseHiddenMedia, useWarmup } from "./upkeep";
 import { cn } from "@/lib/cn";
+import { SetupHint } from "@/components/settings/SetupHint";
+import { Notifier } from "@/components/settings/Notifier";
 
-/** Workspaces that need every pixel get the slim icon rail. */
-const WIDE_ROUTES = ["/director", "/tools/storyboard", "/tools/motion"];
+/** Workspaces that need every pixel get the slim icon rail (Settings has its own rail of sections). */
+const WIDE_ROUTES = ["/director", "/tools/storyboard", "/tools/motion", "/settings"];
 
 export function ShellFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -54,6 +56,9 @@ export function ShellFrame({ children }: { children: ReactNode }) {
         <main id="main" className={DEMO ? "pb-14 lg:pb-0" : undefined}>
           {children}
         </main>
+        {/* A tool that can't run yet: one small pill that opens its fix in Settings. */}
+        <SetupHint pathname={pathname} />
+        {DEMO ? null : <Notifier />}
       </div>
     </div>
   );

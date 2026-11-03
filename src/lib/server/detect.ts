@@ -5,12 +5,14 @@ import path from "node:path";
 import sharp from "sharp";
 import { askText } from "@/lib/engines/refine";
 import { DATA_DIR } from "./paths";
+import { getSettings } from "./settings";
 
 /**
  * Crackio's eyes for pointing at things (Retouch, Recast): a picture, and every separate thing in
  * it with a box around it; then, for one thing, its main parts (a pigeon's head, beak, eye, wings,
- * legs). It runs on Gemini 3.5 Flash on your Comfy key when you have one (the next text model that sees otherwise). Parts are found on a close, enlarged crop of the thing, which also tightens the
- * thing's own box. Answers are cached per picture.
+ * legs). It runs on the eyes picked in settings (retouchEyes): Crackio's own fine-tune of LFM3-VL on your GPU, or Gemini 3.5
+ * Flash on your Comfy key (the next text model that sees when neither answers). Parts are found on a close, enlarged crop
+ * of the thing, which also tightens the thing's own box. Answers are cached per picture and per eyes.
  */
 
 /** x0, y0, x1, y1 in 0–1000 of the picture (x from the left edge, y from the top). */
@@ -20,8 +22,24 @@ export type Thing = { id: string; label: string; detail: string; box: Box };
 const CACHE = path.join(DATA_DIR, "cache", "detect");
 /** Bump when the prompts or the reading change, so pictures are looked at again. */
 const VERSION = 2;
-/** The sharpest-eyed model first: how precise the boxes are decides how precise the edit is. */
-const EYES = ["comfy:google/gemini-3.5-flash"];
+const GEMINI = "comfy:google/gemini-3.5-flash";
+/**
+ * Crackio's own eyes: LFM3-VL 2B with the Retouch LoRA, trained on Qwen3-VL-8B's answers to these very prompts with
+ * SAM 3.1 behind the boxes (2026-11-01). On held-out pictures it found 14.4 things a picture where the base model found
+ * 7.6, at the same box precision (IoU 0.87), and every answer read.
+ */
+const LOCAL = "local:lfm3-retouch";
+
+/** The models to ask, in order, for the eyes picked in settings; Auto is your GPU where the eyes are installed. */
+async function eyes(): Promise<string[]> {
+  const picked = (await getSettings()).retouchEyes ?? "auto";
+  if (picked !== "auto") return picked === "local" ? [LOCAL] : [GEMINI];
+  const { lfm3Machine } = await import("@/lib/engines/comfy-text");
+  return (await lfm3Machine("retouch").catch(() => null)) ? [LOCAL, GEMINI] : [GEMINI];
+}
+
+/** Gemini's answers keep the cache keys they had; each other model's get their own. */
+const keyFor = (key: string, prefer: string[]) => (prefer[0] === GEMINI ? key : `${key}:${prefer[0]}`);
 
 const THINGS = `You map a picture for a precise photo editor, so a person can point at any single thing in it and change just that.
 Find the separate, editable things in the picture:
@@ -82,11 +100,16 @@ function overlap(a: Box, b: Box) {
 }
 
 function json(answer: string): Record<string, unknown> | null {
-  try {
-    return JSON.parse(answer.slice(answer.indexOf("{"), answer.lastIndexOf("}") + 1)) as Record<string, unknown>;
-  } catch {
-    return null;
+  const body = answer.slice(answer.indexOf("{"), answer.lastIndexOf("}") + 1);
+  // An answer cut off mid-list still has its whole items up to the last "}": the list is closed after them.
+  for (const text of [body, `${body}]}`]) {
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      /* the next way */
+    }
   }
+  return null;
 }
 
 /** The things in an answer: labeled, boxed, and without repeats. */
@@ -105,20 +128,35 @@ function readThings(list: unknown, idPrefix: string, max: number): Thing[] {
   return out;
 }
 
-/** The separate things in a picture, most prominent first. */
-export async function detectThings(file: string, signal?: AbortSignal): Promise<{ things: Thing[] } | null> {
+/**
+ * The separate things in a picture, most prominent first. `onThings` gets the things found so far each time one more
+ * is complete (Crackio's own eyes write them one by one; another model answers all at once).
+ */
+export async function detectThings(file: string, signal?: AbortSignal, onThings?: (things: Thing[]) => void): Promise<{ things: Thing[] } | null> {
   const bytes = await fs.readFile(file);
-  return cached(`things:${createHash("sha1").update(bytes).digest("hex")}`, async () => {
+  const prefer = await eyes();
+  return cached(keyFor(`things:${createHash("sha1").update(bytes).digest("hex")}`, prefer), async () => {
+    let shown = 0;
     const answer = await askText({
       instructions: THINGS,
       text: "Find the things in this picture.",
       references: [{ path: file, label: "the picture" }],
-      prefer: EYES,
+      prefer,
       effort: "high",
       imageEdge: 1536,
       detail: "high",
       timeoutMs: 180_000,
       signal,
+      onText: onThings
+        ? (soFar) => {
+            const j = json(soFar);
+            const things = j ? readThings(j.things ?? j.objects, "t", 24) : [];
+            if (things.length > shown) {
+              shown = things.length;
+              onThings(things);
+            }
+          }
+        : undefined,
     }).catch(() => null);
     const j = answer ? json(answer) : null;
     if (!j) return null;
@@ -146,7 +184,8 @@ function cropAround(box: Box, width: number, height: number) {
  */
 export async function detectParts(file: string, parent: { id: string; label: string; detail: string; box: Box }, signal?: AbortSignal): Promise<{ box: Box; parts: Thing[] } | null> {
   const bytes = await fs.readFile(file);
-  const key = `parts:${createHash("sha1").update(bytes).digest("hex")}:${parent.box.map(Math.round).join(",")}:${parent.label.toLowerCase()}`;
+  const prefer = await eyes();
+  const key = keyFor(`parts:${createHash("sha1").update(bytes).digest("hex")}:${parent.box.map(Math.round).join(",")}:${parent.label.toLowerCase()}`, prefer);
   return cached(key, async () => {
     const img = sharp(bytes, { failOn: "none" }).rotate();
     const meta = await img.metadata();
@@ -166,7 +205,7 @@ export async function detectParts(file: string, parent: { id: string; label: str
         instructions: PARTS(parent.label, parent.detail),
         text: `Find the main parts of the ${parent.label}.`,
         references: [{ path: tmp, label: `a close crop of the ${parent.label}` }],
-        prefer: EYES,
+        prefer,
         effort: "high",
         imageEdge: 1536,
         detail: "high",

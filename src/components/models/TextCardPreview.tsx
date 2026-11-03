@@ -53,6 +53,8 @@ const SAMPLES: Record<string, Sample> = {
   },
   // The open model on your GPU: your words, as a prompt.
   "local:text": { kind: "rewrite", ask: "cat on sofa, cozy", answer: "A ginger cat curled on a linen sofa, warm window light, shallow depth of field." },
+  // LFM3-VL on your GPU: words in any language, as a prompt (its Polish rewrite, from a test run).
+  "local:lfm3": { kind: "rewrite", ask: "dziewczyna w czerwonym płaszczu idzie po moście w Pradze o świcie", answer: "A young woman in a red coat walking along a bridge in Prague at dawn, mist over the river, soft morning light." },
 };
 
 const fallback = (name: string): Sample => ({ kind: "rewrite", ask: "neon street, rain", answer: `A rain-soaked street under pink and teal neon, reflections in the puddles, written by ${name}.` });

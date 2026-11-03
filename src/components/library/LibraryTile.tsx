@@ -1,6 +1,7 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
+import { VoiceFace } from "@/components/voice/AudioTake";
 import { memo, useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { Check, Copy, Download, Ellipsis, FolderInput, Maximize2, Play, Trash, TriangleAlert } from "lucide-react";
 import type { TakeKey } from "@/lib/hooks/use-library";
@@ -81,7 +82,7 @@ function DoneTile({ take, width, style, selecting, selected, leaving, dragged, f
     else setLive(false);
   };
   const sizes = `${Math.max(120, Math.round(width))}px`;
-  const label = `${video ? "Clip" : "Image"}${gen.prompt ? `: ${gen.prompt.slice(0, 90)}` : ""}`;
+  const label = `${video ? "Clip" : take.kind === "audio" ? "Voice take" : "Image"}${gen.prompt ? `: ${gen.prompt.slice(0, 90)}` : ""}`;
 
   return (
     <div
@@ -125,7 +126,9 @@ function DoneTile({ take, width, style, selecting, selected, leaving, dragged, f
           selected && "scale-[0.93] rounded-[9px]",
         )}
       >
-        {video ? (
+        {take.kind === "audio" ? (
+          <VoiceFace gen={gen} output={output} />
+        ) : video ? (
           <>
             <Poster url={output.url} sizes={sizes} alt={label} />
             {live ? <HoverPlay url={output.url} /> : null}

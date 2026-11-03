@@ -2,6 +2,8 @@
 # Double-click to start Crackio on a Mac. The first time, right-click it and choose Open.
 cd "$(dirname "$0")" || exit 1
 PORT="${CRACKIO_PORT:-3211}"
+# Only this Mac can open Crackio. Set CRACKIO_HOST=0.0.0.0 to open it to your network (it has no login).
+BIND="${CRACKIO_HOST:-127.0.0.1}"
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 fail() {
@@ -48,6 +50,6 @@ echo "  Starting Crackio at http://localhost:$PORT"
 echo "  Your browser opens by itself. Keep this window open while you use Crackio: closing it stops Crackio."
 echo ""
 node scripts/launch/open-when-ready.mjs "http://localhost:$PORT" &
-"${PNPM[@]}" start -p "$PORT"
+"${PNPM[@]}" start -p "$PORT" -H "$BIND"
 echo ""
 read -r -p "  Crackio stopped. Press Enter to close this window." _

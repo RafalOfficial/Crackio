@@ -38,11 +38,22 @@ async function call(route: string, init: RequestInit & { signal: AbortSignal }) 
   const t = currentTarget();
   const headers = new Headers(init.headers);
   if (t.token) headers.set("Authorization", `Bearer ${t.token}`);
-  try {
-    return await fetch(`${t.url}${route}`, { ...init, headers, cache: "no-store" });
-  } catch (err) {
-    if (init.signal.aborted) throw err;
-    throw new EngineError(`ComfyUI isn't answering at ${t.url}: ${(err as Error).message}`, "Check that the machine and its ComfyUI are running.");
+  // A rented box's port forward resets a connection now and then (ECONNRESET): a read is asked again, twice, before it
+  // counts as the box not answering (one such reset ended a whole swap at 85 s). Sends retry where they're made.
+  const read = !init.method || init.method === "GET" || init.method === "HEAD";
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetch(`${t.url}${route}`, { ...init, headers, cache: "no-store" });
+    } catch (err) {
+      if (init.signal.aborted) throw err;
+      if (read && attempt < 3) {
+        await new Promise((r) => setTimeout(r, 700 * attempt));
+        continue;
+      }
+      const cause = (err as { cause?: { code?: string } }).cause?.code ?? "";
+      console.warn(`[comfy] ${init.method ?? "GET"} ${route.split("?")[0]} to ${t.url} failed${cause ? ` (${cause})` : ""} after ${attempt} tries`);
+      throw new EngineError(`ComfyUI isn't answering at ${t.url}: ${(err as Error).message}`, "Check that the machine and its ComfyUI are running.");
+    }
   }
 }
 
@@ -762,7 +773,7 @@ async function runRecipe(recipe: Recipe, job: EngineJob, ctx: EngineContext, poo
   const outputs = await Promise.all(wanted.map((f) => downloadOutput(f, ctx.signal)));
   // A model whose numbers overflowed on this GPU saves a flat black picture: a failure, not a result.
   if (output === "image" && (await Promise.all(outputs.map((o) => blank(o.data)))).every(Boolean)) {
-    throw new EngineError(`${recipe.name} made a blank picture on this GPU.`, "Try its other version on the Local page, or another model.");
+    throw new EngineError(`${recipe.name} made a blank picture on this GPU.`, "Try its other version (Settings → Tools), or another model.");
   }
   // The Local page shows what each model really takes here per unit of work, loaded and from cold, pictures from words
   // and edits apart, and for which of its versions (the one whose model files the graph loads).

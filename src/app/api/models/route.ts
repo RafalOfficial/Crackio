@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { listModels } from "@/lib/models/resolve";
 import { customModel, isCustomId } from "@/lib/models/custom";
-import { MODEL_KINDS, type ModelKind } from "@/lib/models/catalog";
+import { INTERNAL_TEXT, MODEL_KINDS, type ModelKind } from "@/lib/models/catalog";
 import { getSettings, updateSettings } from "@/lib/server/settings";
 
 export async function GET() {
   const [models, settings] = await Promise.all([listModels(), getSettings()]);
-  return Response.json({ models, defaults: settings.models }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ models: models.filter((m) => !INTERNAL_TEXT.has(m.id)), defaults: settings.models }, { headers: { "Cache-Control": "no-store" } });
 }
 
 const Patch = z.object({

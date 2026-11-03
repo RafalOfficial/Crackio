@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useModels } from "@/lib/hooks/use-models";
 import { ModelPicker, VendorMark } from "@/components/models/ModelPicker";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { Verdict } from "./parts";
+import { ModelLoraLibrary } from "./ModelLoraLibrary";
 import { KIND_LABEL, type ModelKind } from "@/lib/models/catalog";
 import { engineShortName } from "@/lib/providers/names";
 import { cn } from "@/lib/cn";
@@ -20,13 +23,12 @@ const SPEED = { fast: "Fast", medium: "Balanced", slow: "Best quality" } as cons
 
 export function ModelsView() {
   const { models, defaults, loaded, error, setDefault, refresh } = useModels();
+  // Each kind shows its ready models first, a few at a time: the full list is one click away.
+  const [open, setOpen] = useState<Partial<Record<ModelKind, boolean>>>({});
 
   return (
-    <div className="mt-8">
-      <h1 className="font-display text-[34px]">Models</h1>
-      <p className="mt-1.5 max-w-[66ch] text-[15px] leading-relaxed text-haze">
-        Pick the model each kind of job uses by default. Every tool also has its own picker, so you can switch per shot.
-      </p>
+    <div>
+      <Verdict title="Models" facts="The model each kind of job starts on. Every tool has its own picker too (it remembers your last pick there), and its Get models installs any open model on any of your machines." />
       {error ? (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-[12px] bg-tally/10 px-4 py-3 text-[13.5px] text-tally">
           <span>Couldn&rsquo;t load models: {error}</span>
@@ -37,8 +39,9 @@ export function ModelsView() {
       ) : null}
 
       {KINDS.map(({ kind, body }) => {
-        const list = models.filter((m) => m.kind === kind);
+        const list = models.filter((m) => m.kind === kind).sort((a, b) => Number(b.id === defaults[kind]) - Number(a.id === defaults[kind]) || Number(b.available) - Number(a.available));
         const ready = list.filter((m) => m.available).length;
+        const shown = open[kind] ? list : list.slice(0, 4);
         return (
           <section key={kind} className="mt-10">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -55,7 +58,7 @@ export function ModelsView() {
               <ul className="divide-y divide-line">
                 {!loaded
                   ? Array.from({ length: 3 }, (_, i) => <li key={i} className="skeleton m-3 h-12 rounded-[10px]" />)
-                  : list.map((m) => (
+                  : shown.map((m) => (
                       <li key={m.id} className={cn("flex flex-wrap items-start gap-x-3 gap-y-1.5 px-4 py-3 sm:flex-nowrap", !m.available && "opacity-70")}>
                         <VendorMark vendor={m.vendor} model={m.name} size={36} />
                         <div className="min-w-0 flex-1">
@@ -73,7 +76,7 @@ export function ModelsView() {
                               <span className="size-1.5 rounded-full bg-chroma" /> Ready via {engineShortName(m.via!)}
                             </span>
                           ) : m.runnable ? (
-                            <Link href="/settings/connections" className="font-semibold text-tungsten hover:underline">
+                            <Link href="/settings/tools" className="font-semibold text-tungsten hover:underline">
                               {m.reason}
                             </Link>
                           ) : (
@@ -83,10 +86,16 @@ export function ModelsView() {
                       </li>
                     ))}
               </ul>
+              {loaded && list.length > shown.length ? (
+                <button type="button" onClick={() => setOpen((o) => ({ ...o, [kind]: true }))} className="w-full border-t border-line px-4 py-3 text-left text-[13px] font-semibold text-haze hover:text-paper">
+                  Show all {list.length}
+                </button>
+              ) : null}
             </Panel>
           </section>
         );
       })}
+      <ModelLoraLibrary />
     </div>
   );
 }

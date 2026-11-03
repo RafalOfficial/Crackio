@@ -62,7 +62,7 @@ export function RunOnMenu({ machines, runOn, onPicked, className }: { machines: 
       </MenuItem>
       {shown.map((m) => {
         const Icon = m.cloud ? Cloud : m.here ? Monitor : Laptop;
-        const note = m.note ?? (!m.online ? "Offline" : !m.hasModel ? "Doesn't have this model: install it on Local" : m.queue ? `${m.queue} job${m.queue === 1 ? "" : "s"} ahead` : null);
+        const note = m.note ?? (!m.online ? "Offline" : !m.hasModel ? "Doesn't have this model: set it up in Settings → Tools" : m.queue ? `${m.queue} job${m.queue === 1 ? "" : "s"} ahead` : null);
         const time = m.online && m.seconds !== null ? `${m.measured ? "" : "~"}${formatSeconds(m.seconds)}` : null;
         return (
           <MenuItem

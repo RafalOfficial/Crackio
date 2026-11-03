@@ -1,6 +1,8 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
+import { VoiceViewer, speakersOf } from "@/components/voice/AudioTake";
+import { Orb } from "@/components/voice/Orb";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -244,7 +246,7 @@ export function Viewer({ takes, index, onGo, onClose, folders, newColor, onMove,
       ref={root}
       role="dialog"
       aria-modal="true"
-      aria-label={`${take.kind === "video" ? "Clip" : "Image"} ${index + 1} of ${takes.length}`}
+      aria-label={`${kindWord(take.kind)} ${index + 1} of ${takes.length}`}
       tabIndex={-1}
       className="viewer-in fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-[#0c0a10] text-paper outline-none lg:flex-row lg:overflow-hidden"
     >
@@ -286,7 +288,9 @@ export function Viewer({ takes, index, onGo, onClose, folders, newColor, onMove,
         {/* The picture or clip */}
         <div ref={box} className="relative min-h-0 flex-1 overflow-hidden">
           {size.w > 0 ? (
-            take.kind === "image" ? (
+            take.kind === "audio" && take.gen.outputs[take.index] ? (
+              <VoiceViewer key={take.key} ref={media} gen={take.gen} output={take.gen.outputs[take.index]} />
+            ) : take.kind === "image" ? (
               <Still key={take.key} ref={media} take={take} box={size} pad={pad} onZoom={setZoom} onSwipe={(d) => go(index + d)} />
             ) : (
               <ClipPlayer key={take.key} ref={media} take={take} box={size} pad={pad} controls={controlsHost} onToggleFull={toggleFull} onSwipe={(d) => go(index + d)} />
@@ -676,6 +680,9 @@ function precise(t: number) {
   return `${clock(t)}.${tenths}`;
 }
 
+/** What a take is, in a word. */
+const kindWord = (kind: Take["kind"]) => (kind === "video" ? "Clip" : kind === "audio" ? "Voice take" : "Image");
+
 /** Thumbnails keep their shape within limits, at the strip's height. */
 const thumbWidth = (ratio: number) => Math.round(Math.min(92, Math.max(30, 44 * ratio)));
 const THUMB_GAP = 6;
@@ -702,7 +709,7 @@ function Filmstrip({ takes, index, onGo }: { takes: Take[]; index: number; onGo:
         {list.map((t, k) => {
           const i = from + k;
           const o = t.gen.outputs[t.index];
-          const src = o ? (t.kind === "video" ? posterUrl(o.url, 640) : previewUrl(o.url, 640)) : undefined;
+          const src = !o || t.kind === "audio" ? undefined : t.kind === "video" ? posterUrl(o.url, 640) : previewUrl(o.url, 640);
           const here = i === index;
           return (
             <button
@@ -718,6 +725,11 @@ function Filmstrip({ takes, index, onGo }: { takes: Take[]; index: number; onGo:
               style={{ width: widths[k] }}
             >
               {src ? <img src={src} alt="" loading="lazy" decoding="async" draggable={false} className="size-full object-cover" /> : null}
+              {t.kind === "audio" ? (
+                <span className="grid size-full place-items-center bg-[#120f17]">
+                  <Orb hues={speakersOf(t.gen)[0]?.hues ?? ["#ffc07c", "#b8432e"]} size={18} />
+                </span>
+              ) : null}
               {t.kind === "video" ? <Play size={8} fill="currentColor" strokeWidth={0} className="absolute bottom-1 left-1 text-paper drop-shadow" /> : null}
             </button>
           );
@@ -798,7 +810,7 @@ function InfoPanel({
         <div className="min-w-0">
           <p className="truncate text-[15.5px] font-semibold leading-tight">{toolName(take.tool)}</p>
           <p className="mt-1 truncate text-[12.5px] text-haze">
-            {take.kind === "video" ? "Clip" : "Image"} · {made.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+            {kindWord(take.kind)} · {made.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
           </p>
         </div>
       </header>
@@ -843,12 +855,14 @@ function InfoPanel({
                 </span>
               </Detail>
             ) : null}
-            <Detail term="Shape">
-              <span className="inline-flex items-center gap-1.5">
-                <AspectGlyph id={g.aspect} /> {g.aspect}
-              </span>
-            </Detail>
-            {take.kind === "video" && o?.duration ? (
+            {take.kind !== "audio" ? (
+              <Detail term="Shape">
+                <span className="inline-flex items-center gap-1.5">
+                  <AspectGlyph id={g.aspect} /> {g.aspect}
+                </span>
+              </Detail>
+            ) : null}
+            {take.kind !== "image" && o?.duration ? (
               <Detail term="Length">
                 <span className="tabular">
                   {o.duration < 60 ? `${o.duration.toFixed(1)} s` : precise(o.duration)}

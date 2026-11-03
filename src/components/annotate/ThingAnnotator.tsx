@@ -149,7 +149,7 @@ export function ThingAnnotator({
         <span className="pointer-events-none absolute bottom-2.5 left-2.5 z-10 inline-flex max-w-[calc(100%-20px)] items-center gap-1.5 truncate rounded-full bg-black/60 px-2.5 py-1 text-[11.5px] font-semibold text-paper backdrop-blur">
           {status === "loading" ? (
             <>
-              <LoaderCircle size={12} className="animate-spin" /> Finding things…
+              <LoaderCircle size={12} className="animate-spin" /> {things.length ? `Finding things… ${things.length} so far, click one to change it` : "Finding things…"}
             </>
           ) : status === "error" ? (
             <span className="truncate text-tungsten">{error ?? "Nothing found"} · click anywhere to add a change</span>

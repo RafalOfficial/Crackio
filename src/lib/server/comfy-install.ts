@@ -72,7 +72,7 @@ type BuildInfo = {
  * Sizes are the download and the room it takes once installed. CUDA 12.6 on Windows is measured (a 2.4 GB wheel, 3.9 GB
  * installed); the rest are estimated from the wheels' sizes. On Linux the CUDA libraries come as separate packages.
  */
-const BUILDS: Record<TorchBuild, BuildInfo> = {
+export const BUILDS: Record<TorchBuild, BuildInfo> = {
   cu126: { torch: "2.14.1", torchvision: "0.29.1", index: `${PYTORCH}/cu126`, name: "CUDA 12.6", downloadGb: WIN ? 2.5 : 3.4, diskGb: WIN ? 4.5 : 6.5 },
   cu128: { torch: "2.11.0", torchvision: "0.26.0", index: `${PYTORCH}/cu128`, name: "CUDA 12.8", downloadGb: WIN ? 2.6 : 3.4, diskGb: WIN ? 4.6 : 6.5 },
   cu130: { torch: "2.14.1", torchvision: "0.29.1", index: `${PYTORCH}/cu130`, name: "CUDA 13.0", downloadGb: WIN ? 1.9 : 3, diskGb: WIN ? 3.6 : 6 },
@@ -227,7 +227,7 @@ function amdDevice(name: string) {
   return targets.find(([re]) => re.test(name))?.[1] ?? "device-all";
 }
 
-function nvidiaChoice(gpu: Gpu): Choice {
+export function nvidiaChoice(gpu: Gpu): Choice {
   const name = shortName(gpu.name);
   const cc = gpu.compute;
   const driver = driverMajor(gpu.driver);
@@ -957,22 +957,32 @@ async function installedVersion(python: string, pkg: string) {
 
 const pinned = (version: string | null, plan: SetupPlan) => (version && plan.index ? `${version}+${plan.build}` : version);
 
+/**
+ * PyTorch 2.15's Mac build uses the GPU (MPS) only on macOS 15 or newer: on macOS 14 it installs, then runs on the CPU and
+ * fails the GPU check. macOS 15 is Darwin 24.
+ */
+const MAC_BEFORE_15 = process.platform === "darwin" && Number(os.release().split(".")[0]) < 24;
+
 async function installTorch(ctx: Ctx) {
   const { job, l, plan } = ctx;
   const want = pinned(plan.torch, plan);
   const have = await installedVersion(l.python, "torch");
-  if (have && (!want || have === want)) {
+  const tooNewForMac = MAC_BEFORE_15 && !want && Boolean(have) && have!.localeCompare("2.15", undefined, { numeric: true }) >= 0;
+  if (have && !tooNewForMac && (!want || have === want)) {
     say(job, `PyTorch ${have} is already installed.`);
     return;
   }
-  if (have) say(job, `Replacing PyTorch ${have} with ${want}.`);
+  if (have) say(job, `Replacing PyTorch ${have} with ${want ?? "a build that uses this Mac's GPU (older than 2.15)"}.`);
   const wheel = await torchWheel(ctx).catch((err) => {
     say(job, `Couldn't fetch the wheel directly (${(err as Error).message}); the installer will.`);
     return null;
   });
   const vision = pinned(plan.torchvision, plan);
   const extra = plan.extras ? `[${plan.extras}]` : "";
-  const specs = [wheel ?? (want ? `torch${extra}==${want}` : "torch"), vision ? `torchvision${extra}==${vision}` : "torchvision"];
+  const specs = [
+    wheel ?? (want ? `torch${extra}==${want}` : MAC_BEFORE_15 ? "torch<2.15" : "torch"),
+    vision ? `torchvision${extra}==${vision}` : MAC_BEFORE_15 ? "torchvision<0.30" : "torchvision",
+  ];
   const index = plan.index ? ["--index-url", plan.index] : [];
   job.fraction = wheel ? 0.88 : null;
   job.detail = null;
@@ -1124,6 +1134,24 @@ async function refreshBridge(rec: InstallRecord) {
   } catch {
     // A bridge it can't update still works as it was.
   }
+}
+
+/**
+ * Brings the bridge in this computer's ComfyUI up to Crackio's own copy and restarts ComfyUI to load it (the bridge's
+ * own restart: the same process starts over). Refused while ComfyUI has work queued.
+ */
+export async function updateLocalBridge() {
+  const rec = await readRecord();
+  if (!rec?.complete) throw new SetupError("ComfyUI isn't installed on this computer.", 404);
+  const url = `http://127.0.0.1:${rec.port}`;
+  const queue = await fetch(`${url}/queue`, { signal: AbortSignal.timeout(5000) })
+    .then((r) => r.json() as Promise<{ queue_running?: unknown[]; queue_pending?: unknown[] }>)
+    .catch(() => null);
+  if (!queue) throw new SetupError("This computer's ComfyUI isn't running: start it in Settings → Machines.", 409);
+  if (queue.queue_running?.length || queue.queue_pending?.length) throw new SetupError("ComfyUI is busy: update it once its jobs are done.", 409);
+  await refreshBridge(rec);
+  const res = await fetch(`${url}/crackio/restart`, { method: "POST", signal: AbortSignal.timeout(8000) }).catch(() => null);
+  if (!res?.ok) throw new SetupError("ComfyUI didn't restart: restart it from Settings → Machines.", 502);
 }
 
 /** Loads PyTorch, and on a GPU runs a matrix multiply and a convolution and compares them with the CPU's. */

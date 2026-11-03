@@ -31,6 +31,6 @@ export async function POST(request: Request) {
     read: ((take?.params?.studio as { read?: ProductRead | null } | undefined)?.read ?? null) as ProductRead | null,
     notes: typeof b.notes === "string" ? b.notes.slice(0, 1000) : "",
   });
-  if (!script) return Response.json({ error: "No text model answered. Add a Comfy key in Connections, or sign in to ChatGPT or Grok, or write the lines yourself." }, { status: 503 });
+  if (!script) return Response.json({ error: "No text model answered. Add a Comfy key in Settings → Accounts, set up a text model in Settings → Tools, or write the lines yourself." }, { status: 503 });
   return Response.json({ script }, { headers: { "Cache-Control": "no-store" } });
 }

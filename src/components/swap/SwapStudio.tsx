@@ -36,6 +36,20 @@ const PAINTS = [
 ];
 const PERSON = /\b(man|woman|person|girl|boy|guy|lady|child|kid|dancer|singer|creator|model|player|grandma|grandpa|friend|she|he|her|him)\b/i;
 
+/** Who checks the drawings (server/swap-checker), and whether each can run now (/api/swap/checkers). */
+type Checker = "auto" | "local" | "cloud";
+type CheckerState = { picked: Checker; local: { ok: boolean; where?: string; why?: string }; cloud: { ok: boolean; why?: string } };
+
+/** The line under Checks: who will check this swap, or why the pick can't. */
+function checkerNote(picked: Checker, s: CheckerState): { ok: boolean; text: string } {
+  const judge = `Crackio's judge on ${s.local.where}, free`;
+  if (picked === "local") return s.local.ok ? { ok: true, text: judge } : { ok: false, text: s.local.why ?? "Crackio's judge isn't installed." };
+  if (picked === "cloud") return s.cloud.ok ? { ok: true, text: "Gemini 3.5 Flash on your Comfy key" } : { ok: false, text: `Gemini can't check right now: ${s.cloud.why ?? "it didn't answer."}` };
+  if (s.local.ok) return { ok: true, text: `Auto: ${judge}` };
+  if (s.cloud.ok) return { ok: true, text: "Auto: Gemini 3.5 Flash (Crackio's judge isn't installed on your GPUs)" };
+  return { ok: true, text: "Auto: a picture reader on your GPU. Crackio's judge (Settings → Tools → Swap) makes sharper checks." };
+}
+
 type Clip = { url: string; name: string; duration: number; title?: string };
 type Frame = { url: string; width: number; height: number };
 type Becomes = "cast" | "picture" | "paint" | "words" | "remove";
@@ -127,8 +141,13 @@ export function SwapStudio() {
   const [sharp, setSharp] = useState(false);
   const [lock, setLock] = useState(false);
   const [fast, setFast] = useState(false);
-  // The Qwen3-VL that checks each drawing on your GPU (without a Comfy key): a setting, kept for every swap.
-  const [vision, setVision] = useState<"4b" | "8b">("4b");
+  // Who checks each drawing: Crackio's judge on your GPU, Gemini on your Comfy key, or Auto (the judge where it's
+  // installed). A setting, kept for every swap; `checkers` says whether each can run now.
+  const [checker, setChecker] = useState<Checker>("auto");
+  const [checkers, setCheckers] = useState<CheckerState | null>(null);
+  // How sure the checker must be before a drawing is kept: Lenient keeps acceptable swaps with small flaws (fewer
+  // redraws), Strict draws anything doubtful again. A setting too.
+  const [strictness, setStrictness] = useState<"strict" | "normal" | "lenient">("lenient");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,9 +158,16 @@ export function SwapStudio() {
   const used = clip ? Math.min(SPAN, Math.max(0.5, clip.duration - start)) : 0;
 
   useEffect(() => {
+    void fetch("/api/swap/checkers")
+      .then((r) => r.json())
+      .then((s: CheckerState) => {
+        setCheckers(s);
+        setChecker(s.picked);
+      })
+      .catch(() => {});
     void fetch("/api/settings")
       .then((r) => r.json())
-      .then((s: { localVision?: "4b" | "8b" }) => s.localVision && setVision(s.localVision))
+      .then((s: { swapStrictness?: "strict" | "normal" | "lenient" }) => s.swapStrictness && setStrictness(s.swapStrictness))
       .catch(() => {});
   }, []);
 
@@ -232,11 +258,13 @@ export function SwapStudio() {
           fast,
           seconds: SPAN,
           consent,
+          checker,
+          strictness,
           ...(clip.title ? { title: clip.title } : {}),
         }),
       });
-      const data = (await res.json()) as { item?: Generation; error?: string };
-      if (!res.ok || !data.item) throw new Error(data.error ?? "Couldn't start the swap.");
+      const data = (await res.json()) as { item?: Generation; error?: string; hint?: string };
+      if (!res.ok || !data.item) throw new Error([data.error ?? "Couldn't start the swap.", data.hint].filter(Boolean).join(" "));
       const store = useGenerationsStore.getState();
       useGenerationsStore.setState({ items: [data.item, ...store.items] });
       setViewing(data.item.id);
@@ -382,18 +410,37 @@ export function SwapStudio() {
               />
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <span className="text-[12.5px] text-fog" title="Every drawing is checked (pose, outfit, the right one changed). With a Comfy API key Gemini 3.5 Flash checks them; without one, this model on your GPU.">
-                Checks on your GPU
+              <span className="text-[12.5px] text-fog" title="Every drawing is checked before it's used: is the character fully swapped in, is the pose kept. Your GPU: Crackio's own judge, free. Gemini: Gemini 3.5 Flash on your Comfy API key. Auto: your GPU where the judge is installed, else Gemini.">
+                Checks
               </span>
               <Segmented
-                value={vision}
+                value={checker}
                 onChange={(v) => {
-                  setVision(v);
-                  void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ localVision: v }) }).catch(() => {});
+                  setChecker(v);
+                  void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ swapChecker: v }) }).catch(() => {});
                 }}
                 options={[
-                  { id: "4b", label: "Qwen3-VL 4B" },
-                  { id: "8b", label: "Qwen3-VL 8B" },
+                  { id: "auto", label: "Auto" },
+                  { id: "local", label: "Your GPU" },
+                  { id: "cloud", label: "Gemini" },
+                ]}
+              />
+            </div>
+            {checkers ? <p className={cn("mt-1.5 text-right text-[12px] leading-snug", checkerNote(checker, checkers).ok ? "text-haze" : "text-[var(--color-spike)]")}>{checkerNote(checker, checkers).text}</p> : null}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-[12.5px] text-fog" title="How sure the checker must be before a drawing is kept. Lenient: an acceptable swap with small flaws is kept, so fewer redraws. Strict: anything doubtful is drawn again, slower and safer.">
+                Strictness
+              </span>
+              <Segmented
+                value={strictness}
+                onChange={(v) => {
+                  setStrictness(v);
+                  void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ swapStrictness: v }) }).catch(() => {});
+                }}
+                options={[
+                  { id: "lenient", label: "Lenient" },
+                  { id: "normal", label: "Normal" },
+                  { id: "strict", label: "Strict" },
                 ]}
               />
             </div>

@@ -321,7 +321,9 @@ export function TemplateStudio({ id }: { id: string }) {
           onView={setViewing}
         />
 
-        <Panel className="flex flex-col">
+        {/* The panel stays on screen beside the clip, its settings scrolling inside it and the button always in view, so a
+            remix starts without scrolling down to the button and back up to the clip (as the Swap tool's panel works). */}
+        <Panel className="flex flex-col lg:sticky lg:top-6 lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-hidden">
           <div className="border-b border-line p-4">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="rounded-[7px] bg-white/[0.07] px-1.5 py-[3px] text-[10.5px] font-bold uppercase tracking-[0.05em] text-fog">{swapLabel(t)}</span>
@@ -345,7 +347,7 @@ export function TemplateStudio({ id }: { id: string }) {
 
           </div>
 
-          <div className="space-y-6 p-4">
+          <div className="space-y-6 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             {t.slots.map((s) => (
               <SlotCard
                 key={s.id}
@@ -590,16 +592,16 @@ export function TemplateStudio({ id }: { id: string }) {
             ) : null}
 
             <PromptBox prompt={prompt} edited={override !== null} open={showPrompt} setOpen={setShowPrompt} onEdit={setOverride} />
+          </div>
 
+          <div className="mt-auto space-y-2 border-t border-line p-4">
+            {/* Beside the button it unlocks. */}
             {people ? (
-              <label className="flex cursor-pointer items-start gap-2.5 text-[12.5px] leading-relaxed text-fog">
+              <label className="flex cursor-pointer items-start gap-2.5 px-1 pb-1 text-[12.5px] leading-relaxed text-fog">
                 <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-[3px] size-4 shrink-0 accent-[var(--color-spike)]" />
                 <span>Everyone in these photos is an adult and agreed to be put in this clip.</span>
               </label>
             ) : null}
-          </div>
-
-          <div className="mt-auto space-y-2 border-t border-line p-4">
             {error ? (
               <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-tally">
                 <TriangleAlert size={14} className="mt-0.5 shrink-0" /> {error}
@@ -686,6 +688,9 @@ function Stage({
   const showing = tab === "original" || !take ? "original" : "yours";
   const ratio = result?.width && result?.height ? result.width / result.height : 9 / 16;
   const liveTake = take && (take.status === "queued" || take.status === "running");
+  // The clip as big as fits beside the panel, never taller than the window: a tall clip used to run past the bottom of a
+  // 956 px MacBook screen, so its controls needed a scroll.
+  const fit = (r: number) => ({ aspectRatio: r, width: `min(100%, ${r >= 1 ? 960 : 460}px, calc((100dvh - 170px) * ${r.toFixed(4)}))` });
 
   const both = () => {
     const vids = [before.current, after.current].filter((v): v is HTMLVideoElement => Boolean(v));
@@ -717,16 +722,16 @@ function Stage({
 
       <div className={cn("mt-3 grid gap-3", playing && result ? "sm:grid-cols-2" : "")}>
         {((playing && result) || showing === "original") && !original ? (
-          <div className="mx-auto grid w-full max-w-[460px] place-items-center rounded-[18px] p-8 text-center shadow-[inset_0_0_0_1.5px_var(--color-line-strong)]" style={{ aspectRatio: 9 / 16 }}>
+          <div className="mx-auto grid place-items-center rounded-[18px] p-8 text-center shadow-[inset_0_0_0_1.5px_var(--color-line-strong)]" style={fit(9 / 16)}>
             <p className="max-w-[26ch] text-[13.5px] leading-relaxed text-fog">Drop the trend&rsquo;s clip on the right, then click who to replace.</p>
           </div>
         ) : (playing && result) || showing === "original" ? (
-          <div className="mx-auto w-full max-w-[460px] overflow-hidden rounded-[18px] bg-black" style={{ aspectRatio: 9 / 16 }}>
+          <div className="mx-auto overflow-hidden rounded-[18px] bg-black" style={fit(9 / 16)}>
             <video ref={before} key={original} src={`${original}#t=0.1`} poster={poster} className="size-full object-contain" playsInline loop muted={playing} controls={!playing} preload="metadata" />
           </div>
         ) : null}
         {showing === "yours" && take ? (
-          <div className="relative mx-auto w-full max-w-[460px] overflow-hidden rounded-[18px] bg-black" style={{ aspectRatio: ratio }}>
+          <div className="relative mx-auto overflow-hidden rounded-[18px] bg-black" style={fit(ratio)}>
             {result ? <video ref={after} key={result.url} src={`${result.url}#t=0.1`} className="size-full object-contain" playsInline loop controls={!playing} preload="auto" /> : null}
             {liveTake ? (
               <GeneratingField
@@ -899,8 +904,8 @@ function SlotCard({
           </button>
           {ready.length ? (
             <div className="flex items-center gap-2">
-              <span className="text-[11.5px] text-haze">Or from your Cast:</span>
-              <div className="scrollbar-none flex gap-1.5 overflow-x-auto">
+              <span className="shrink-0 whitespace-nowrap text-[11.5px] text-haze">Or from your Cast:</span>
+              <div className="scrollbar-none flex min-w-0 gap-1.5 overflow-x-auto">
                 {ready.map((c) => (
                   <button
                     key={c.id}

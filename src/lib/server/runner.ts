@@ -9,7 +9,8 @@ import type { Generation } from "@/lib/generations/types";
 import { sizeFor } from "@/lib/shot";
 import { runMotion } from "@/lib/motion/job";
 import { keepOutside } from "./protect";
-import { withSourceSound } from "./clip";
+import { finishAtSize, withSourceSound } from "./clip";
+import { dropPasteMask, takePasteMask } from "./paste-masks";
 import { runRetouch } from "./retouch";
 import { runProductShoot, type ProductShootResult } from "./product";
 import { runProductFilm, type FilmResult } from "./product-film";
@@ -84,7 +85,7 @@ async function run(id: string) {
   };
 
   try {
-    update({ status: "running", progress: 0.01, stage: "Starting" });
+    update({ status: "running", startedAt: Date.now(), progress: 0.01, stage: "Starting" });
 
     // Motion turns: the agent writes a composition, then it renders on this computer.
     if (gen.params?.kind === "motion") {
@@ -97,6 +98,26 @@ async function run(id: string) {
       return;
     }
 
+    // Voice takes: speech from your script on your own GPU (server/voice).
+    if (gen.params?.kind === "voice") {
+      const { runVoice } = await import("./voice/run");
+      const result = await runVoice(gen, { signal: ctrl.signal, progress });
+      update({ engine: "comfy-local", model: result.model, modelName: result.modelName, params: { ...gen.params, heard: result.heard }, stage: "Saving" });
+      const outputs = await saveOutputs(id, result.outputs);
+      update({ status: "done", outputs, compiledPrompt: result.usedPrompt, progress: 1, stage: undefined, finishedAt: Date.now() });
+      return;
+    }
+
+    // Lip Sync: a clip's words changed, and its mouth redrawn to say them only there (server/lipsync).
+    if (gen.params?.kind === "lipsync") {
+      const { runLipsync } = await import("./lipsync/run");
+      const result = await runLipsync(gen, { signal: ctrl.signal, progress });
+      update({ engine: "comfy-local", model: "local:lipsync:latentsync", modelName: result.modelName, params: { ...gen.params, lipsyncReport: result.report }, stage: "Saving" });
+      const outputs = await saveOutputs(id, result.outputs);
+      update({ status: "done", outputs, compiledPrompt: result.usedPrompt, progress: 1, stage: undefined, finishedAt: Date.now() });
+      return;
+    }
+
     const kind = (gen.params?.kind as ModelKind | undefined) ?? "image";
     const mode = kind === "video" ? "video" : "image";
     const def = await resolveModel(kind, gen.model);
@@ -104,7 +125,13 @@ async function run(id: string) {
     if (!engine) throw new EngineError(`${def.name} has no engine connected.`, "Open Connections.");
     update({ engine: def.via!, model: def.id, modelName: def.name });
 
-    const { width, height } = sizeFor(gen.aspect);
+    // A shape of the tool's own, where its control picture has one the aspects don't (Angles: the photo's): the picture
+    // takes it at the aspect's size, so the control isn't stretched and the take frames what the camera saw.
+    const shape = typeof gen.params?.ratio === "number" && gen.params.ratio > 0 ? Math.min(3, Math.max(1 / 3, gen.params.ratio)) : null;
+    const asked = sizeFor(gen.aspect);
+    const long = Math.max(asked.width, asked.height);
+    const snap = (n: number) => Math.max(256, Math.round(n / 16) * 16);
+    const { width, height } = shape ? (shape >= 1 ? { width: snap(long), height: snap(long / shape) } : { width: snap(long * shape), height: snap(long) }) : asked;
     // A picture Crackio can't find would otherwise be skipped quietly, and an edit would come back as a new picture.
     const lost = gen.references.filter((r) => !urlToPath(r.url));
     if (lost.length) throw new EngineError(lost.length === 1 ? "Crackio can't find a picture you gave it." : `Crackio can't find ${lost.length} of the pictures you gave it.`, "Add it again.");
@@ -230,6 +257,21 @@ async function run(id: string) {
     if (kind === "image" && retouch?.version !== 2 && protect?.boxes?.length && original) {
       update({ stage: "Keeping the rest as it was" });
       result.outputs = await outside("The picture outside your changes put back as it was", "sharp", () => keepOutside(original, result.outputs, protect.boxes!));
+    }
+
+    // Ripple made the swapped people inside a 720p copy of a bigger clip: they're laid onto the clip at its own size, so
+    // everything around them keeps the clip's own sharpness (clip.finishAtSize).
+    const pasted = kind === "video" && sourcePath ? takePasteMask(sourcePath) : null;
+    if (pasted) {
+      const big = pathParam("finishUrl");
+      try {
+        if (big) {
+          update({ stage: "Laying the swap onto the clip at its own size" });
+          result.outputs = await outside("The swap laid onto the clip at its own size", "ffmpeg", () => Promise.all(result.outputs.map((o) => (o.mime.startsWith("video/") ? finishAtSize(o, big, pasted) : o))));
+        }
+      } finally {
+        await dropPasteMask(pasted);
+      }
     }
 
     // Template swaps keep the clip's own sound exactly, cut back to the clip's length when it was padded for the model.

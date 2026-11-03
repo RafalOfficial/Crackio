@@ -12,7 +12,7 @@ import type { ElementKind } from "./types";
 export type ModelStatus = { state: "missing" | "downloading" | "loading" | "ready" | "error"; received: number; total: number; error?: string };
 export type CutoutResult = { url: string; width: number; height: number; cutout: boolean; note?: string };
 
-type VisionStore = { busy: number; models: Record<"depth" | "cutout", ModelStatus> | null };
+type VisionStore = { busy: number; models: Partial<Record<"depth" | "cutout" | "geometry", ModelStatus>> | null };
 export const useVision = create<VisionStore>(() => ({ busy: 0, models: null }));
 
 let poll: ReturnType<typeof setInterval> | null = null;
@@ -41,7 +41,7 @@ function track<T>(p: Promise<T>): Promise<T> {
   });
 }
 
-async function call<T>(task: "depth" | "cutout" | "mask" | "read", url: string): Promise<T> {
+async function call<T>(task: "depth" | "geometry" | "cutout" | "mask" | "read", url: string): Promise<T> {
   const res = await fetch("/api/vision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -160,15 +160,59 @@ export function useDepth(url: string | null | undefined) {
   };
 }
 
+/**
+ * A photo measured for Angles (server/vision `estimateGeometry`): its depth map in Director's encoding, which with
+ * `near` and `far` (meters) gives true distances, the lens's vertical field of view, and the share that is sky.
+ */
+export type Geometry = { depth: DepthMap; fov: number; near: number; far: number; sky: number };
+
+const geometries = new Map<string, Promise<Geometry>>();
+
+export function loadGeometry(url: string) {
+  let p = geometries.get(url);
+  if (!p) {
+    p = track(call<{ width: number; height: number; data: string; fov: number; near: number; far: number; sky: number }>("geometry", url)).then(
+      ({ fov, near, far, sky, ...map }) => ({ depth: decodeDepth(map), fov, near, far, sky }),
+    );
+    p.catch(() => geometries.delete(url));
+    geometries.set(url, p);
+  }
+  return p;
+}
+
+/** The measured 3D shape of an image once it's ready. */
+export function useGeometry(url: string | null | undefined) {
+  const [state, setState] = useState<{ url: string | null; geometry: Geometry | null; error: string | null }>({ url: null, geometry: null, error: null });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!url) return;
+    let live = true;
+    loadGeometry(url).then(
+      (geometry) => live && setState({ url, geometry, error: null }),
+      (err: Error) => live && setState({ url, geometry: null, error: err.message }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [url, attempt]);
+  const current = state.url === url;
+  return {
+    geometry: current ? state.geometry : null,
+    error: current ? state.error : null,
+    retry: () => setAttempt((a) => a + 1),
+  };
+}
+
 /** A one-line description of what the vision service is doing, for progress UI. */
 export function visionMessage(models: VisionStore["models"]) {
   if (!models) return null;
-  const downloading = (["depth", "cutout"] as const).filter((m) => models[m].state === "downloading");
+  const all = (["depth", "cutout", "geometry"] as const).flatMap((m) => (models[m] ? [models[m]] : []));
+  const downloading = all.filter((m) => m.state === "downloading");
   if (downloading.length) {
-    const received = downloading.reduce((s, m) => s + models[m].received, 0);
-    const total = downloading.reduce((s, m) => s + models[m].total, 0);
+    const received = downloading.reduce((s, m) => s + m.received, 0);
+    const total = downloading.reduce((s, m) => s + m.total, 0);
     return `Getting the 3D tools ready (one time) · ${Math.round((received / Math.max(1, total)) * 100)}%`;
   }
-  if ((["depth", "cutout"] as const).some((m) => models[m].state === "loading")) return "Warming up the 3D tools";
+  if (all.some((m) => m.state === "loading")) return "Warming up the 3D tools";
   return null;
 }

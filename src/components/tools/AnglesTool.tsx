@@ -6,7 +6,7 @@ import { Box, Crosshair, Image as ImageIcon, LoaderCircle, RotateCcw, TriangleAl
 import { toolBySlug } from "@/lib/tools";
 import { Slider } from "@/components/ui/Slider";
 import { Osd } from "@/components/ui/Viewfinder";
-import { loadDepth, loadMask, useDepth, useMask, useVision, visionMessage } from "@/lib/director/vision";
+import { loadGeometry, loadMask, useGeometry, useMask, useVision, visionMessage } from "@/lib/director/vision";
 import {
   angleBase,
   angleFacts,
@@ -20,7 +20,7 @@ import {
   type AngleShot,
   type AngleView,
 } from "@/lib/angles/rig";
-import { anglePrompt, angleSummary, describeMove, isOriginal } from "@/lib/angles/prompt";
+import { anglePrompt, angleSummary, anyAnglePrompt, describeMove, isOriginal } from "@/lib/angles/prompt";
 import { ControlSection, EditToolShell, type Compiled, type ToolModel } from "./EditToolShell";
 import { imageSlots } from "@/lib/models/caps";
 import type { SourceImage } from "./SourcePicker";
@@ -35,10 +35,23 @@ const AngleStage = dynamic(() => import("./angles/AngleStage"), {
 const HINT_KEY = "crackio-angles-hint-seen";
 
 /**
- * Auto's picks for Angles: in tests the GPT Image models followed the 3D guide's camera most
- * faithfully while keeping people the same; Nano Banana is next. Then Crackio's usual order.
+ * Angles' first model: Qwen Angles, trained to take the camera from a rough 3D render and everything else from the photo
+ * (the shot is the 3D view's, who and what is in it the photo's), then the GPT Image models, which followed the 3D
+ * guide's camera most faithfully of the rest, and Nano Banana. Then Crackio's usual order.
  */
-const PREFER = ["comfy:openai/gpt-image-2.5-flare", "comfy:vertexai/gemini-nano-banana-2.1", "local:flux3-klein", "local:flux2-klein-4b"];
+const PREFER = ["local:qwen-angles", "comfy:openai/gpt-image-2.5-flare", "comfy:vertexai/gemini-nano-banana-2.1", "local:flux3-klein", "local:flux2-klein-4b"];
+
+/** Models that re-shoot from the 3D view itself (job.guide, their second picture), the photo being their first. */
+const FROM_VIEW = new Set(["local:qwen-angles"]);
+
+async function upload(blob: Blob, name: string) {
+  const body = new FormData();
+  body.append("file", new File([blob], name, { type: "image/png" }));
+  const res = await fetch("/api/uploads", { method: "POST", body });
+  const data = (await res.json().catch(() => ({}))) as { items?: { url: string }[]; error?: string };
+  if (!res.ok || !data.items?.[0]) throw new Error(data.error ?? "Couldn't save the 3D preview.");
+  return data.items[0].url;
+}
 
 type Pivot = { url: string; u: number; v: number };
 type SetView = Dispatch<SetStateAction<AngleView>>;
@@ -68,29 +81,43 @@ const HEIGHTS = [
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-/** The photo's 3D set, what the camera orbits and where it stood, once depth (and the subject's matte) arrive. */
+/** The photo's 3D set, what the camera orbits and where it stood, once its measurement (and the subject's matte) arrive. */
 function useAngleScene(source: SourceImage, picked?: { u: number; v: number }) {
-  const { depth, error, retry } = useDepth(source.url);
+  const { geometry, error, retry } = useGeometry(source.url);
+  const depth = geometry?.depth ?? null;
   const { mask } = useMask(source.url);
   const aspect = source.width / source.height;
-  const place = useMemo(() => (depth ? placeFor(depth, aspect) : provisionalPlace(aspect)), [depth, aspect]);
+  const place = useMemo(() => (geometry ? placeFor(geometry, aspect) : provisionalPlace(aspect)), [geometry, aspect]);
   const u = picked?.u;
   const v = picked?.v;
   const orbit = useMemo(() => orbitFor(place, depth, aspect, mask, u === undefined || v === undefined ? undefined : { u, v }), [place, depth, aspect, mask, u, v]);
   const base = useMemo(() => angleBase(place, orbit.point), [place, orbit]);
-  return { depth, mask, error, retry, place, orbit, base, aspect };
+  return { geometry, depth, mask, error, retry, place, orbit, base, aspect };
 }
 
 /**
  * Renders the 3D set from the chosen camera, uploads it as the guide and words the move around it.
  * A model that takes only one picture gets the move in words alone (it couldn't see the guide).
+ * Pressed before the 3D set is ready, the camera as it was then waits for it and goes on its own (`waiting` says so).
  */
-async function compileAngles(source: SourceImage, view: AngleView, model: ToolModel): Promise<Compiled> {
+async function compileAngles(source: SourceImage, view: AngleView, model: ToolModel, waiting?: (on: boolean) => void): Promise<Compiled> {
+  const fromView = Boolean(model.id && FROM_VIEW.has(model.id));
+  const late = fromView && waiting ? setTimeout(() => waiting(true), 150) : null;
+  try {
+    return await compileView(source, view, model, fromView);
+  } finally {
+    if (late) clearTimeout(late);
+    waiting?.(false);
+  }
+}
+
+async function compileView(source: SourceImage, view: AngleView, model: ToolModel, fromView: boolean): Promise<Compiled> {
   const aspect = source.width / source.height;
-  // Usually ready already (the 3D view asked for them). Without depth the move goes by words alone;
+  // Usually ready already (the 3D view asked for them). Without a measurement the move goes by words alone;
   // without a subject matte the set is one surface.
-  const [depth, mask] = await Promise.all([loadDepth(source.url).catch(() => null), loadMask(source.url).catch(() => null)]);
-  const place = depth ? placeFor(depth, aspect) : provisionalPlace(aspect);
+  const [geometry, mask] = await Promise.all([loadGeometry(source.url).catch(() => null), loadMask(source.url).catch(() => null)]);
+  const depth = geometry?.depth ?? null;
+  const place = geometry ? placeFor(geometry, aspect) : provisionalPlace(aspect);
   const orbit = orbitFor(place, depth, aspect, mask, view.pivot);
   const base = angleBase(place, orbit.point);
   const shot = resolveShot(base, view);
@@ -98,16 +125,23 @@ async function compileAngles(source: SourceImage, view: AngleView, model: ToolMo
   if (isOriginal(facts)) throw new Error("Move the camera first: drag the 3D view or pick a spot.");
   const summary = `Angles · ${angleSummary(facts)}`;
   const oneImage = model.caps ? imageSlots(model.caps) < 2 : false;
-  if (!depth || oneImage) return { summary, prompt: anglePrompt(facts, { guide: false }), params: { view, shot } };
+  if (fromView && !geometry) throw new Error("The 3D view isn't ready for this photo. Press Retry on it, then Re-shoot.");
+  if (!geometry || !depth || (oneImage && !fromView)) return { summary, prompt: anglePrompt(facts, { guide: false }), params: { view, shot } };
 
   const { renderGuide } = await import("./angles/place");
   const guide = await renderGuide({ url: source.url, depth, mask, place, aspect, base, shot });
-  const body = new FormData();
-  body.append("file", new File([guide.blob], "angle-guide.png", { type: "image/png" }));
-  const res = await fetch("/api/uploads", { method: "POST", body });
-  const data = (await res.json().catch(() => ({}))) as { items?: { url: string }[]; error?: string };
-  if (!res.ok || !data.items?.[0]) throw new Error(data.error ?? "Couldn't save the 3D preview.");
-  const guideUrl = data.items[0].url;
+  const guideUrl = await upload(guide.blob, "angle-guide.png");
+  if (fromView) {
+    // Qwen Angles re-shoots the photo (picture 1) from the 3D view's camera (picture 2: runner, params.guideUrl is the
+    // job's guide), in the words its camera LoRAs learned. The take has the photo's own shape, not the nearest aspect's
+    // (runner: params.ratio).
+    return {
+      summary,
+      prompt: anyAnglePrompt(facts),
+      refs: [{ url: source.url, label: "the original image", role: "edit-target" }],
+      params: { view, shot, preview: guideUrl, guideUrl, ratio: aspect },
+    };
+  }
   // The original goes first (models keep image 1's identity best), the preview second.
   return {
     summary,
@@ -117,6 +151,9 @@ async function compileAngles(source: SourceImage, view: AngleView, model: ToolMo
   };
 }
 
+/** Qwen Angles, offered for your GPU in the tool while it isn't there (EditToolShell `ownModel`). */
+const OWN_MODEL = { id: "local:qwen-angles", why: "Angles’ own model: it re-shoots your photo from the camera you set in the 3D view, free on your GPU." };
+
 export function AnglesTool() {
   const tool = toolBySlug("angles")!;
   const [view, setView] = useState<AngleView>({ azimuth: -35, zoom: 0 });
@@ -125,6 +162,8 @@ export function AnglesTool() {
   const viewFor = (source: SourceImage | null): AngleView =>
     pivot && source && pivot.url === source.url ? { ...view, pivot: { u: pivot.u, v: pivot.v } } : view;
   const moved = view.azimuth !== 0 || view.elevation !== undefined || view.zoom !== 0;
+  // Re-shoot pressed before the 3D set was ready: that camera is waiting for it.
+  const [queued, setQueued] = useState(false);
 
   return (
     <EditToolShell
@@ -133,7 +172,9 @@ export function AnglesTool() {
       actionLabel="Re-shoot"
       ready={moved}
       prefer={PREFER}
-      compile={(source, model) => compileAngles(source, viewFor(source), model)}
+      ownChoice="angles"
+      ownModel={OWN_MODEL}
+      compile={(source, model) => compileAngles(source, viewFor(source), model, setQueued)}
       controls={(source) =>
         source ? (
           <AnglesControls source={source} view={viewFor(source)} setView={setView} onPivot={(p) => setPivot(p && { url: source.url, ...p })} />
@@ -148,6 +189,7 @@ export function AnglesTool() {
           view={viewFor(source)}
           setView={setView}
           onPivot={(p) => setPivot({ url: source.url, ...p })}
+          queued={queued}
         />
       )}
     />
@@ -300,6 +342,7 @@ function AnglesStage({
   view,
   setView,
   onPivot,
+  queued,
 }: {
   source: SourceImage;
   compare: ReactNode;
@@ -307,6 +350,7 @@ function AnglesStage({
   view: AngleView;
   setView: SetView;
   onPivot: (p: { u: number; v: number }) => void;
+  queued: boolean;
 }) {
   const [tab, setTab] = useState<"camera" | "result">("camera");
   // A new result shows itself; moving the camera brings the 3D view back. (By value: the view
@@ -331,7 +375,7 @@ function AnglesStage({
         </StageTab>
       </div>
       <div className="min-h-0 flex-1">
-        {showing === "camera" ? <AngleViewport source={source} view={view} setView={setView} onPivot={onPivot} /> : compare}
+        {showing === "camera" ? <AngleViewport source={source} view={view} setView={setView} onPivot={onPivot} queued={queued} /> : compare}
       </div>
     </div>
   );
@@ -361,11 +405,13 @@ function AngleViewport({
   view,
   setView,
   onPivot,
+  queued,
 }: {
   source: SourceImage;
   view: AngleView;
   setView: SetView;
   onPivot: (p: { u: number; v: number }) => void;
+  queued: boolean;
 }) {
   const scene = useAngleScene(source, view.pivot);
   const shot: AngleShot = resolveShot(scene.base, view);
@@ -488,16 +534,16 @@ function AngleViewport({
           </span>
         ) : null}
 
-        {loading ? (
+        {queued || loading ? (
           <span className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-black/65 px-3 py-1.5 text-[12px] font-semibold text-paper">
             <LoaderCircle size={13} className="animate-spin" />
-            {visionMessage(models) ?? "Building 3D from your image"}
+            {queued ? "3D view is loading…" : (visionMessage(models) ?? "Building 3D from your image")}
           </span>
         ) : scene.error ? (
           <span className="absolute inset-x-3 bottom-3 flex items-start gap-2 rounded-[12px] bg-black/70 px-3 py-2 text-[12px] leading-relaxed text-paper">
             <TriangleAlert size={14} className="mt-0.5 shrink-0 text-tungsten" />
             <span className="min-w-0 flex-1">
-              The 3D preview isn&rsquo;t available ({scene.error}). Re-shoot still works, guided by words alone.
+              The 3D preview isn&rsquo;t available ({scene.error}). Qwen Angles needs it; other models can re-shoot from words alone.
             </span>
             <button onClick={scene.retry} className="press shrink-0 font-semibold text-spike hover:brightness-110">
               Retry

@@ -47,7 +47,7 @@ async function api<T>(url: string, key: string, init?: RequestInit): Promise<T> 
     signal: AbortSignal.timeout(20_000),
   });
   const text = await res.text();
-  if (res.status === 401 || res.status === 403) throw new CloudError("The key was refused: check it under Connections → GPUs.");
+  if (res.status === 401 || res.status === 403) throw new CloudError("The key was refused: check it under Settings → Accounts.");
   if (!res.ok) throw new CloudError(`${res.status}: ${text.slice(0, 200)}`);
   return JSON.parse(text) as T;
 }
@@ -130,7 +130,8 @@ function vastLogins(i: VastInstance): SshLogin[] {
 function vastConnection(i: VastInstance, ssh = vastLogins(i)[0]): ConnectRequest {
   const ip = i.public_ipaddr?.trim();
   const web = ip && hostPort(i, 8188);
-  return { provider: "vast", instance: String(i.id), ...(web ? { url: `http://${ip}:${web}` } : {}), ...(i.jupyter_token ? { token: i.jupyter_token } : {}), ...(ssh ? { ssh } : {}) };
+  const routes = vastLogins(i);
+  return { provider: "vast", instance: String(i.id), ...(web ? { url: `http://${ip}:${web}` } : {}), ...(i.jupyter_token ? { token: i.jupyter_token } : {}), ...(ssh ? { ssh } : {}), ...(routes.length > 1 ? { sshRoutes: routes } : {}) };
 }
 
 /** The first of these logins (in order) whose SSH answers now, all asked at once. */
@@ -332,7 +333,22 @@ export async function rentedBoxes(): Promise<Listing> {
         }
       })(),
   ]);
+  // Each box's price, kept for estimates (Settings shows what a job costs on it) without asking the cloud each time.
+  const prices = (g.__crackioBoxPrices ??= { at: 0, byBox: new Map<string, number>() });
+  prices.at = Date.now();
+  for (const b of boxes) if (typeof b.price === "number" && b.price > 0) prices.byBox.set(`${b.provider}:${b.id}`, b.price);
   return { accounts: { vast: Boolean(s.keys.vast), runpod: Boolean(s.keys.runpod) }, boxes: withJobs(boxes), errors, keyAdded };
+}
+
+/**
+ * Dollars an hour a rented box costs, from the last look at your accounts (the background watch looks every 30 s while
+ * Crackio is in use); a look older than five minutes is refreshed in the background. Null until one is known.
+ */
+export function boxPrice(provider: string | undefined, id: string | undefined): number | null {
+  if (!provider || !id) return null;
+  const prices = g.__crackioBoxPrices;
+  if (!prices || Date.now() - prices.at > 5 * 60_000) void rentedBoxes().catch(() => undefined);
+  return prices?.byBox.get(`${provider}:${id}`) ?? null;
 }
 
 /**
@@ -343,13 +359,13 @@ export async function boxConnection(provider: "vast" | "runpod", id: string): Pr
   const s = await getSettings();
   if (provider === "vast") {
     const key = s.keys.vast;
-    if (!key) throw new CloudError("Add your vast.ai key under Connections → GPUs first.");
+    if (!key) throw new CloudError("Add your vast.ai key under Settings → Accounts first.");
     const box = await vastInstance(key, id);
     if (!box) throw new CloudError("That box isn't on your vast.ai account any more.");
     return { provider: "vast", instance: id, label: `${gpuName(box.gpu_name, box.num_gpus)} · vast.ai`, untilUp: (say) => vastUntilUp(key, id, say) };
   }
   const key = s.keys.runpod;
-  if (!key) throw new CloudError("Add your RunPod key under Connections → GPUs first.");
+  if (!key) throw new CloudError("Add your RunPod key under Settings → Accounts first.");
   const pod = await runpodPod(key, id).catch(() => null);
   if (!pod?.id) throw new CloudError("That pod isn't on your RunPod account any more.");
   return { provider: "runpod", instance: id, label: `${podGpu(pod)} · RunPod`, untilUp: (say) => runpodUntilUp(key, id, say) };
@@ -381,14 +397,14 @@ export async function addKeyToAccount(provider: "vast" | "runpod") {
   const s = await getSettings();
   const { key } = await publicKey();
   if (provider === "vast") {
-    if (!s.keys.vast) throw new CloudError("Add your vast.ai key under Connections → GPUs first.");
+    if (!s.keys.vast) throw new CloudError("Add your vast.ai key under Settings → Accounts first.");
     const have = await vastKeys(s.keys.vast).catch(() => []);
     if (!have.some((k) => keyBody(k) === keyBody(key))) await api(`${VAST}/ssh/`, s.keys.vast, { method: "POST", body: JSON.stringify({ ssh_key: key }) });
     const running = (await vastInstances(s.keys.vast)).filter((i) => (i.actual_status ?? "") === "running");
     await Promise.all(running.map((i) => api(`${VAST}/instances/${i.id}/ssh/`, s.keys.vast!, { method: "POST", body: JSON.stringify({ ssh_key: key }) }).catch(() => null)));
     return { added: true, attached: running.length };
   }
-  if (!s.keys.runpod) throw new CloudError("Add your RunPod key under Connections → GPUs first.");
+  if (!s.keys.runpod) throw new CloudError("Add your RunPod key under Settings → Accounts first.");
   const current = await runpodKeys(s.keys.runpod);
   if (current.some((k) => keyBody(k) === keyBody(key))) return { added: true, attached: 0 };
   await api(`${RUNPOD}/account/ssh-keys`, s.keys.runpod, { method: "PUT", body: JSON.stringify({ keys: [...current, key] }) });
@@ -428,7 +444,7 @@ type Watch = {
   last: number;
   busy: boolean;
 };
-const g = globalThis as unknown as { __crackioCloudWatch?: Watch };
+const g = globalThis as unknown as { __crackioCloudWatch?: Watch; __crackioBoxPrices?: { at: number; byBox: Map<string, number> } };
 const w = (g.__crackioCloudWatch ??= { connecting: new Map(), failed: new Map(), gone: new Map(), silent: new Map(), seen: new Map(), last: 0, busy: false });
 // The dev server keeps the watch across reloads: one from before `seen`.
 w.seen ??= new Map();

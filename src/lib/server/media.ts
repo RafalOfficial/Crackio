@@ -18,6 +18,9 @@ const EXT: Record<string, string> = {
   "image/webp": "webp",
   "video/mp4": "mp4",
   "video/webm": "webm",
+  "audio/wav": "wav",
+  "audio/flac": "flac",
+  "audio/mpeg": "mp3",
 };
 
 export const MIME: Record<string, string> = {
@@ -78,8 +81,13 @@ export async function saveOutputs(generationId: string, outputs: EngineOutput[])
       const ext = EXT[out.mime] ?? "bin";
       const file = `${generationId}-${i}.${ext}`;
       await fs.writeFile(path.join(/*turbopackIgnore: true*/ MEDIA_DIR, file), out.data);
-      const kind = out.mime.startsWith("video/") ? "video" : "image";
+      const kind = out.mime.startsWith("video/") ? "video" : out.mime.startsWith("audio/") ? "audio" : "image";
       let { width, height } = out;
+      if (kind === "audio") {
+        // A Voice take: its length and size are all its cards need.
+        const info = await probe(path.join(/*turbopackIgnore: true*/ MEDIA_DIR, file)).catch(() => null);
+        return { url: `/api/media/out/${file}`, kind, duration: info?.duration, bytes: info?.bytes ?? out.data.length } satisfies MediaRef;
+      }
       if (kind === "image" && (!width || !height)) {
         const meta = await sharp(out.data).metadata();
         width = meta.width;

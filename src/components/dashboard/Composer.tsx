@@ -731,13 +731,13 @@ export function Composer() {
             <span className="text-spike">{zones.length > 1 ? "Drop it on what it's for" : zones.length ? "Drop to add as references" : `Drop to add: ${who} won't use pictures`}</span>
           ) : noModel ? (
             <span className="text-tungsten">
-              {mode === "video" ? "No video model yet." : "No picture model yet."} Install a free one on your GPU in{" "}
-              <Link href="/local" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
-                Local
+              {mode === "video" ? "No video model yet." : "No picture model yet."} Set a free one up on your GPU in{" "}
+              <Link href={mode === "video" ? "/settings/tools?tool=video" : "/settings/tools?tool=image"} className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
+                Settings → Tools
               </Link>{" "}
-              (ComfyUI), or add a Comfy key in{" "}
-              <Link href="/settings/connections" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
-                Connections
+              or add a Comfy key in{" "}
+              <Link href="/settings/accounts#comfy" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
+                Accounts
               </Link>
               .
             </span>

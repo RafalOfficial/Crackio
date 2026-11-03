@@ -99,8 +99,8 @@ export async function createBrain(model: ModelAvailability, instructions: string
     case "comfy-text":
       return chatBrain((body, signal) => routerChat(body, signal, model.name), model.model, instructions, tools, first);
     case "comfy-local-text":
-      throw new EngineError("The open model on your GPU is too small to run Motion.", "Pick a Comfy model (Claude Sonnet 5 works best) with a Comfy API key in Connections.");
+      throw new EngineError("The open model on your GPU is too small to run Motion.", "Pick a Comfy model (Claude Sonnet 5 works best) with a Comfy API key in Settings → Accounts.");
     default:
-      throw new EngineError(`${model.name} can't run Motion.`, "Pick a Comfy model (Claude Sonnet 5 works best) with a Comfy API key in Connections.");
+      throw new EngineError(`${model.name} can't run Motion.`, "Pick a Comfy model (Claude Sonnet 5 works best) with a Comfy API key in Settings → Accounts.");
   }
 }

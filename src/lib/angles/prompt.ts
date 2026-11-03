@@ -20,6 +20,32 @@ import type { AngleFacts } from "./rig";
 
 const round = (n: number, step = 5) => Math.round(n / step) * step;
 
+/**
+ * Qwen Angles' first sentence, exactly as its AnyAngle LoRA learned it: picture 1 is the photo, picture 2 the rough
+ * render from the new camera, and the take is picture 1 seen from picture 2's camera.
+ */
+export const ANY_ANGLE = "Change the camera angle from <image2> to <image1>.";
+
+const QMA_SIDES = ["front view", "front-right quarter view", "right side view", "back-right quarter view", "back view", "back-left quarter view", "left side view", "front-left quarter view"];
+
+/**
+ * Qwen Angles' words for a move. In front of the subject, AnyAngle's sentence alone: the 3D view carries the move, and
+ * everyone keeps their pose, the sun stays in its sky. Past 112° the view shows only a wash of the subject's back, and
+ * AnyAngle drew the front again; there the camera is also named in the words of the second LoRA (QMA: 8 sides × 4
+ * heights × 3 distances, bucketed as ComfyUI's own CameraAngle node does, "<qma> back-right quarter view elevated shot
+ * medium shot") and a person's back said outright (Lena from behind stayed facing the camera without it). QMA's words
+ * everywhere re-posed people toward the camera, dropped the sun and softened the take (Oct 2026 A/B, 8 cases).
+ */
+export function anyAnglePrompt(f: AngleFacts) {
+  if (Math.abs(f.azimuth) < 112.5) return ANY_ANGLE;
+  const side = QMA_SIDES[Math.floor((((f.azimuth % 360) + 360 + 22.5) % 360) / 45) % 8];
+  const el = f.elevation;
+  const height = el < -15 ? "low-angle shot" : el < 15 ? "eye-level shot" : el < 45 ? "elevated shot" : "high-angle shot";
+  const distance = f.distance < 0.78 ? "close-up" : f.distance > 1.35 ? "wide shot" : "medium shot";
+  const back = f.orbit.kind === "subject" ? " The subject's back faces the camera." : "";
+  return `${ANY_ANGLE} <qma> ${side} ${height} ${distance}${back}`;
+}
+
 /** How the view of whatever faced the original camera changes, by how far around the camera went. */
 function viewName(a: number) {
   if (a >= 150) return "seen from directly behind";

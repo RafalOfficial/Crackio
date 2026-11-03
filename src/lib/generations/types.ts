@@ -5,7 +5,8 @@ export type GenerationStatus = "queued" | "running" | "done" | "error";
 
 export type MediaRef = {
   url: string;
-  kind: "image" | "video";
+  /** "audio": a Voice take. */
+  kind: "image" | "video" | "audio";
   width?: number;
   height?: number;
   /** A clip's length in seconds. */
@@ -46,6 +47,8 @@ export type Generation = {
   stage?: string;
   error?: string;
   createdAt: number;
+  /** When the job runner started it (its wait in line is `startedAt − createdAt`). Older takes, and ones made outside the runner, have none. */
+  startedAt?: number;
   finishedAt?: number;
   /** The live demo's access code that made it (lib/demo); only that code sees it. */
   owner?: string;

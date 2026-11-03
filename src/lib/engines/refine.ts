@@ -1,7 +1,8 @@
 import "server-only";
-import { localText, routerText } from "./comfy-text";
+import sharp from "sharp";
+import { lfm3LoraOf, lfm3Text, localText, routerText } from "./comfy-text";
 import { listModels } from "@/lib/models/resolve";
-import { AUTO_PREFERENCE, type ModelAvailability } from "@/lib/models/catalog";
+import { AUTO_PREFERENCE, INTERNAL_TEXT, modelById, type ModelAvailability } from "@/lib/models/catalog";
 import { getSettings } from "@/lib/server/settings";
 import { toDataUrl } from "./util";
 import type { EngineReference } from "./types";
@@ -48,6 +49,11 @@ type RefineInput = {
   detail?: "low" | "high" | "auto";
   /** Give up after this long (two minutes by default). */
   timeoutMs?: number;
+  /** LFM3 only: JSON keys it answers true or false, and where to report how likely "true" was at each (a judge's yes and
+   * how sure it is). Other models answer without. */
+  odds?: { keys: string[]; got: (odds: Record<string, number>) => void };
+  /** LFM3 only: the answer so far, as it's written (Retouch draws each thing as soon as it's complete). */
+  onText?: (soFar: string) => void;
 };
 
 function userMessage({ text, references = [], aspect }: RefineInput) {
@@ -67,9 +73,15 @@ async function run(m: ModelAvailability, input: RefineInput): Promise<string> {
       return routerText({ model: m.model, system, prompt: userMessage(input), images, what: m.name, signal });
     }
     case "comfy-local-text": {
-      // A model that sees gets them all, as one labelled contact sheet when there are several (comfy-text).
+      // A model that sees gets them all: LFM3-VL each at its own size, Qwen as one labelled contact sheet (comfy-text).
       const files = (input.references ?? []).filter((r): r is EngineReference => Boolean(r.path)).slice(0, 6);
       const images = await Promise.all(files.map(async (r) => Buffer.from((await toDataUrl(r, edge)).split(",")[1] ?? "", "base64")));
+      if (m.model.startsWith("lfm3")) {
+        // JPEG for the trip: a swap's PNG takes are about 1 MB each, three or four a check, often over a long link to a
+        // rented GPU.
+        const jpegs = await Promise.all(images.map((b) => sharp(b).jpeg({ quality: 90 }).toBuffer()));
+        return lfm3Text({ system, prompt: userMessage(input), images: jpegs, lora: lfm3LoraOf(m.model), odds: input.odds, onText: input.onText, signal });
+      }
       return localText({ system, prompt: userMessage(input), images, signal });
     }
     default:
@@ -78,15 +90,57 @@ async function run(m: ModelAvailability, input: RefineInput): Promise<string> {
 }
 
 /**
+ * The model list takes 2-10 s (every machine and model is asked), and a swap checks a take every 10-30 s, Retouch on
+ * every picture: the last list answers at once, however old, while a fresh one is fetched behind it past 15 s (each
+ * model still finds its own machine when it runs, and one that fails hands on to the next). Only the server's very
+ * first question waits for one, and the server fetches it when it starts (warmTextModels). On globalThis: the
+ * server's start-up and its requests load this module apart.
+ */
+const lists = ((globalThis as unknown as { __crackioTextModels?: { known: { at: number; models: ModelAvailability[] } | null; fetching: Promise<ModelAvailability[]> | null } }).__crackioTextModels ??= { known: null, fetching: null });
+function recentModels(): Promise<ModelAvailability[]> {
+  const age = lists.known ? Date.now() - lists.known.at : Infinity;
+  if (age > 15_000 && !lists.fetching) {
+    const fetching = listModels()
+      .then((models) => (lists.known = { at: Date.now(), models }).models)
+      .finally(() => (lists.fetching = null));
+    fetching.catch(() => {}); // a refresh in the background fails quietly; the next question fetches again
+    lists.fetching = fetching;
+  }
+  return lists.known ? Promise.resolve(lists.known.models) : lists.fetching!;
+}
+
+/** The model list and the machines with Crackio's LFM3 fine-tunes, fetched when the server starts (instrumentation). */
+export async function warmTextModels() {
+  const { lfm3Machine } = await import("./comfy-text");
+  await Promise.all([recentModels(), lfm3Machine("none"), lfm3Machine("judge"), lfm3Machine("retouch")].map((p) => p.catch(() => null)));
+}
+
+/**
  * The first usable answer from the text models you can reach: your pick in Settings, then Auto's order. A prompt shorter
  * than `shortest` is no prompt; a question's answer can be one word (a "Yes" thrown away had every model asked in turn:
  * 106 s of a place's build).
  */
 async function firstAnswer(input: RefineInput, shortest = 13): Promise<{ text: string; by: string } | null> {
-  const models = (await listModels()).filter((m) => m.kind === "text" && m.available);
-  const saved = (await getSettings()).models?.text;
-  const order = [...(input.prefer ?? []), saved, ...AUTO_PREFERENCE.text, ...models.map((m) => m.id)];
+  // Crackio's own LFM3 models need only their machine, not the whole model list (2-15 s when it's fetched from cold):
+  // asked first by name (Retouch's eyes, the swap judge), one answers before the list is looked at.
+  const own = modelById(input.prefer?.[0]);
   const seen = new Set<string>();
+  if (own?.family === "comfy-local-text" && own.model.startsWith("lfm3")) {
+    const { lfm3LoraOf, lfm3Machine } = await import("./comfy-text");
+    if (await lfm3Machine(lfm3LoraOf(own.model)).catch(() => null)) {
+      seen.add(own.id);
+      try {
+        const out = (await run({ ...own, available: true, via: "comfy-local" }, input)).replace(/^["“]|["”]$/g, "").trim();
+        if (out.length >= shortest) return { text: out, by: own.name };
+      } catch (err) {
+        if (input.signal?.aborted) return null;
+        console.warn(`[text] ${own.name} failed, trying the next model: ${(err as Error).message}`);
+      }
+    }
+  }
+  const models = (await recentModels()).filter((m) => m.kind === "text" && m.available);
+  const saved = (await getSettings()).models?.text;
+  const order = [...(input.prefer ?? []), saved, ...AUTO_PREFERENCE.text, ...models.filter((m) => !INTERNAL_TEXT.has(m.id)).map((m) => m.id)];
   for (const id of order) {
     const m = models.find((x) => x.id === id);
     if (!m || seen.has(m.id)) continue;

@@ -69,6 +69,8 @@ export type EngineJob = {
     control?: number;
     /** How far through the steps the ControlNet holds (0.2 to 1): the details after it are the model’s own. */
     controlEnd?: number;
+    /** Qwen Angles: its AnyAngle LoRA's strength (0 to 1.5, 1 when missing). */
+    lora?: number;
   };
   /** Where an inpainting model paints: white changes, black stays (the main picture's size or shape). */
   mask?: EngineReference;

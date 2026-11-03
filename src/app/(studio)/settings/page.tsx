@@ -1,5 +1,13 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { OverviewView } from "@/components/settings/OverviewView";
+
+export const metadata: Metadata = { title: "Settings" };
 
 export default function SettingsPage() {
-  redirect("/settings/connections");
+  return (
+    <Suspense>
+      <OverviewView />
+    </Suspense>
+  );
 }

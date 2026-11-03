@@ -201,7 +201,7 @@ export async function developBrief(b: Storyboard): Promise<DevelopPlan> {
     effort: "medium",
     timeoutMs: 4 * 60_000,
   });
-  if (!answer) throw new Error("No text model answered. Add a Comfy key in Connections, or sign in to ChatGPT or Grok to make films.");
+  if (!answer) throw new Error("No text model answered. Add a Comfy key in Settings → Accounts, or set up a text model in Settings → Tools, to make films.");
   const p = parseJson<Partial<DevelopPlan>>(answer);
   return {
     mode: p.mode === "go" ? "go" : "ask",
@@ -262,7 +262,7 @@ export async function writeTreatment(b: Storyboard, placePicturePath?: string | 
     effort: "high",
     timeoutMs: 6 * 60_000,
   });
-  if (!answer) throw new Error("No text model answered. Add a Comfy key in Connections, or sign in to ChatGPT or Grok to make films.");
+  if (!answer) throw new Error("No text model answered. Add a Comfy key in Settings → Accounts, or set up a text model in Settings → Tools, to make films.");
   const p = parseJson<{ reply?: string; treatment?: Partial<Treatment> }>(answer);
   const t = p.treatment ?? {};
   const list = <T,>(v: unknown) => (Array.isArray(v) ? (v as T[]) : []);
@@ -372,7 +372,7 @@ export async function writePlan(b: Storyboard, extra?: string) {
     effort: "high",
     timeoutMs: 6 * 60_000,
   });
-  if (!answer) throw new Error("No text model answered. Add a Comfy key in Connections, or sign in to ChatGPT or Grok to plan the film.");
+  if (!answer) throw new Error("No text model answered. Add a Comfy key in Settings → Accounts, or set up a text model in Settings → Tools, to plan the film.");
   const p = parseJson<Plan>(answer);
   if (!Array.isArray(p.shots) || !p.shots.length) throw new Error("The plan had no shots. Try describing the film a little more.");
   return p;
@@ -840,7 +840,7 @@ export async function readFollowUp(b: Storyboard, text: string) {
     effort: "medium",
     timeoutMs: 4 * 60_000,
   });
-  if (!answer) throw new Error("No text model answered. Add a Comfy key in Connections, or sign in to ChatGPT or Grok.");
+  if (!answer) throw new Error("No text model answered. Add a Comfy key in Settings → Accounts, or set up a text model in Settings → Tools.");
   const parsed = parseJson<{ reply?: string; ops?: EditOp[] }>(answer);
   return { reply: clean(parsed.reply, 1200) || "Done.", ops: Array.isArray(parsed.ops) ? parsed.ops.filter((o) => o && typeof o.op === "string").slice(0, 24) : [] };
 }

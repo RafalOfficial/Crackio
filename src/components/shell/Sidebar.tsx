@@ -8,7 +8,9 @@ import { NavTile, ToolTile } from "@/components/ui/ToolTile";
 import { TOOLS } from "@/lib/tools";
 import { cn } from "@/lib/cn";
 import { useShell } from "./shell-store";
-import { useConnections } from "@/lib/hooks/use-connections";
+import { useEffect } from "react";
+import { useSetupStore } from "@/lib/hooks/use-setup";
+import { findProblems } from "@/components/settings/problems";
 import { DEMO, DEMO_FULL, demoPage, demoToolSlug } from "@/lib/demo/config";
 import { DemoCard } from "@/components/demo/DemoStrip";
 
@@ -19,7 +21,6 @@ const primary = [
   { href: "/video", label: "Video", glyph: "/icons/video.png" },
   { href: "/templates", label: "Templates", glyph: "/icons/templates.png" },
   { href: "/library", label: "Library", glyph: "/icons/library.png" },
-  { href: "/local", label: "Local", glyph: "/icons/local.png" },
   { href: "/comfy", label: "ComfyUI", glyph: "/icons/comfy.png" },
 ];
 
@@ -35,7 +36,6 @@ export function Sidebar({ forceCollapsed = false }: { forceCollapsed?: boolean }
   const pathname = usePathname();
   const { collapsed: storedCollapsed, toggleCollapsed, mobileOpen, setMobileOpen } = useShell();
   const collapsed = storedCollapsed || forceCollapsed;
-  const { connected, loaded, error } = useConnections();
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -113,21 +113,9 @@ export function Sidebar({ forceCollapsed = false }: { forceCollapsed?: boolean }
           <DemoCard collapsed={collapsed} />
           {DEMO && !DEMO_FULL ? null : (
           <>
-          <NavLink href="/settings/connections" active={isActive("/settings/connections")} collapsed={collapsed} label="Connections">
-            <NavTile glyph="/icons/connections.png" size={TILE} className={tileMotion} />
-            <span className={cn("ml-auto flex items-center gap-1.5 text-[12px] tabular", collapsed && "lg:hidden")}>
-              {!loaded ? null : error ? (
-                <span className="text-tally">Offline</span>
-              ) : (
-                <>
-                  <span className={cn("size-1.5 rounded-full", connected > 0 ? "bg-chroma" : "bg-tungsten")} />
-                  <span className={connected > 0 ? "text-fog" : "text-tungsten"}>{connected > 0 ? connected : "Set up"}</span>
-                </>
-              )}
-            </span>
-          </NavLink>
-          <NavLink href="/settings/models" active={isActive("/settings/models")} collapsed={collapsed} label="Models">
-            <NavTile glyph="/icons/models.png" size={TILE} className={tileMotion} />
+          <NavLink href="/settings" active={isActive("/settings")} collapsed={collapsed} label="Settings">
+            <NavTile glyph="/icons/settings.png" size={TILE} className={tileMotion} />
+            <SettingsLamp collapsed={collapsed} />
           </NavLink>
           </>
           )}
@@ -179,5 +167,25 @@ function NavLink({
       <span className={cn("truncate", collapsed && "lg:hidden")}>{label}</span>
       {rest}
     </Link>
+  );
+}
+
+/**
+ * Settings' health at a glance, from the same look its pages use: a count of what needs you (Overview's "Needs you"),
+ * blue while something sets up, green when all is well. Looked at once per page load; Settings' own pages keep it fresh.
+ */
+function SettingsLamp({ collapsed }: { collapsed: boolean }) {
+  const snap = useSetupStore((s) => s.snap);
+  useEffect(() => {
+    if (!DEMO) void useSetupStore.getState().reload();
+  }, []);
+  if (!snap) return null;
+  const problems = findProblems(snap).length;
+  const busy = snap.jobs.some((j) => j.state === "running" || j.state === "queued");
+  return (
+    <span className={cn("ml-auto flex items-center gap-1.5 text-[12px] tabular", collapsed && "lg:hidden")}>
+      <span className={cn("size-1.5 rounded-full", busy ? "bg-daylight" : problems ? "bg-tungsten" : "bg-chroma")} />
+      <span className={problems ? "text-fog" : "text-haze"}>{busy ? "Setting up" : problems ? problems : ""}</span>
+    </span>
   );
 }

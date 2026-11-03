@@ -52,6 +52,7 @@ export function ModelPicker({
   label = "Model",
   prefer,
   task: taskProp,
+  tool,
   only,
   noAuto = false,
   featured,
@@ -77,6 +78,8 @@ export function ModelPicker({
   prefer?: string[];
   /** What the tool needs from a model (an edit model, a clip editor…). */
   task?: ModelTask;
+  /** The tool it's in (its slug): an open model made for it is first in the library's Get models. */
+  tool?: string;
   /** Limit the list to these models (Recast: only Grok's clip editor can edit). */
   only?: string[];
   /** Hide "Auto" in the short lists (prompt writers). Picture, video and upscale pickers never offer Auto. */
@@ -262,6 +265,7 @@ export function ModelPicker({
           anchor={anchor}
           kind={kind}
           task={task}
+          tool={tool}
           // A text picker on Auto shows the model Auto uses as the chosen card.
           value={value === "auto" && !unchosen ? (auto?.id ?? value) : value}
           onChange={onChange}
@@ -321,8 +325,8 @@ export function ModelPicker({
             <Link href="/settings/models" onClick={close} className="font-semibold text-fog hover:text-paper">
               Set defaults
             </Link>
-            <Link href="/settings/connections" onClick={close} className="font-semibold text-fog hover:text-paper">
-              Connect more
+            <Link href="/settings" onClick={close} className="font-semibold text-fog hover:text-paper">
+              Settings
             </Link>
           </div>
         </div>

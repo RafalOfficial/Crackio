@@ -1,10 +1,16 @@
 import { relayFor } from "@/lib/server/comfy-relay";
+import { ourHost } from "@/lib/server/our-host";
 
 /**
  * The ComfyUI page's frame: the port on this computer that relays one machine's ComfyUI interface (`?machine=` its id from
  * the Local page). Opened from another device, the relay listens for the network too.
  */
 export async function GET(request: Request) {
+  // Only from Crackio's own page: another website (an <img> pointing here) or a name that isn't this computer's (DNS
+  // rebinding) can't open a relay, least of all one for the whole network.
+  if (request.headers.get("sec-fetch-site") === "cross-site" || !ourHost(request.headers.get("host"))) {
+    return Response.json({ error: "Crackio only opens this from its own page." }, { status: 403 });
+  }
   const machine = new URL(request.url).searchParams.get("machine");
   if (!machine || machine.length > 120) return Response.json({ error: "Which machine?" }, { status: 400 });
   const host = (request.headers.get("host") ?? "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");

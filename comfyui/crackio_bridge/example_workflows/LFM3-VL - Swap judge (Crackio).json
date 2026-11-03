@@ -1,0 +1,326 @@
+{
+ "last_node_id": 102,
+ "last_link_id": 5,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "LoadImage",
+   "pos": [
+    40,
+    40
+   ],
+   "size": [
+    320,
+    330
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "title": "Image 1: the original frame",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      1
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "MASK",
+     "type": "MASK",
+     "links": null,
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "frame.png",
+    "image"
+   ]
+  },
+  {
+   "id": 2,
+   "type": "LoadImage",
+   "pos": [
+    40,
+    400
+   ],
+   "size": [
+    320,
+    330
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "title": "Image 2: take 1",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      2
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "MASK",
+     "type": "MASK",
+     "links": null,
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "take1.png",
+    "image"
+   ]
+  },
+  {
+   "id": 3,
+   "type": "LoadImage",
+   "pos": [
+    40,
+    760
+   ],
+   "size": [
+    320,
+    330
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "title": "Image 3: take 2",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      3
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "MASK",
+     "type": "MASK",
+     "links": null,
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "take2.png",
+    "image"
+   ]
+  },
+  {
+   "id": 4,
+   "type": "LoadImage",
+   "pos": [
+    40,
+    1120
+   ],
+   "size": [
+    320,
+    330
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "title": "Image 4: who should now be there",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      4
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "MASK",
+     "type": "MASK",
+     "links": null,
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "character.png",
+    "image"
+   ]
+  },
+  {
+   "id": 100,
+   "type": "CrackioLFM3",
+   "pos": [
+    420,
+    40
+   ],
+   "size": [
+    460,
+    560
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "image_1",
+     "type": "IMAGE",
+     "link": 1
+    },
+    {
+     "name": "image_2",
+     "type": "IMAGE",
+     "link": 2
+    },
+    {
+     "name": "image_3",
+     "type": "IMAGE",
+     "link": 3
+    },
+    {
+     "name": "image_4",
+     "type": "IMAGE",
+     "link": 4
+    }
+   ],
+   "outputs": [
+    {
+     "name": "text",
+     "type": "STRING",
+     "links": [
+      5
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "thinking",
+     "type": "STRING",
+     "links": null,
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "CrackioLFM3"
+   },
+   "widgets_values": [
+    "Reference images:\nImage 1: the original frame\nImage 2: take 1\nImage 3: take 2\nImage 4: who or what should now be there\n\nRequest: Replaced: the woman in the yellow jacket. Takes: image 2, image 3.",
+    false,
+    200,
+    "judge",
+    "greedy",
+    0,
+    "fixed",
+    "You compare takes of the same edit of a video frame. Image 1 is the original frame, the next images are takes of the edit, and the last image shows who or what should now be in it.\nPick the take where the one named below is most fully replaced by the one in the last image: a person's face, hair and skin must now be the new one's, and their whole outfit from head to toe too (top, skirt or trousers, legs, shoes) unless a costume is named below (that costume is meant to be worn, even when it matches the original's clothes); an animal, vehicle or object must now be the new one entirely. Glasses or a colour added to the original do not count. Small things they wear or hold (a watch, a ring, a phone) do not matter either way. Prefer the take that keeps the original's exact pose, size and place and the rest of the frame unchanged, with no extra figures. A take that redraws the new one standing in a stock pose instead of the original's (a raised leg put down, a ball or object dropped, arms moved) is wrong even when the new one looks right.\nAnswer with JSON only: {\"best\": the take's image number, \"replaced\": true or false for that take, \"pose\": true or false (that take keeps the original's body position, limbs and what they hold or touch), \"left\": \"what is still wrong in that take, in a few words\"}"
+   ]
+  },
+  {
+   "id": 101,
+   "type": "PreviewAny",
+   "pos": [
+    920,
+    40
+   ],
+   "size": [
+    420,
+    300
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 5
+    }
+   ],
+   "outputs": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 102,
+   "type": "Note",
+   "pos": [
+    920,
+    380
+   ],
+   "size": [
+    420,
+    220
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "properties": {},
+   "widgets_values": [
+    "LFM3-VL 2B by Liquid AI (LFM Open License v1.0: free, commercial use under $10M a year in revenue). Put lfm3-vl-2b.safetensors (model.safetensors from huggingface.co/LiquidAI/LFM3-VL-2B) and lfm3-vl-2b-tokenizer.json (its tokenizer.json) in ComfyUI/models/lfm3. Needs transformers 5.21+. Crackio's Local page sets it up for you. The judge is Crackio's fine-tune (models/lfm3/lfm3-vl-2b-lora-judge.safetensors): it says which redrawn frame swapped the character in fully, in the same pose, as JSON."
+   ]
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   100,
+   0,
+   "IMAGE"
+  ],
+  [
+   2,
+   2,
+   0,
+   100,
+   1,
+   "IMAGE"
+  ],
+  [
+   3,
+   3,
+   0,
+   100,
+   2,
+   "IMAGE"
+  ],
+  [
+   4,
+   4,
+   0,
+   100,
+   3,
+   "IMAGE"
+  ],
+  [
+   5,
+   100,
+   0,
+   101,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

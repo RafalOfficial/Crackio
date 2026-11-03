@@ -231,13 +231,13 @@ function MakeClipForm({ pick }: { pick: ClipPick }) {
         <ModelPicker kind="video" task="video" value={model} onChange={setModel} />
         {noModel ? (
           <p className="rounded-[12px] bg-tungsten/10 px-3 py-2.5 text-[12.5px] leading-relaxed text-tungsten shadow-[inset_0_0_0_1px_rgb(242_181_75/0.25)]">
-            Clips need a video model: install a free one in{" "}
-            <Link href="/local" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
-              Local
+            Clips need a video model: set a free one up in{" "}
+            <Link href="/settings/tools?tool=video" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
+              Settings → Tools
             </Link>
             , or add a Comfy key in{" "}
-            <Link href="/settings/connections" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
-              Connections
+            <Link href="/settings/accounts#comfy" className="font-semibold underline decoration-tungsten/40 underline-offset-2 hover:text-paper">
+              Accounts
             </Link>
             .
           </p>

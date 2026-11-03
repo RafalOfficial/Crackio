@@ -86,7 +86,7 @@ export function comfyRow(m: ComfyModel, available: boolean): CustomRow {
     caps: m.caps,
     builtin: false,
     available,
-    reason: available ? undefined : "Add your Comfy key in Connections",
+    reason: available ? undefined : "Add your Comfy key in Settings → Accounts",
   };
 }
 
@@ -114,7 +114,7 @@ async function comfyCustomModel(kind: ModelKind, id: string): Promise<ModelAvail
   const caps = info?.caps ?? null;
   const wantVideo = kind === "video";
   let reason: string | undefined;
-  if (!key) reason = "Add your Comfy key in Connections";
+  if (!key) reason = "Add your Comfy key in Settings → Accounts";
   else if (!caps) reason = "Crackio couldn't read this model's settings from Comfy";
   else if ((caps.output === "video") !== wantVideo) reason = wantVideo ? "This model doesn't make video" : "This model makes video, not images";
   else if (caps.missing.length) reason = `Needs inputs Crackio can't send yet (${caps.missing.join(", ")})`;

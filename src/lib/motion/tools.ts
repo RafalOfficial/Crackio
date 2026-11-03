@@ -394,7 +394,7 @@ async function runEngine(
     throw new ToolError(`${model} can't run right now: ${err instanceof Error ? err.message : String(err)}`);
   });
   const engine = def.via ? engineFor(def.via) : null;
-  if (!engine) throw new ToolError(`${def.name} has no connection, so there's no ${kind} model to use. Tell the user to connect one in Connections.`);
+  if (!engine) throw new ToolError(`${def.name} has no connection, so there's no ${kind} model to use. Tell the user to connect one in Settings → Accounts.`);
   const { width, height } = sizeFor(aspect);
   const job: EngineJob = {
     kind,

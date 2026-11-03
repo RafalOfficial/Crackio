@@ -144,7 +144,7 @@ async function post(body: Record<string, unknown>) {
 export async function addLora(model: LocalModel, entry: LoraEntry, targets: TargetStatus[], file?: LoraFile): Promise<string | null> {
   if (!model.crackio) return "This model can't take LoRAs yet.";
   const body = entry.found ? { action: "install", model: model.id, repo: entry.repo, path: (file ?? entry.files[0])?.path, targets: targets.map((t) => t.id) } : { action: "install", model: model.id, id: entry.id, targets: targets.map((t) => t.id) };
-  if (!targets.length) return "Connect a machine with ComfyUI first (Local page).";
+  if (!targets.length) return "Connect a machine with ComfyUI first (Settings → Machines).";
   const out = await post(body);
   if ("error" in out && out.error) return out.error;
   const names = ((out as { files?: string[] }).files ?? entryFiles(entry)).slice(0, 6);

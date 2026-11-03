@@ -5,7 +5,8 @@ import { nanoid } from "nanoid";
 import type { CloudGpu } from "@/lib/local/types";
 import { addedId, forgetTargets, samePlace } from "./comfy-targets";
 import { updateSettings } from "./settings";
-import { markedJson, SshError, sshRun, sshTunnel, type SshLogin } from "./ssh";
+import { markedJson, safeLogin, SshError, sshAnswers, sshRun, sshTunnel, type SshLogin } from "./ssh";
+import { boxFacts, ensurePython, installComfyOnBox, startComfyOnBox } from "./cloud-bootstrap";
 
 /**
  * Connecting a rented GPU (vast.ai, RunPod or any box with ComfyUI and SSH) in one step. From a pasted link or SSH
@@ -46,7 +47,9 @@ export function readPasted(text: string): Pasted {
         }
       }
     }
-    if (host) out.ssh = { host, port, user: user ?? "root" };
+    // Only a login ssh can't read as one of its options ("-l -oProxyCommand=…" would run a program on this computer).
+    const login = host ? { host, port, user: user ?? "root" } : null;
+    if (login && safeLogin(login)) out.ssh = login;
   }
   for (const m of text.matchAll(/https?:\/\/[^\s"'<>`]+/gi)) {
     try {
@@ -300,6 +303,8 @@ const BRIDGE_DIR = path.join(/*turbopackIgnore: true*/ process.cwd(), "comfyui",
 
 async function bridgeFiles() {
   const names = (await fs.readdir(BRIDGE_DIR)).filter((f) => /\.(py|md)$/.test(f));
+  // LFM3-VL's config, processor settings, chat template and model code, which lfm3.py loads from its own folder.
+  names.push(...(await fs.readdir(path.join(BRIDGE_DIR, "lfm3_vl")).catch(() => [] as string[])).map((f) => `lfm3_vl/${f}`));
   const files: Record<string, string> = {};
   for (const n of names) files[n] = (await fs.readFile(path.join(BRIDGE_DIR, n))).toString("base64");
   const version = /^VERSION = "([^"]+)"/m.exec(Buffer.from(files["__init__.py"] ?? "", "base64").toString("utf8"))?.[1] ?? "0";
@@ -321,10 +326,12 @@ dest = os.path.join(${JSON.stringify(root)}, "custom_nodes", "crackio_bridge")
 os.makedirs(dest, exist_ok=True)
 files = json.loads(base64.b64decode("${payload}"))
 for name, data in files.items():
-    tmp = os.path.join(dest, name + ".crackio-new")
+    target = os.path.join(dest, *name.split("/"))
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    tmp = target + ".crackio-new"
     with open(tmp, "wb") as f:
         f.write(base64.b64decode(data))
-    os.replace(tmp, os.path.join(dest, name))
+    os.replace(tmp, target)
 print("CRACKIO_JSON " + json.dumps({"copied": len(files), "to": dest}))
 PYEOF
 `;
@@ -346,6 +353,8 @@ export type ConnectJob = {
   error?: string;
   /** What's left for you to do, when Crackio can't do it (restart ComfyUI from the cloud's page). */
   todo?: string;
+  /** Worth knowing once it's in: a disk too small for every tool. */
+  note?: string;
   /** The machine's id on the Local page, once added. */
   machine?: string;
   label?: string;
@@ -363,6 +372,12 @@ export type ConnectRequest = Pasted & {
   label?: string;
   /** Crackio's key was just put on the box (vast.ai's API): its SSH may refuse it for a moment. */
   waitForKey?: boolean;
+  /**
+   * Every way into the box by SSH, in order (vast.ai: straight in, then its proxy): when the one in use stops answering
+   * part way (a vast.ai host's direct port began resetting every connection during a long install), the next that
+   * answers takes over.
+   */
+  sshRoutes?: SshLogin[];
   /**
    * A box on your cloud account that may still be starting: resolves once its cloud says it runs and its SSH answers, with
    * the way in that does (cloud-accounts). `say` shows what it's doing meanwhile, in the cloud's words.
@@ -421,7 +436,15 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
     w.detail = !waited ? "it's up" : `up after ${took < 90_000 ? `${Math.round(took / 1000)} s` : `${Math.round(took / 60_000)} min`}`;
   }
   let { url, token, instance } = req;
-  const login = req.ssh;
+  let login = req.ssh;
+  // Another of the box's SSH routes, once the one in use stops answering (it then stays the one used and saved).
+  const reroute = async (): Promise<SshLogin | null> => {
+    for (const r of req.sshRoutes ?? []) {
+      if (login && r.host === login.host && r.port === login.port) continue;
+      if (await sshAnswers(r)) return (login = r);
+    }
+    return null;
+  };
   let provider: Provider = req.provider ?? providerOf(req);
   if (!url && !login) throw new CloudError("Paste the box's ComfyUI link or its SSH command (or both).");
 
@@ -433,6 +456,8 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
     const retry = req.waitForKey ? /timed out|refused|closed by|reset by|didn't take Crackio's SSH key/i : /timed out|refused|closed by|reset by/i;
     for (let tries = 1; ; tries++) {
       try {
+        // A bare image (Ubuntu, NVIDIA's CUDA image) has no Python for Crackio's look at it: uv's own Python first.
+        if ((await ensurePython(login)) === "installed") s.detail = "put a Python on it (uv's 3.12) to read it";
         probe = await probeBox(login);
         break;
       } catch (err) {
@@ -447,6 +472,34 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
     // Its id at the cloud, from its own variables (vast.ai: VAST_CONTAINERLABEL "C.27395123"): a pasted box is then
     // known on your cloud account too, and not connected again from there.
     instance ??= /^C\.(\d+)$/.exec(probe.env.VAST_CONTAINERLABEL ?? "")?.[1] ?? (probe.env.RUNPOD_POD_ID || undefined);
+    // No ComfyUI running, and no template about to start one (a CUDA, PyTorch or bare image): Crackio installs it, the
+    // PyTorch build its GPU and driver run, with the bridge in from the start, and keeps it running. One Crackio installed
+    // before (the box restarted) is started again.
+    if (!probe.comfy.length) {
+      const facts = await boxFacts(login);
+      if (facts.installed || !facts.comfyComing) {
+        let at = facts.installed;
+        if (!at) {
+          const w = step(job, "Installing ComfyUI on the box");
+          try {
+            at = await installComfyOnBox(login, facts, (detail) => (w.detail = detail), undefined, reroute);
+          } catch (err) {
+            throw new CloudError((err as Error).message);
+          }
+          step(job, "Adding the Crackio bridge").detail = `into ${at.dir}`;
+          await copyBridge(login, at.dir);
+        }
+        const st = step(job, "Starting ComfyUI");
+        st.detail = await startComfyOnBox(login, facts, at).catch((err: Error) => {
+          throw new CloudError(err.message);
+        });
+        if (!(await waitInside(login, at.port))) {
+          const log = await sshRun(login, `tail -n 12 "${facts.ws}/crackio-comfyui.log" 2>/dev/null`, { timeoutMs: 30_000 }).catch(() => null);
+          throw new CloudError(`ComfyUI didn't start on the box. Its log ends: ${(log?.stdout ?? "").trim().slice(-500) || "(empty)"}`);
+        }
+        probe = await probeBox(login);
+      }
+    }
     if (!probe.comfy.length) {
       // A box just rented: its template downloads and starts ComfyUI on the first boot.
       const w = step(job, "Waiting for its ComfyUI to start");
@@ -525,13 +578,15 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
   const label = req.label || `${gpu} · ${PROVIDER_NAME[provider]}`;
   job.label = label;
 
-  // A PyTorch that can't run on this GPU gets one that can, before anything else runs there.
+  // A PyTorch that can't run on this GPU gets one that can, before anything else runs there; a CUDA 13 build gets its
+  // libraries found by cuDNN.
   const swapped = login && probe ? await fitTorch(job, login, probe) : false;
+  const linked = login && probe ? await linkCudaLibs(job, login, probe) : false;
 
   // The bridge: added, or brought up to Crackio's version.
   const mine = (await bridgeFiles()).version;
   const info = await comfyGet<{ version?: string }>(url, token, "/crackio/info");
-  if (!older(info?.version, mine) && !swapped) {
+  if (!older(info?.version, mine) && !swapped && !linked) {
     step(job, `Crackio bridge ${info?.version} is there`);
   } else if (!login || !probe) {
     const b = step(job, "Adding the Crackio bridge");
@@ -566,6 +621,16 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
   }));
   forgetTargets();
   job.machine = addedId(entry);
+  // A small disk, said now rather than when set-ups start refusing (a box rented with 16 GB keeps ~9 once ComfyUI is in).
+  if (login) {
+    const free = (await boxFacts(login).catch(() => null))?.diskGb ?? null;
+    if (free !== null && free < 30) {
+      job.note =
+        free < 12
+          ? `Only ${free} GB of disk is left on it: room for small tools like the upscalers. Rent it with 70 GB or more for every tool.`
+          : `Only ${free} GB of disk is left on it: room for a picture model, not video models (20 to 40 GB each). Rent it with 70 GB or more for every tool.`;
+    }
+  }
   job.steps.findLast((x) => x.state === "doing")!.state = "done";
   job.state = "done";
 }
@@ -647,6 +712,39 @@ PYEOF
 }
 
 /**
+ * PyTorch's CUDA 13 builds bring CUDA's libraries as pip packages (nvidia/cu13/lib), and cuDNN loads NVRTC from there by
+ * name at run time: with that folder missing from the system's library list, SAM 3.1's attention stopped ComfyUI
+ * ("Could not open libnvrtc", a rented RTX 5090, Oct 2026). Adds it (root only). True when it did: ComfyUI must restart.
+ */
+async function linkCudaLibs(job: ConnectJob, login: SshLogin, probe: Probe): Promise<boolean> {
+  const pid = probe.comfy[0]?.pid;
+  if (!pid) return false;
+  const script = String.raw`
+PY=$(readlink -f /proc/${pid}/exe)
+LIB=$("$PY" - <<'PYEOF'
+import glob, os
+try:
+    import torch
+    if (torch.version.cuda or "").split(".")[0] == "13":
+        import nvidia
+        hits = [p for root in nvidia.__path__ for p in glob.glob(os.path.join(root, "*", "lib", "libnvrtc.so.13*"))]
+        print(os.path.dirname(hits[0]) if hits else "")
+except Exception:
+    pass
+PYEOF
+)
+[ -n "$LIB" ] || exit 0
+ldconfig -p | grep -q "libnvrtc.so.13 .*=> $LIB/" && exit 0
+[ "$(id -u)" = 0 ] || exit 0
+echo "$LIB" > /etc/ld.so.conf.d/crackio-cuda13.conf && ldconfig && echo CRACKIO_LINKED
+`;
+  const res = await sshRun(login, script, { timeoutMs: 120_000 }).catch(() => null);
+  if (!res?.stdout.includes("CRACKIO_LINKED")) return false;
+  step(job, "Pointing cuDNN at PyTorch's CUDA 13 libraries").detail = "SAM 3.1 needs them";
+  return true;
+}
+
+/**
  * Restarts the box's ComfyUI so the bridge loads, the gentlest way it has: the bridge's own restart (when an older one
  * runs), its supervisor, ComfyUI-Manager's restart, or its systemd service. All of them restart it in place or under its
  * keeper; none stops the box. Says how, or null when it has none of them (then the user restarts it).
@@ -672,6 +770,12 @@ async function restart(login: SshLogin, probe: Probe, url: string, token: string
   if (probe.systemd) {
     const res = await sshRun(login, `systemctl restart ${probe.systemd}`, { timeoutMs: 120_000 });
     if (res.code === 0) return `with its service (${probe.systemd})`;
+  }
+  // A ComfyUI Crackio installed there (cloud-bootstrap) runs under Crackio's own loop: stopping it starts it again.
+  const pid = probe.comfy[0]?.pid;
+  if (pid) {
+    const res = await sshRun(login, `pgrep -f crackio-comfyui.sh >/dev/null && kill ${pid} && echo CRACKIO_RESTARTED`, { timeoutMs: 30_000 }).catch(() => null);
+    if (res?.stdout.includes("CRACKIO_RESTARTED")) return "with Crackio's own loop";
   }
   return null;
 }

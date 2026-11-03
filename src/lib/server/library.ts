@@ -170,7 +170,9 @@ export async function libraryGenerations(): Promise<Generation[]> {
   const items = rows.map((r) => {
     const gen = JSON.parse(r.data) as Generation;
     const kind = gen.params?.kind;
-    return { ...gen, references: [], params: kind ? { kind } : undefined };
+    // A Voice take's card and viewer show who speaks, its waveform and its timed words.
+    const voice = kind === "voice" ? { voice: { who: (gen.params?.voice as { who?: unknown } | undefined)?.who }, heard: gen.params?.heard } : {};
+    return { ...gen, references: [], params: kind ? { kind, ...voice } : undefined };
   });
   const missing = items.flatMap((gen) => gen.outputs.filter((o) => o.bytes === undefined || (o.kind === "video" && o.duration === undefined)));
   // A few at a time: the first listing after a restart reads every clip's header once.

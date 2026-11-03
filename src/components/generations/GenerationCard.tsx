@@ -1,5 +1,6 @@
 "use client";
 
+import { VoiceFace } from "@/components/voice/AudioTake";
 import { memo, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Check, Copy, Download, LoaderCircle, Trash, TriangleAlert } from "lucide-react";
 import type { Generation } from "@/lib/generations/types";
@@ -100,6 +101,9 @@ export const GenerationCard = memo(function GenerationCard({
       )}
       style={{ aspectRatio: ratio }}
     >
+      {output.kind === "audio" ? (
+        <VoiceFace gen={gen} output={output} />
+      ) : (
       <Media
         media={output}
         alt={gen.prompt}
@@ -109,9 +113,10 @@ export const GenerationCard = memo(function GenerationCard({
           select?.selected && "scale-[0.9] rounded-[12px]",
         )}
       />
+      )}
       {picking ? (
         <SelectMark selected={select.selected} className="absolute left-3 top-3" />
-      ) : (
+      ) : output.kind === "audio" ? null : (
         <figcaption className="absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/75 via-black/10 to-black/30 p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
           <div className="flex items-center justify-between gap-2">
             {/* With a check in the corner, the label goes down with the prompt so neither gets cut short. */}

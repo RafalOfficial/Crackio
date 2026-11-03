@@ -67,6 +67,7 @@ export const MODELS: ModelDef[] = [
   local({ kind: "image", model: "flux3-klein", name: "FLUX 3 Klein (your GPU)", vendor: "Black Forest Labs", maxRefs: 10, speed: "fast", bestFor: "FLUX 3 on your own card: sharp pictures and edits from up to 10 references." }),
   local({ kind: "image", model: "z-image-turbo", name: "Z-Image Turbo (your GPU)", vendor: "Tongyi-MAI", maxRefs: 0, speed: "fast", bestFor: "Photoreal pictures from words, free on your own GPU." }),
   local({ kind: "image", model: "qwen-director", name: "Qwen Director (your GPU)", vendor: "Alibaba Qwen + Alibaba PAI", maxRefs: 4, speed: "medium", bestFor: "The Director’s shots that keep your cast’s faces and clothes from their pictures (a depth ControlNet)." }),
+  local({ kind: "image", model: "qwen-angles", name: "Qwen Angles (your GPU)", vendor: "Alibaba Qwen + lilylilith + gribbliest", maxRefs: 2, speed: "fast", bestFor: "Angles’ re-shoots: your photo seen from the camera you picked in its 3D view (two camera LoRAs)." }),
   local({ kind: "image", model: "z-image-director", name: "Z-Image Director (your GPU)", vendor: "Tongyi-MAI + Alibaba PAI", maxRefs: 0, speed: "fast", bestFor: "The Director’s shots: your set drawn as a real, cinematic film still (a depth ControlNet)." }),
   local({ kind: "image", model: "flux2-klein-4b", name: "FLUX.2 klein 4B (your GPU)", vendor: "Black Forest Labs", maxRefs: 4, speed: "fast", bestFor: "Pictures and edits from up to 4 references, free on your own GPU; the lightest good one for small cards." }),
 
@@ -112,9 +113,17 @@ export const MODELS: ModelDef[] = [
   { id: "comfy:anthropic/claude-opus-5", kind: "text", providers: ["comfy-cloud"], model: "anthropic/claude-opus-5", name: "Claude Opus 5", vendor: "Anthropic", maxRefs: 4, speed: "slow", family: "comfy-text", runnable: true, bestFor: "The most capable writer and coder on Comfy; slower and pricier." },
   { id: "comfy:deepseek/deepseek-v4-pro", kind: "text", providers: ["comfy-cloud"], model: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", vendor: "DeepSeek", maxRefs: 0, speed: "medium", family: "comfy-text", runnable: true, bestFor: "An open model on your Comfy key, at a fraction of the price; words only." },
   { id: "local:text", kind: "text", providers: ["comfy-local"], model: "text", name: "Qwen on your GPU", vendor: "Alibaba", maxRefs: 1, speed: "fast", family: "comfy-local-text", runnable: true, bestFor: "Free: an open model on your own ComfyUI writes the prompts and answers the checks." },
+  // Liquid AI's 1.9B vision model through the Crackio bridge's node: each picture at its own size, about half a second a
+  // check on a 5090. The judge is Crackio's fine-tune of it for swap checks, asked for by name only (INTERNAL_TEXT).
+  { id: "local:lfm3", kind: "text", providers: ["comfy-local"], model: "lfm3", name: "LFM3-VL 2B on your GPU", vendor: "Liquid AI", maxRefs: 6, speed: "fast", family: "comfy-local-text", runnable: true, bestFor: "Free and quick: Liquid AI's small vision model reads several pictures at their own size, on almost any GPU." },
+  { id: "local:lfm3-judge", kind: "text", providers: ["comfy-local"], model: "lfm3-judge", name: "LFM3-VL 2B swap judge", vendor: "Liquid AI", maxRefs: 6, speed: "fast", family: "comfy-local-text", runnable: true, bestFor: "Crackio's own fine-tune of LFM3-VL that checks swap drawings: was the character fully swapped in, is the pose kept." },
+  { id: "local:lfm3-retouch", kind: "text", providers: ["comfy-local"], model: "lfm3-retouch", name: "LFM3-VL 2B Retouch eyes", vendor: "Liquid AI", maxRefs: 1, speed: "fast", family: "comfy-local-text", runnable: true, bestFor: "Crackio's own fine-tune of LFM3-VL that finds the things in a picture and their parts, with boxes, for Retouch." },
 ];
 
 export const modelById = (id: string | undefined | null) => (id ? MODELS.find((m) => m.id === id) : undefined);
+
+/** Text models made for one job (Swap's judge answers only its check): never in pickers, never a fallback for others. */
+export const INTERNAL_TEXT = new Set(["local:lfm3-judge", "local:lfm3-retouch"]);
 
 export const KIND_LABEL: Record<ModelKind, string> = {
   image: "Images",
@@ -131,8 +140,9 @@ export const AUTO_PREFERENCE: Record<ModelKind, string[]> = {
   upscale: ["local:nomos2-hq", "local:realesrgan-x4", "comfy:freepik/ai-image-upscaler-precision-v2", "comfy:wavespeed/seedvr2"],
   reframe: ["comfy:bria/image-edit-expand"],
   video: ["local:ltx-2.5", "local:wan2.2-5b", "comfy:byteplus/dreamina-seedance-2-5-260628", "comfy:minimax/minimax-h3"],
-  // A hosted model on your Comfy key (it sees pictures), else the open one on your own ComfyUI's biggest GPU.
-  text: ["comfy:google/gemini-3.5-flash", "local:text"],
+  // A hosted model on your Comfy key (it sees pictures), else an open one on your own ComfyUI's biggest GPU: LFM3-VL
+  // (quick, several pictures at their own size) before Qwen.
+  text: ["comfy:google/gemini-3.5-flash", "local:lfm3", "local:text"],
 };
 
 export type ModelAvailability = ModelDef & {

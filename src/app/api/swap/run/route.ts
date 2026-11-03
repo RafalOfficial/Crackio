@@ -3,11 +3,14 @@ import { z } from "zod";
 import { saveGeneration } from "@/lib/server/db";
 import { runner } from "@/lib/server/runner";
 import { urlToPath } from "@/lib/server/media";
-import { ClipError, prepareClip } from "@/lib/server/clip";
+import { ClipError, prepareClip, swapRate } from "@/lib/server/clip";
+import { probe } from "@/lib/motion/ffmpeg";
 import { getCharacter } from "@/lib/server/cast";
 import { describePhoto } from "@/lib/server/template-describe";
 import { LOCAL_RIPPLE_ID } from "@/lib/models/catalog";
 import { listModels } from "@/lib/models/resolve";
+import { swapChecks } from "@/lib/server/swap-checker";
+import type { EngineError } from "@/lib/engines/types";
 import { ASPECTS, type AspectId } from "@/lib/shot";
 import type { Generation, ReferenceRef } from "@/lib/generations/types";
 import { demoOn } from "@/lib/demo/config";
@@ -47,9 +50,16 @@ const Body = z.object({
   title: z.string().trim().max(80).optional(),
   /** Fast draft: fewer steps and EasyCache (a quick look before the full swap). */
   fast: z.boolean().default(false),
-  /** Benchmarks: Ripple's strength and steps, EasyCache's threshold, a redrawn frame to reuse. */
+  /** Who checks the drawings (server/swap-checker); the Swap page's pick, else the setting. */
+  checker: z.enum(["auto", "local", "cloud"]).optional(),
+  /** How sure the judge must be before a drawing is kept (server/swap-checker); the Swap page's pick, else the setting. */
+  strictness: z.enum(["strict", "normal", "lenient"]).optional(),
+  /**
+   * Benchmarks: Ripple's strength and steps, EasyCache's threshold, a redrawn frame to reuse, the picture model that
+   * redraws, and laying the swap onto a bigger clip at its own size (finish).
+   */
   ripple: z
-    .object({ strength: z.number().min(0.3).max(2.5), steps: z.number().int().min(2).max(16), cache: z.number().min(0).max(3), firstFrame: z.string().max(500), inpaint: z.boolean(), zoom: z.boolean() })
+    .object({ strength: z.number().min(0.3).max(2.5), steps: z.number().int().min(2).max(16), cache: z.number().min(0).max(3), firstFrame: z.string().max(500), inpaint: z.boolean(), zoom: z.boolean(), editor: z.string().max(80), finish: z.boolean() })
     .partial()
     .optional(),
 });
@@ -77,14 +87,27 @@ export async function POST(request: Request) {
   if (!file) return Response.json({ error: "Upload the clip first." }, { status: 400 });
   const model = (await listModels()).find((m) => m.id === LOCAL_RIPPLE_ID);
   if (!model?.available) return Response.json({ error: `${model?.name ?? "LTX-2.5 Ripple"} can't run here: ${model?.reason ?? "ComfyUI isn't answering"}.` }, { status: 400 });
+  // Who checks the drawings must be able to, before anything starts (not as unchecked drawings halfway through).
+  const checks = await swapChecks(body.checker, body.strictness).catch((err: EngineError) => err);
+  if (checks instanceof Error) return Response.json({ error: checks.message, hint: checks.hint }, { status: 400 });
   if (body.changes.some((c) => c.to === "cast" || c.to === "picture") && !body.consent) {
     return Response.json({ error: "Confirm that everyone in the pictures agreed to this and is an adult." }, { status: 400 });
   }
 
   let clip: Awaited<ReturnType<typeof prepareClip>>;
+  // The swap laid onto the clip at its own size, when that's bigger than the copy it's made in (runner).
+  let finish: Awaited<ReturnType<typeof prepareClip>> | null = null;
   try {
-    // A clip shorter than LTX takes is held on its last frame, and the result is cut back to its length.
-    clip = await prepareClip(file, { start: body.clip.start, maxSeconds: body.seconds - 0.1, pad: true, box: body.sharp ? 1920 : 1280, fps: 24, model: "LTX-2.5 Ripple" });
+    // A clip shorter than LTX takes is held on its last frame, and the result is cut back to its length. It's made at
+    // the clip's own frame rate (up to 30 a second, evened out: swapRate).
+    const own = await probe(file).catch(() => null);
+    const fps = swapRate(own?.fps, Math.min(body.seconds, (own?.duration ?? body.seconds) - body.clip.start));
+    const cut = { start: body.clip.start, maxSeconds: body.seconds - 0.1, pad: true, fps, steady: true, model: "LTX-2.5 Ripple" };
+    // The swap is made in a 720p copy and laid onto it (layOnto). A bigger clip is also cut at its own size (up to
+    // 1080p), and the made people are laid onto that after the run, so everything else keeps the clip's own sharpness.
+    const info = body.sharp || body.ripple?.finish === false ? null : own;
+    const bigger = Boolean(info && Math.max(info.width ?? 0, info.height ?? 0) > 1280);
+    [clip, finish] = await Promise.all([prepareClip(file, { ...cut, box: body.sharp ? 1920 : 1280 }), bigger ? prepareClip(file, { ...cut, box: 1920 }) : null]);
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: err instanceof ClipError ? err.status : 422 });
   }
@@ -159,6 +182,7 @@ export async function POST(request: Request) {
       kind: "video",
       refine: false,
       videoUrl: clip.url,
+      ...(finish ? { finishUrl: finish.url } : {}),
       sourceUrl: body.clip.url,
       start: clip.start,
       length: clip.length,
@@ -172,6 +196,8 @@ export async function POST(request: Request) {
         extra: {
           edits,
           views,
+          checker: checks.checker === "basic" ? "auto" : checks.checker,
+          strictness: checks.strictness,
           ...(background ? { background } : {}),
           // Only a new background, nothing clicked: the first frame is redrawn from the words.
           ...(!edits.length && background ? { instruction: `Replace the background with ${background.replace(/[.\s]+$/, "")}, keeping every person and thing in front exactly as they are` } : {}),
@@ -183,6 +209,7 @@ export async function POST(request: Request) {
           // plate (over the whole frame Ripple brought the removed woman back at a table behind, on Café Duo).
           ...(edits.length && edits.every((e) => e.to === "remove") && !background && !body.sharp ? { inpaint: true } : {}),
           ...body.ripple,
+          ...(finish ? { finish: true } : {}),
         },
       },
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MousePointerClick, Trash } from "lucide-react";
 import { toolBySlug } from "@/lib/tools";
 import { useMentions } from "@/components/cast/Mentions";
@@ -47,6 +47,14 @@ export function RetouchTool() {
   const lock = lockChoice ?? !extra.trim();
   const field = useRef<HTMLTextAreaElement>(null);
   const mentions = useMentions({ textarea: field, value: extra, onChange: setExtra });
+  // Who finds the things in a picture, kept in settings for every tool that points at things.
+  const [eyes, setEyes] = useState<"auto" | "local" | "cloud">("auto");
+  useEffect(() => {
+    void fetch("/api/settings")
+      .then((r) => r.json())
+      .then((s: { retouchEyes?: "auto" | "local" | "cloud" }) => s.retouchEyes && setEyes(s.retouchEyes))
+      .catch(() => {});
+  }, []);
 
   const pinsOf = (url: string) => pinsByImage[url] ?? [];
   const written = (url: string) => pinsOf(url).filter((p) => p.text.trim());
@@ -153,6 +161,36 @@ export function RetouchTool() {
                 {mode === "closeup"
                   ? "Each change is made on an enlarged close-up of its own area and blended back in, so nothing else moves. Changes side by side share a close-up; the background and “Anything else” are done on the whole picture first."
                   : "One edit of the whole picture, with every change in words. Faster and cheaper, but the model may redraw other things a little."}
+              </p>
+            </ControlSection>
+
+            <ControlSection title="Finds things with">
+              <div role="radiogroup" aria-label="Who finds the things in the picture" className="grid grid-cols-3 gap-1 rounded-[14px] bg-white/[0.05] p-1">
+                {(
+                  [
+                    ["auto", "Auto"],
+                    ["local", "Your GPU"],
+                    ["cloud", "Gemini"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={eyes === value}
+                    onClick={() => {
+                      setEyes(value);
+                      void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ retouchEyes: value }) }).catch(() => {});
+                    }}
+                    className={cn("press h-9 rounded-[10px] text-[12.5px] font-semibold", eyes === value ? "bg-paper text-[#16131b]" : "text-fog hover:bg-white/[0.06] hover:text-paper")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 px-1 text-[12px] leading-relaxed text-haze">
+                Your GPU: Crackio&apos;s own eyes, a fine-tune of LFM3-VL, free and private. Gemini: Gemini 3.5 Flash on your Comfy key. Auto: your GPU where the eyes are
+                installed, else Gemini. For the next picture you open.
               </p>
             </ControlSection>
 

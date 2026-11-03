@@ -76,7 +76,22 @@ async function makeOwnKey() {
 /** ssh's options as one line each: a path in quotes, so a user name with a space in it still works. */
 const quoted = (file: string) => `"${file.replace(/\\/g, "/")}"`;
 
+/**
+ * A user name and address ssh can only take as those, never as one of its options: "-l -oProxyCommand=… host" pasted into
+ * Connect once made the user name "-oProxyCommand=…", and "user@host" then reached ssh as that option, which runs a
+ * program on this computer. Letters, digits and . _ - (not first), and a real port.
+ */
+const SAFE_USER = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
+const SAFE_HOST = /^[A-Za-z0-9_:][A-Za-z0-9_.:-]{0,252}$/;
+export const safeLogin = (login: Pick<SshLogin, "host" | "port" | "user">) =>
+  SAFE_USER.test(login.user) && SAFE_HOST.test(login.host) && Number.isInteger(login.port) && login.port > 0 && login.port < 65536;
+
+function checked(login: SshLogin) {
+  if (!safeLogin(login)) throw new SshError("That SSH login has a user name or address Crackio won't give ssh (it could be read as one of ssh's options).");
+}
+
 async function baseArgs(login: SshLogin) {
+  checked(login);
   const keys = await keyFiles();
   await fs.mkdir(SSH_DIR, { recursive: true });
   return [
@@ -94,6 +109,7 @@ async function baseArgs(login: SshLogin) {
 
 /** A rented box's address goes to the next renter with a new host key: forget the old one (they asked for this box). */
 async function forgetHost(login: SshLogin) {
+  checked(login);
   const name = login.port === 22 ? login.host : `[${login.host}]:${login.port}`;
   await new Promise<void>((resolve) => execFile(bin("ssh-keygen"), ["-R", name, "-f", KNOWN_HOSTS], { timeout: 15_000 }, () => resolve()));
 }
@@ -137,7 +153,7 @@ export async function sshRun(login: SshLogin, script: string, opts: { timeoutMs?
 /** What went wrong reaching the box, in words. */
 function sshProblem(stderr: string, login: SshLogin) {
   const where = `${login.user}@${login.host} port ${login.port}`;
-  if (/Permission denied|publickey/i.test(stderr)) return `The box at ${where} didn't take Crackio's SSH key. Add the key shown under Connections → GPUs to your cloud account, then rent again (or add it to this box).`;
+  if (/Permission denied|publickey/i.test(stderr)) return `The box at ${where} didn't take Crackio's SSH key. Add the key shown under Settings → Machines → Add a computer to your cloud account, then rent again (or add it to this box).`;
   if (/timed out|Connection refused|No route|Could not resolve/i.test(stderr)) return `Couldn't reach ${where}: ${stderr.trim().split("\n").pop()}`;
   return `SSH to ${where} failed: ${stderr.trim().split("\n").slice(-2).join(" ").slice(0, 300) || "no answer"}`;
 }

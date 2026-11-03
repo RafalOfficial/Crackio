@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { LocalView } from "@/components/local/LocalView";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Local", description: "The best open image and video models on your own hardware: free, private, installed into ComfyUI in one click." };
-
+/**
+ * Local moved into Settings: machines under Machines, what to set up on each under Tools, every open model in the model
+ * library's Get models. Old links (and bookmarks) land on Tools.
+ */
 export default function Page() {
-  return <LocalView />;
+  redirect("/settings/tools");
 }

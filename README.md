@@ -17,9 +17,21 @@ Crackio is a full AI studio for pictures and video: stage a shot on a 3D set, cu
 ## Why Crackio
 
 - **Runs on what you have.** A 2016 GTX 1060 with 6 GB, any RTX card, a MacBook, two computers sharing one model, a GPU you rent by the second, or Comfy's cloud. Crackio reads your machine, installs what fits, and tells you how long each job will take *before* you press Generate.
-- **A whole studio, not one trick.** 16 tools, from a 3D Director and a Storyboard editor to swaps, templates and product ads, in one app.
+- **A whole studio, not one trick.** 17 tools, from a 3D Director and a Storyboard editor to swaps, templates and product ads, in one app.
 - **ComfyUI inside.** Every job is a ComfyUI graph. Watch it run live, open any result's workflow in ComfyUI, or download it. Crackio ships its own ComfyUI nodes too.
 - **Free, private, yours.** No account and no subscription. Your files stay on your machine, and the code is MIT.
+
+## New since the first release (Oct 30)
+
+- **Voice** says your lines and scenes on your GPU, and **Talk** is a live voice conversation that runs fully on your own computer.
+- **Lip Sync** changes what someone in a clip says: rewrite a sentence and only the mouth is redrawn (LatentSync 1.6; **best quality** adds HuMo 17B on 32 GB cards). A cloned voice is used only after you tick that you have the speaker's permission.
+- **Retouch** finds every thing in your picture: click one and say how it should change, and everything else keeps its exact pixels.
+- **Settings** is one place for every machine, tool, model, key and preference: each tool's set-up lists the models it can use on that machine with real times and costs, plus live GPU meters, Storage, Usage (what your takes saved against official APIs) and a Doctor.
+- **Rented GPUs set themselves up** on any template, since Crackio installs ComfyUI where none runs, and can stop or delete themselves when idle.
+- **Swap** keeps the clip's own frame rate and size (up to 1080p) and redraws judged keyframes, so faces and hair hold up.
+- **Safer by default:** the launchers listen on this computer only, changes asked by other websites and DNS-rebinding requests are refused, and pasted SSH logins are checked.
+
+The live demo at [crackio.pages.dev](https://crackio.pages.dev) still runs the Oct 30 release. Everything above runs when you install Crackio.
 
 ## Get started
 
@@ -58,11 +70,11 @@ pnpm studio          # builds, then runs on http://localhost:3211
 
 ### Your first picture
 
-1. In Crackio, open **Local** and press **Install ComfyUI**. It goes into one folder of its own with the PyTorch build your GPU needs, and nothing else on your system changes.
-2. Install a model Local recommends for your machine (FLUX 3 Klein on most cards, FLUX.2 klein 4B on 6 GB cards and Macs).
+1. In Crackio, open **Settings → Machines** and press **Install ComfyUI**. It goes into one folder of its own with the PyTorch build your GPU needs, and nothing else on your system changes.
+2. In **Settings → Tools**, set up a tool with the model Crackio picks for your machine (FLUX 3 Klein on most cards, FLUX.2 klein 4B on 6 GB cards and Macs).
 3. Open **Image**, type what you want, press **Generate**. Everything you make stays in `data/` on your computer.
 
-No GPU? Add a RunPod or vast.ai key under **Connections** (or a RunPod Serverless endpoint), or a Comfy key for Comfy's cloud models.
+No GPU? Add a RunPod or vast.ai key under **Settings → Accounts** (or a RunPod Serverless endpoint), or a Comfy key for Comfy's cloud models.
 
 <details>
 <summary><b>Troubleshooting</b></summary>
@@ -72,7 +84,7 @@ No GPU? Add a RunPod or vast.ai key under **Connections** (or a RunPod Serverles
 - **macOS says the file can't be opened, or "permission denied":** right-click it and choose Open. If that doesn't help, open Terminal in the Crackio folder and run `chmod +x "Start Crackio.command"` once.
 - **Something else already uses port 3211:** close the other Crackio window, or start it on another port: `set CRACKIO_PORT=3300` before running the `.bat` from a Command Prompt, or `CRACKIO_PORT=3300 "./Start Crackio.command"` in Terminal.
 - **Updating:** download the new version (or `git pull`) and start it the same way; it rebuilds only when the code changed.
-- **Models:** pictures and video run on your own GPU through ComfyUI, which Crackio installs for you from the **Local** page, or through Comfy's cloud with a Comfy API key (**Connections**).
+- **Models:** pictures and video run on your own GPU through ComfyUI, which Crackio installs for you from **Settings**, or through Comfy's cloud with a Comfy API key (**Settings → Accounts**).
 
 </details>
 
@@ -85,8 +97,9 @@ No GPU? Add a RunPod or vast.ai key under **Connections** (or a RunPod Serverles
 <tr><td width="50%" valign="top"><img src="docs/screenshots/tool-product.webp" alt="Product Studio" width="420"><br><b>Product Studio</b><br>Drop a photo of anything you sell. Crackio reads what it is and how people use it, suggests the shot, who's in it, the scene and the camera, then checks every take against your product and re-shoots any where the label or shape drifted. Video mode makes short product films.</td><td width="50%" valign="top"><img src="docs/screenshots/tool-relight.webp" alt="Relight" width="420"><br><b>Relight</b><br>Drag a light around a sphere, or pick a look (front, 45° key, Rembrandt, split, rim, backlight, coloured gels). Your subject stays exactly as it is; only the light changes.</td></tr>
 <tr><td width="50%" valign="top"><img src="docs/screenshots/tool-retouch.webp" alt="Retouch" width="420"><br><b>Retouch</b><br>Crackio finds every thing in your picture and its parts. Click one, say how it should change (or add a picture of how), and it's redrawn on an enlarged close-up and blended back: everything you didn't mark keeps its exact pixels.</td><td width="50%" valign="top"><img src="docs/screenshots/tool-upscale.webp" alt="Upscale" width="420"><br><b>Upscale</b><br>Pictures 2× or 4× (Nomos2 HQ, Real-ESRGAN, SeedVR2) and clips to 1080p, 2K or 4K (FlashVSR+, SeedVR2), on your GPU, with a before/after slider. Reframe extends the scene to a new shape.</td></tr>
 <tr><td width="50%" valign="top"><img src="docs/screenshots/tool-motion.webp" alt="Motion" width="420"><br><b>Motion</b><br>An agent that makes ads, trailers, lyric videos and explainers: it plans the piece, builds it in code (type, graphics, 3D, camera moves, sound), makes pictures and clips on your GPU or Comfy key only where they're needed, cuts with ffmpeg and checks its own work. It thinks on Comfy Router's chat models (Claude Sonnet 5 works best), so it needs a Comfy key.</td><td width="50%" valign="top"><img src="docs/screenshots/tool-library.webp" alt="Library" width="420"><br><b>Library</b><br>Everything you made, in folders, stored on your computer. Open any take to zoom, play or download it; **How it was made** shows the model, settings and seed, the machine and GPU it ran on, how long it took, and the ComfyUI workflow itself, ready to open in ComfyUI or download.</td></tr>
-<tr><td width="50%" valign="top"><img src="docs/screenshots/tool-local.webp" alt="Local" width="420"><br><b>Local</b><br>Reads each machine's GPU, memory and disk (this computer, another one on your network, a rented vast.ai or RunPod GPU, RunPod Serverless, Comfy Cloud), says which open models run well on it with real times, and installs ComfyUI and models in one click. Two computers can split one model neither could hold alone.</td><td width="50%" valign="top"><img src="docs/screenshots/tool-comfyui.webp" alt="ComfyUI" width="420"><br><b>ComfyUI</b><br>Every ComfyUI you've connected opens inside Crackio as ComfyUI itself. Each job Crackio runs appears in its own tab of nodes, and the running node lights up.</td></tr>
-<tr><td width="50%" valign="top"><img src="docs/screenshots/tool-connections.webp" alt="Connections" width="420"><br><b>Connections</b><br>One Comfy key reaches Comfy Router's hosted models and Comfy Cloud. Add your ComfyUIs, a Hugging Face token for gated open models, vast.ai and RunPod keys for rented GPUs, and RunPod Serverless endpoints. Keys stay on your computer.</td></tr>
+<tr><td width="50%" valign="top"><img src="docs/screenshots/tool-settings.webp" alt="Settings" width="420"><br><b>Settings</b><br>One place for every machine (this computer, another one on your network, a rented vast.ai or RunPod GPU, RunPod Serverless, Comfy Cloud) and every tool. Each tool's sheet lists the models it can use there with real times and costs, Crackio's pick first, and sets them up in one click; live GPU meters, Storage and a Doctor say what needs you. Two computers can split one model neither could hold alone.</td><td width="50%" valign="top"><img src="docs/screenshots/tool-comfyui.webp" alt="ComfyUI" width="420"><br><b>ComfyUI</b><br>Every ComfyUI you've connected opens inside Crackio as ComfyUI itself. Each job Crackio runs appears in its own tab of nodes, and the running node lights up.</td></tr>
+<tr><td width="50%" valign="top"><img src="docs/screenshots/tool-usage.webp" alt="Usage" width="420"><br><b>Accounts and Usage</b><br>One Comfy key reaches Comfy Router's hosted models and Comfy Cloud. Add a Hugging Face token for gated open models, vast.ai and RunPod keys for rented GPUs (they join by themselves, and can stop or delete themselves when idle), and RunPod Serverless endpoints. Keys stay on your computer. Usage shows what your takes cost and what they saved against the models' official APIs.</td><td width="50%" valign="top"><img src="docs/screenshots/tool-voice.webp" alt="Voice" width="420"><br><b>Voice</b><br>Type a line and pick who says it: one of Crackio's voices, yours cloned from a short recording, or a new one described in words. Add a laugh, a sigh or a whisper where you want them, or write a scene for up to four voices. Fish Audio Drama 3 acts it out on your GPU in about 80 languages; VoxCPM2 designs voices on 8 GB cards and Supertonic 3 runs anywhere. Every word lights up as it plays. <a href="#voice">More below</a>.</td></tr>
+<tr><td width="50%" valign="top"><img src="docs/screenshots/tool-lipsync.webp" alt="Lip Sync" width="420"><br><b>Lip Sync</b><br>Change what someone in a clip says by editing their words like text. The new words are said in their own voice (cloned from the clip, with your permission) or one of yours, and LatentSync 1.6 redraws only the mouth, only where the words changed. <a href="#lip-sync">More below</a>.</td><td width="50%" valign="top"></td></tr>
 </table>
 
 ## Director
@@ -140,6 +153,36 @@ Make a whole film, not one clip at a time: shoot your scenes in the Director, cu
 4. Click a still, choose **Make it move**, pick a camera move and a pace, and press **Make the clip**. The clip takes the still's place when it's done.
 5. Drop a sound on the music track if you like, then **Export** to get one MP4.
 
+## Voice
+
+![Voice: the script with its sound chips, the voice's orb, and a take playing](docs/screenshots/tool-voice.webp)
+
+Voice turns a script into speech on your own GPU. The default is **Fish Audio Drama 3**, the best-rated open voice model on the Artificial Analysis speech arena: it follows directions written in plain words, adds [laughs], [sighs] and pauses where you put them, whispers or slows down chosen words, and plays scenes with several voices in one take, in about 80 languages. Built with Fish Audio.
+
+### How to use it
+
+1. Open **Voice**. Type what should be said in the bar, as on Home (Enter speaks, Shift+Enter starts a new line). **Add** puts a laugh, a chuckle, a sigh, a gasp, a breath or a pause where the cursor is, or makes the selected words whispered, slower or stressed; every one has a ▶ to hear it first.
+2. Pick who says it: one of Crackio's 12 voices (each designed from words with VoxCPM2, not copied from anyone), or **Clone a voice** from 10–30 seconds of you talking (record it or upload a clip; Crackio types out what it says and asks you to confirm the voice is yours or that its owner agreed), or **Design a voice** from a description and keep one of three takes.
+3. Optionally say how it's said ("warm and a little tired"), or pick a mood (calm, warm, excited, serious, sad, storyteller, playful, announcer; each with a take to hear), steady to lively, and the language. The **+** next to the voice makes it a conversation for up to four voices, one line each.
+4. Press **Speak**. Each take plays with its words lighting up as they're said; **Again, but…** makes another go with a note ("happier", "slower"). Takes land in the Library like everything else, with the ComfyUI graph that made them.
+
+The first time, the model picker (the same model library as everywhere in Crackio, with a sample to play on each card) gets the model onto your GPU: Drama 3 (17–25 GB, by your card; on 16 GB cards part of it stays in RAM), VoxCPM2 (3 GB, 8 GB cards and Macs) or Supertonic 3 (0.3 GB, any computer), plus Qwen3-ASR and its aligner for transcripts and word timings. They run in the Crackio bridge's **Crackio Voice** node through [audio.cpp](https://github.com/0xShug0/audio.cpp), a C++ engine for open speech models, so no Python packages are added to ComfyUI. Drama 3 is under the Fish Audio Community License: free for personal use and for businesses under $500k a year, and not for hosted services, so the online demo doesn't offer it.
+
+## Lip Sync
+
+![Lip Sync: a clip with its sentences on the right, one of them rewritten](docs/screenshots/tool-lipsync.webp)
+
+Lip Sync changes what someone in a clip says, and nothing else. Speech to text writes out the clip sentence by sentence, with times; you rewrite any sentence as text. For each stretch you changed, Crackio:
+
+1. **Says the new words** in the speaker's own voice (cloned from the clip's own speech, only after you confirm you may use it) or in one of your voices, with Drama 3 or VoxCPM2. Three takes are made and heard back; the one that says every word and fits the time there wins (sped up by at most a fifth if nothing fits).
+2. **Mixes them in:** the old words fade out over 20 ms and the new ones come in at the same moment; every other sound stays the clip's own.
+3. **Redraws the mouth** with **LatentSync 1.6** on your GPU, from just before the new words to just after, and only round the mouth: MediaPipe finds the face (and any hand in front of it, which stays), LatentSync draws the lower face at 512 px, and only the area from under the nose round the jaw goes back, feathered, its skin colour and grain matched to the frame and the lips matched to their own colour. Each stretch is scored by SyncNet; a mouth that falls under 0.5 is drawn once more with another seed and the better one kept.
+4. **Puts the video together** in the clip's own colours (BT.709, written in YUV without a round trip through RGB): the redrawn pixels go onto exactly their frames, everything is encoded once at CRF 10 with the clip's own colour tags, and every frame outside the changed stretches stays the clip's own (about 50.6 dB from the original after that one high-quality encode).
+
+**Measured on an RTX 5090:** one changed sentence in a 10 s 1088×1920 clip took 95–117 s from Sync to done (the words about 15 s, the mouth about 60 s, the video about 15 s). SyncNet put the new mouth at 0.84–0.88 with the new words; the clip's own mouth with its own words scored 0.81–0.82. LatentSync needs about 11 GB of GPU memory (10.8 GB peaked with its check), so Lip Sync is offered on NVIDIA cards with 11 GB or more; it isn't tried on Macs yet.
+
+**How to:** open **Tools → Lip Sync** → drop a clip of someone talking (or pick one you made) → click a sentence and rewrite it (Enter goes to the next; Ctrl or ⌘ Enter syncs) → keep **Their own voice** and tick that you may use it, or pick another voice → **Sync lips**. **Before / After** compare at the same moment; **Change more words** starts from the new take. The first time, the note at the top sets Lip Sync up on your GPU: its engine (pinned Python packages in their own folder, not ComfyUI's), MediaPipe's landmarkers and LatentSync's 7.1 GB of files (ByteDance's are gated: accept their terms on Hugging Face and add your token under Settings → Accounts), then a check with the model loaded.
+
 ## Swap and Templates
 
 ### Swap
@@ -179,10 +222,10 @@ Measured through Crackio on real machines (Oct 2026):
 | **Two computers** | one model split across both GPUs, for models neither can hold alone |
 | **No GPU** | a GPU on RunPod Serverless, billed by the second; a rented vast.ai or RunPod box; or Comfy's cloud models with a Comfy key |
 
-![Local: every machine, its GPU, and what runs well on it](docs/screenshots/local.webp)
+![Settings → Machines: every machine, its GPU live, and the tools ready on it](docs/screenshots/settings-machines.webp)
 
-- **Local** reads every machine you connect, recommends the models that fit, installs them in one click (GGUF on small cards and Macs) and learns each job's real time.
-- **Connections** takes your own keys: a Comfy key (Comfy Router models and Comfy Cloud), a RunPod key (pods and **RunPod Serverless** endpoints) and a vast.ai key. GPUs you rent there connect by themselves.
+- **Settings → Machines and Tools** read every machine you connect, recommend the models that fit, install them in one click (GGUF on small cards and Macs) and learn each job's real time.
+- **Settings → Accounts** takes your own keys: a Comfy key (Comfy Router models and Comfy Cloud), a RunPod key (pods and **RunPod Serverless** endpoints) and a vast.ai key. GPUs you rent there connect by themselves.
 - **Run on** picks the machine per job, or leave it on Auto: the free machine with the fastest GPU that has the model.
 
 ## Built on ComfyUI
@@ -202,12 +245,15 @@ Measured through Crackio on real machines (Oct 2026):
 
 ## Models and tools used
 
-- **Open models, installed from the Local page** (each shows its licence there):
+- **Open models, installed from Settings** (each shows its licence there):
   - **Pictures and edits:** FLUX 3 Klein, FLUX.2 klein 4B (for 6 GB cards and Macs), Qwen-Image 2.1, Qwen-Image-Edit 2511, Z-Image Turbo, plus about 50 more.
   - **Director shots:** Z-Image Director (Z-Image Turbo + Fun ControlNet Union 2.1) and Qwen Director (Qwen-Image 2.1 + its Fun ControlNet Union; Qwen Research licence, non-commercial).
   - **Clips:** LTX-2.5 with WepeNerd's Ripple IC-LoRA and the in/outpainting IC-LoRA, Wan 2.2 5B (small cards), and SCAIL-2 (character swaps).
   - **Tracking:** SAM 3.1. **Upscaling:** SeedVR2, FlashVSR+, Nomos2 and Real-ESRGAN. **In-between frames:** FILM.
-  - **Text and vision on your GPU:** Qwen 3.5 9B, Qwen3-VL 8B and 4B, through Generate Text.
+  - **Text and vision on your GPU:** Qwen 3.5 9B, Qwen3-VL 8B and 4B, through Generate Text. Talk and Crackio's vision checks use **LFM3-VL 2B** by Liquid AI under the LFM Open License v1.0 (free, commercial use only below $10M in yearly revenue; not an OSI licence). The bridge's copy of its code, `comfyui/crackio_bridge/lfm3_vl`, keeps that licence.
+  - **Angles:** Qwen-Image 2.1 Turbo with the AnyAngle LoRA, under the Qwen Research licence (non-commercial), like Qwen Director.
+  - **Lip sync:** LatentSync 1.6 by ByteDance (Apache-2.0 code; CreativeML OpenRAIL++-M weights, with use restrictions) with its StableSyncNet for the sync scores, and MediaPipe's face and hand landmarkers (Apache-2.0), run by the Crackio bridge's Lip Sync node in a Python process of its own. **Best quality** adds HuMo 17B (Comfy-Org's repack of ByteDance's HuMo, Apache-2.0) with Whisper large v3 (MIT), umt5-xxl and the Wan 2.1 VAE (Apache-2.0). Lip Sync needs an NVIDIA card with 11 GB or more (best quality: 32 GB, such as an RTX 5090); background music under changed words isn't separated, only the speech is crossfaded.
+  - **Voice:** Fish Audio Drama 3 (Fish Audio Community License: free for personal use and businesses under $500k a year, not for hosted services; built with Fish Audio), VoxCPM2 (Apache-2.0), Supertonic 3 (OpenRAIL-M), and Qwen3-ASR with its forced aligner (Apache-2.0) for transcripts and word timings, all run by [audio.cpp](https://github.com/0xShug0/audio.cpp) (Apache-2.0) inside the Crackio bridge's Voice node.
 - **Optional, on your own Comfy key:** Comfy Router's hosted models (FLUX 3, GPT Image 2.5, Kling, Veo, Seedance, Wan, MiniMax H3, Grok Imagine, and hosted text models) and Comfy Cloud.
 - **Inside the app:** Depth Anything V2 and BiRefNet (onnxruntime) for sets and cut-outs, ffmpeg for clips, yt-dlp as Motion's download tool for clips you have the rights to. Built with Next.js 16, React 19, React Three Fiber (three.js), Tailwind 4 and GSAP.
 - **Crackio's own page art:** the pictures and showcase clips on Crackio's pages were made with Grok Imagine 1.5 and GPT Image 2 ([`scripts/assets`](scripts/assets)). The templates' clips are all open models: FLUX 3 Klein and LTX-2.5.
@@ -217,9 +263,9 @@ Measured through Crackio on real machines (Oct 2026):
 <details>
 <summary><b>Run models on your own GPU: install, times, Macs, upscalers</b></summary>
 
-Open **Local** in the sidebar. Crackio reads your machine (GPU and its free memory, RAM, disk), says honestly what runs well on it, installs the version that fits, and runs it in every tool: free, private, no account.
+Open **Settings** at the bottom of the sidebar. Crackio reads your machine (GPU and its free memory, RAM, disk), says honestly what runs well on it, installs the version that fits, and runs it in every tool: free, private, no account.
 
-1. **Install ComfyUI** once, from the Local page. It gets one folder of its own: Python, ComfyUI, the PyTorch build your GPU needs and Crackio's bridge node. Nothing else on your system changes, and deleting the folder removes all of it. From then on it starts with Crackio (stop it on the Local page and it stays stopped).
+1. **Install ComfyUI** once, from **Settings → Machines**. It gets one folder of its own: Python, ComfyUI, the PyTorch build your GPU needs and Crackio's bridge node. Nothing else on your system changes, and deleting the folder removes all of it. From then on it starts with Crackio (stop it in Settings → Machines and it stays stopped).
    - NVIDIA: GTX 900 series and newer. RTX 20 series and newer get CUDA 13 with driver 580+, everything else CUDA 12.6.
    - AMD: ROCm on Linux; on Windows 11, AMD's ROCm build for RX 6000 and newer.
    - Intel Arc (XPU) and Apple Silicon (Metal).
@@ -250,25 +296,25 @@ A MacBook Air M2 16 GB: a FLUX.2 klein 4B picture in ~1.6 min (97 s; 2.4 min bef
 - **Memory back.** On Macs with 24 GB or less, ComfyUI lets its models go after 5 idle minutes, so your other apps get the memory back.
 - **Heat and battery.** A job keeps the GPU at full power for minutes, and a MacBook Air has no fan. Crackio reads macOS's thermal state and the battery's temperature. When the Mac is hot, it waits between steps until it cools. On a MacBook Air, work that runs past 3 minutes rests between steps while the Mac is warm. Unplugged at 10% battery, it stops rather than drain it. Expect an Air to get warm: plug it in for clips and keep it on a hard surface.
 
-**How long a job takes.** The time above the Generate button, and every model's time on the Local page, is Crackio's best estimate for that job on the machine it will run on, with a likely range and where it comes from (`src/lib/local/estimate.ts`):
+**How long a job takes.** The time above the Generate button, and every model's time in Settings, is Crackio's best estimate for that job on the machine it will run on, with a likely range and where it comes from (`src/lib/local/estimate.ts`):
 
 - **The card and its series.** Crackio reads the GPU ComfyUI runs on and its series: the first two digits of a GeForce card's number (RTX 4070 → RTX 40, GTX 1080 → GTX 10), or its architecture for workstation, Apple, AMD and Intel GPUs.
 - **Benchmarks first.** The starting point is the runs measured on real cards, shipped in `src/lib/local/benchmarks.ts`. Next to Crackio's own runs on 9 cards are 232 published timings of 25 more models on over 50 cards (`scripts/local/reported-times.json`). Each published timing keeps its source, is converted to the job Crackio's template runs (steps, size, frames), and counts for less than Crackio's own runs. The estimate uses the same card's numbers if there are any, else its series', else every card's. Each is carried over by the cards' speed, the model's precision (INT8 on PyTorch's CUDA 12 build, FP8 on cards without FP8 math) and, on GTX 10 cards, what that model loses without tensor cores. A model with no timings at all starts from its size and steps, or from the model it's built on.
 - **The machine now.** Crackio's bridge in ComfyUI reports the GPU's state. Memory other apps hold leaves less for the model. What doesn't fit streams from RAM every step, timed by the GPU's PCIe link; Windows lends the GPU system memory instead, which is far slower. Other apps keeping the GPU busy count too, and so does loading the model when the last job ran another one, at the speed this machine's disk showed.
-- **Every run teaches it.** Each job's real time is kept, with what was estimated before it. After a run or two of a model its own runs take over, and after one when they disagree with the benchmarks (a GTX 1060's Nomos2 HQ estimate went from 250 s to 75 s after its first 64 s run); the recent ones and those of a similar size count most. How the machine compares with its benchmarks across every model it ran (a laptop's power limit, a slower bus, a busier desktop) carries over to the models it hasn't run yet. The Local page shows, per machine, how many runs it learned from and how many of its recent runs took within 25% of the time shown before.
+- **Every run teaches it.** Each job's real time is kept, with what was estimated before it. After a run or two of a model its own runs take over, and after one when they disagree with the benchmarks (a GTX 1060's Nomos2 HQ estimate went from 250 s to 75 s after its first 64 s run); the recent ones and those of a similar size count most. How the machine compares with its benchmarks across every model it ran (a laptop's power limit, a slower bus, a busier desktop) carries over to the models it hasn't run yet. Settings shows, per machine, how many runs it learned from and how many of its recent runs took within 25% of the time shown before.
 
-Each Local card times one job: a ~1 MP picture, an edit with one reference picture, 5 s of 720p clip, or a 1 MP picture upscaled 2×. Its quality score is the model's standing among open models for its task: from public arenas (Artificial Analysis's open-model boards, Oct 2026) and, for upscalers, Crackio's own tests.
+Each time in Settings is for one job: a ~1 MP picture, an edit with one reference picture, 5 s of 720p clip, or a 1 MP picture upscaled 2×. Its quality score is the model's standing among open models for its task: from public arenas (Artificial Analysis's open-model boards, Oct 2026) and, for upscalers, Crackio's own tests.
 
-Disk: Crackio takes about 2.5 GB with its packages and ComfyUI about 2 GB; each model 0.1–40 GB, shown before you install. Got a second computer? On its Local page tick **Let my other computers use it**, then add its address under **Use another computer** here: each job runs on a machine that has its model (experimental).
+Disk: Crackio takes about 2.5 GB with its packages and ComfyUI about 2 GB; each model 0.1–40 GB, shown before you install. Got a second computer? In its **Settings → Machines** tick **Let my other computers use it**, then add its address under **Use another computer** in Settings → Machines here: each job runs on a machine that has its model (experimental).
 
-**Pick the machine.** With more than one machine connected (this computer, another one, a rented GPU), jobs go to **Auto**: the free machine with the fastest GPU that has the model. To choose one, click the GPU's name in the time above Generate, open **Advanced → Run on**, or press **Run jobs here** on that machine's card on the Local page. Each lists every machine with the job's time there, or why it can't take it (offline, without the model, jobs ahead). The choice holds for every tool until you set Auto again; when that machine is offline or lacks the model, the job runs on Auto's pick and the time line says so.
+**Pick the machine.** With more than one machine connected (this computer, another one, a rented GPU), jobs go to **Auto**: the free machine with the fastest GPU that has the model. To choose one, click the GPU's name in the time above Generate, open **Advanced → Run on**, or press **Send jobs here first** on that machine in **Settings → Machines**. Each lists every machine with the job's time there, or why it can't take it (offline, without the model, jobs ahead). The choice holds for every tool until you set Auto again; when that machine is offline or lacks the model, the job runs on Auto's pick and the time line says so.
 
 **Resolution and Advanced.**
 - **Resolution:** pictures from open models come at Draft, 720p, 1K, 2K or 4K. Each model renders natively up to the size it handles well; past that, Real-ESRGAN enlarges the picture, and Crackio installs it itself the first time it's needed.
 - **Advanced:** sets the negative prompt, steps, guidance and seed. It offers only what the model's own workflow uses, with the model's values as defaults.
 - **Measured on a rented RTX 5090:** a 4K Qwen-Image 2.1 picture took 33 s, and a 1080p LTX-2.5 clip took 118 s.
 
-**Upscale on your own GPU.** The Upscale tool enlarges pictures 2× or 4× and clips to 1080p, 2K or 4K through ComfyUI, with any of these (the Local page installs them):
+**Upscale on your own GPU.** The Upscale tool enlarges pictures 2× or 4× and clips to 1080p, 2K or 4K through ComfyUI, with any of these (Settings installs them):
 
 | Upscaler | Pictures | Clips | Licence | What it's like |
 | --- | --- | --- | --- | --- |
@@ -300,17 +346,17 @@ A plain resize stays closest on clean, mildly shrunk material: the upscalers add
 <details>
 <summary><b>No GPU: rented GPUs and RunPod Serverless</b></summary>
 
-Rent a GPU with your cloud's ComfyUI template (vast.ai, RunPod, or any box with ComfyUI and SSH), then paste its SSH command, or its ComfyUI link, into **Local → Connect a rented GPU**. Crackio logs in and reads the box's address and token. It then copies its bridge into ComfyUI and restarts it, so the box joins your machines. From then on, models install there from the Local page and every tool's jobs can run there.
+Rent a GPU on vast.ai, RunPod or any box with SSH (any template: ComfyUI, PyTorch, CUDA or plain Ubuntu; where no ComfyUI runs, Crackio installs it), then paste its SSH command, or its ComfyUI link, into **Settings → Machines → Connect a rented GPU**. Crackio logs in and reads the box's address and token. It then copies its bridge into ComfyUI and restarts it, so the box joins your machines. From then on, models install there from Settings and every tool's jobs can run there.
 
-- **One-time setup:** your SSH key on the cloud account. Crackio uses the one in `~/.ssh`, or makes one; **Add to vast.ai** puts it there for you. Your Hugging Face token goes under **Connections → GPUs and open models**. Crackio sends it with each download, so a box you rent needs no setup of its own.
-- **With your vast.ai or RunPod key in Connections**, no pasting: a GPU you rent there shows up on the Local page within half a minute and connects by itself. Its first step waits while the cloud places the box and pulls its image (shown in the cloud's own words, "loading · Pull complete"), until the cloud says it runs and its SSH answers; on vast.ai Crackio then puts its SSH key on the box through the API (a RunPod pod needs the key on the account before it starts). A box you give back leaves your machines, and one restarted at new ports connects again. Turn **Connect GPUs I rent by themselves** off to press Connect on each instead.
+- **One-time setup:** your SSH key on the cloud account. Crackio uses the one in `~/.ssh`, or makes one; with your vast.ai or RunPod key saved, Crackio adds it to the account for you. Your Hugging Face token goes under **Settings → Accounts**. Crackio sends it with each download, so a box you rent needs no setup of its own.
+- **With your vast.ai or RunPod key in Settings → Accounts**, no pasting: a GPU you rent there shows up in Settings → Machines within half a minute and connects by itself. Its first step waits while the cloud places the box and pulls its image (shown in the cloud's own words, "loading · Pull complete"), until the cloud says it runs and its SSH answers; on vast.ai Crackio then puts its SSH key on the box through the API (a RunPod pod needs the key on the account before it starts). A box you give back leaves your machines, and one restarted at new ports connects again. Turn **Connect GPUs I rent by themselves** off to press Connect on each instead.
 - **Measured on 2026-10-24** with a vast.ai RTX 5090 (Malaysia, $0.54/h), on the official ComfyUI template:
   - Running 3 minutes after renting.
   - Connected 91 seconds after pasting its SSH command, 70 of them waiting for the template's first boot; a box that's already set up reconnects in 6 seconds.
   - 57 GB of models downloaded at about 120 MB/s.
   - A 1 MP Qwen-Image 2.1 picture in 12 s and a 5 s LTX-2.5 clip with sound in 64 s, warm, with results back on this computer.
 - **The PyTorch build the card needs.** Cloud images often ship PyTorch's CUDA 12 build, and ComfyUI keeps its fast int8 and fp8 kernels off on it. When the box's driver runs CUDA 13, Crackio puts in the CUDA 13 build as it connects. On a rented RTX 4060 Ti that took 39 s, and then a FLUX 3 Klein picture took 11 s instead of 34 s and a Z-Image Turbo picture 12 s instead of 26 s. GTX 10 cards get the CUDA 12.6 build, the newest one with kernels for them.
-- **Checked on rented RTX 5070 Ti, 5060 Ti, 4070, 4060 Ti, 3060 Ti, 2080 Ti and GTX 1080 Ti cards** (2026-10-24): the popular picture, edit, video and upscale models, 2–3 runs each, through Crackio (times in the table under **Run models on your own GPU**). The Local page's time estimates were corrected against these runs:
+- **Checked on rented RTX 5070 Ti, 5060 Ti, 4070, 4060 Ti, 3060 Ti, 2080 Ti and GTX 1080 Ti cards** (2026-10-24): the popular picture, edit, video and upscale models, 2–3 runs each, through Crackio (times in the table under **Run models on your own GPU**). Crackio's time estimates were corrected against these runs:
   - Picture upscalers barely slow down on smaller cards, and their time now follows the picture's size.
   - Spilling a few GB into RAM costs little on Linux.
   - INT8 models on a CUDA 12 build run about 3× slower.
@@ -318,7 +364,7 @@ Rent a GPU with your cloud's ComfyUI template (vast.ai, RunPod, or any box with 
   - On GTX 10 cards (no tensor cores), transformer models such as Z-Image Turbo, Nomos2 HQ and Wan 2.2 lose 2–2.5× more than their speed ratio says.
 - **Clip upscales need RAM.** SeedVR2 and FlashVSR+ hold the frames in memory: a 5 s clip at 1080p needs about 25 GB. On a machine with less, Crackio says so before it starts.
 
-**RunPod Serverless.** Deploy Crackio's worker as a RunPod Serverless endpoint (see [docs/SERVERLESS.md](docs/SERVERLESS.md)), add its ID under **Connections → RunPod Serverless**, install models on it from Local, and pick it under Run on. GPUs start for a job and stop after it, billed by the second: on an RTX 4090 about $0.02 for a picture from cold, $0.001 warm, and $0.06 for a 2 s 720p clip.
+**RunPod Serverless.** Deploy Crackio's worker as a RunPod Serverless endpoint (see [docs/SERVERLESS.md](docs/SERVERLESS.md)), add its ID under **Settings → Accounts → RunPod Serverless**, install models on it from Settings, and pick it under Run on. GPUs start for a job and stop after it, billed by the second: on an RTX 4090 about $0.02 for a picture from cold, $0.001 warm, and $0.06 for a 2 s 720p clip.
 
 **Comfy Cloud.** With a Comfy key and a Comfy plan with API access (Standard or higher), Crackio's graphs can run on Comfy's own servers, paid with your Comfy credits.
 
@@ -369,7 +415,7 @@ For one picture it is slower than one GPU that held the model, because the two t
 
 Pooling is for the machines that can't run a model by themselves, a Mac or a laptop with little RAM, or two cards that hold half each, and for batches, where two computers beat one.
 
-To use it: install ComfyUI on both from their Local pages, tick **Let my other computers use it** on the second one, and add it under **Use another computer** on the first. **Split models too big for one GPU** sets when Crackio splits a job: **Auto** only when the computer with the files can't run it alone, **Always** whenever its GPU can't hold it, **Off** never. Models that will split show **Runs pooled**. GGUF models only, for now; the node is `Crackio Pool Loader (GGUF)` in `comfyui/crackio_bridge/pool.py`, so it works in any ComfyUI workflow too.
+To use it: install ComfyUI on both from Settings → Machines, tick **Let my other computers use it** on the second one, and add it under **Use another computer** on the first. **Split models too big for one GPU** sets when Crackio splits a job: **Auto** only when the computer with the files can't run it alone, **Always** whenever its GPU can't hold it, **Off** never. Models that will split show **Runs pooled**. GGUF models only, for now; the node is `Crackio Pool Loader (GGUF)` in `comfyui/crackio_bridge/pool.py`, so it works in any ComfyUI workflow too.
 
 </details>
 

@@ -11,7 +11,7 @@ import { customModel, isCustomId } from "./custom";
 import { engineShortName } from "@/lib/providers/names";
 import { localModelReady, localTimes } from "@/lib/server/local-models";
 import { templateDefs } from "@/lib/server/local-templates";
-import { localLlm } from "@/lib/engines/comfy-text";
+import { lfm3LoraOf, lfm3Machine, localLlm } from "@/lib/engines/comfy-text";
 import { demoOn, demoWords } from "@/lib/demo/config";
 
 /** Every model with whether it can run on this machine right now, and through which connection. */
@@ -34,7 +34,11 @@ export async function listModels(): Promise<ModelAvailability[]> {
       templateCaps.set(t.def.id, t.caps);
     }
     for (const m of all) if (m.family === "comfy-local") localReady.set(m.id, await localModelReady(m.id).catch(() => null));
-    for (const m of all) if (m.family === "comfy-local-text") localReady.set(m.id, (await localLlm().catch(() => null)) !== null);
+    for (const m of all) {
+      if (m.family !== "comfy-local-text") continue;
+      const found = m.model.startsWith("lfm3") ? lfm3Machine(lfm3LoraOf(m.model)) : localLlm();
+      localReady.set(m.id, (await found.catch(() => null)) !== null);
+    }
   }
   // What each installed one takes on the machine that would run it, in place of a fixed "fast" (a small card takes minutes).
   const times = await localTimes([...localReady].filter(([, ready]) => ready).map(([id]) => id)).catch(() => new Map<string, NonNullable<ModelAvailability["localTime"]>>());
@@ -45,7 +49,7 @@ export async function listModels(): Promise<ModelAvailability[]> {
     let reason: string | undefined;
     if (via === "comfy-local" && localReady.get(m.id) === false) {
       via = null;
-      reason = m.family === "comfy-local-text" ? "Needs Qwen 3.5 9B or Qwen3-VL 8B in your ComfyUI's text_encoders" : "Install it on the Local page";
+      reason = m.family === "comfy-local-text" && !m.model.startsWith("lfm3") ? "Needs Qwen 3.5 9B or Qwen3-VL 8B in your ComfyUI's text_encoders" : "Set it up in Settings → Tools";
     }
     if (!m.runnable) reason = "Coming soon";
     else if (!via) reason ??= `Connect ${m.providers.map(engineShortName).join(" or ")}`;
@@ -76,7 +80,7 @@ export async function resolveModel(kind: ModelKind, requested: string | undefine
     const m = find(requested);
     if (!m) throw new EngineError(`Unknown model "${requested}".`, "Pick another model.");
     if (m.kind !== kind) throw new EngineError(`${m.name} can't do this.`, "Pick another model.");
-    if (!m.available) throw new EngineError(`${m.name} isn't available.`, m.reason ? `${m.reason} in Connections.` : undefined);
+    if (!m.available) throw new EngineError(`${m.name} isn't available.`, m.reason ? `${m.reason}.` : undefined);
     return m;
   }
 
@@ -93,13 +97,13 @@ export async function resolveModel(kind: ModelKind, requested: string | undefine
   }
   if (kind === "text")
     throw new EngineError(
-      "No text model can run yet: add a Comfy key in Connections, or put Qwen 3.5 9B or Qwen3-VL 8B in your ComfyUI's text_encoders.",
-      "Add a Comfy key in Connections, or install a text model on the Local page.",
+      "No text model can run yet: add a Comfy key in Settings → Accounts, or put Qwen 3.5 9B or Qwen3-VL 8B in your ComfyUI's text_encoders.",
+      "Add a Comfy key in Settings → Accounts, or set up a text model in Settings → Tools.",
     );
   const needs = find(AUTO_PREFERENCE[kind][0]);
   const what = { image: "make images", video: "make video", upscale: "upscale", reframe: "reframe", text: "write prompts" }[kind];
   throw new EngineError(
     `Nothing connected can ${what} yet.`,
-    needs ? `Connect ${needs.providers.map(engineShortName).join(" or ")} in Connections.` : "Open Connections.",
+    needs ? `Connect ${needs.providers.map(engineShortName).join(" or ")} in Settings → Accounts.` : "Open Settings.",
   );
 }

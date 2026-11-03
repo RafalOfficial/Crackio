@@ -10,7 +10,7 @@ export function ToolGrid() {
     <section aria-labelledby="tools-heading" id="tools" className="scroll-mt-24">
       <div className="flex items-baseline justify-between gap-4">
         <h2 id="tools-heading" className="font-display text-[28px] sm:text-[34px]">
-          Ten tools, done properly
+          Twelve tools, done properly
         </h2>
         <p className="hidden text-[14px] text-fog md:block">Each one runs on the plans and engines you connect.</p>
       </div>

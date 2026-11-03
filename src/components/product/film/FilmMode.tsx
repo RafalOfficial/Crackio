@@ -327,10 +327,10 @@ export function FilmMode({ incoming, onShoot }: { incoming: FilmPicture | null; 
           />
           {noModel ? (
             <Link
-              href="/settings/connections"
+              href="/settings/tools?tool=video"
               className="block rounded-[12px] bg-tungsten/10 px-3.5 py-3 text-[13px] leading-relaxed text-tungsten shadow-[inset_0_0_0_1px_rgb(242_181_75/0.25)] hover:bg-tungsten/15"
             >
-              Video mode needs a video model: install LTX-2.5 on the Local page, or add a Comfy key in Connections.
+              Video mode needs a video model: set up Video in Settings → Tools, or add a Comfy key in Settings → Accounts.
             </Link>
           ) : null}
 

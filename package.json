@@ -11,7 +11,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "studio": "next build && next start -p 3211",
+    "studio": "next build && next start -p 3211 -H 127.0.0.1",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "assets:generate": "node scripts/assets/generate.mjs",

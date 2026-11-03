@@ -63,7 +63,9 @@ export const useGenerationsStore = create<GenerationsState>((set, get) => {
     load: async () => {
       try {
         const res = await fetch("/api/generations?limit=60", { cache: "no-store" });
-        const { items } = (await res.json()) as { items: Generation[] };
+        const { items } = (await res.json()) as { items?: Generation[] };
+        // An error answer (the dev server mid-restart) has no list: kept, every later look at the takes threw.
+        if (!res.ok || !Array.isArray(items)) throw new Error(`Takes didn't load (${res.status})`);
         set({ items, loaded: true });
         schedule();
       } catch {

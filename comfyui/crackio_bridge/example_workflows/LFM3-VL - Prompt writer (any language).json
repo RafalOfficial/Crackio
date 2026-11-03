@@ -1,0 +1,113 @@
+{
+ "last_node_id": 102,
+ "last_link_id": 1,
+ "nodes": [
+  {
+   "id": 100,
+   "type": "CrackioLFM3",
+   "pos": [
+    420,
+    40
+   ],
+   "size": [
+    460,
+    560
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "text",
+     "type": "STRING",
+     "links": [
+      1
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "thinking",
+     "type": "STRING",
+     "links": null,
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "CrackioLFM3"
+   },
+   "widgets_values": [
+    "dziewczyna w czerwonym płaszczu idzie po moście w Pradze o świcie, mgła, z daleka",
+    false,
+    300,
+    "none",
+    "greedy",
+    0,
+    "fixed",
+    "You write prompts for an image model. Rewrite the person's request below as one precise English image prompt.\nRules:\n- Keep every concrete detail they gave (subjects, colors, clothing, places, actions, camera hints). Translate faithfully if it isn't in English.\n- Do not add new subjects, objects, brands or text they didn't ask for.\n- Where they imply it, make explicit: subject and action, setting, shot size and camera angle, lens feel, lighting and time of day, mood, style.\n- Natural prose, 2 to 5 sentences, front-load the subject. No lists, no quotation marks, no preamble.\n- If reference images are listed, refer to them as \"the person in image 1\", \"the product in image 2\", and so on, and describe what matters about them only when the request depends on it.\nOutput only the prompt."
+   ]
+  },
+  {
+   "id": 101,
+   "type": "PreviewAny",
+   "pos": [
+    920,
+    40
+   ],
+   "size": [
+    420,
+    300
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 1
+    }
+   ],
+   "outputs": [],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 102,
+   "type": "Note",
+   "pos": [
+    920,
+    380
+   ],
+   "size": [
+    420,
+    220
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "properties": {},
+   "widgets_values": [
+    "LFM3-VL 2B by Liquid AI (LFM Open License v1.0: free, commercial use under $10M a year in revenue). Put lfm3-vl-2b.safetensors (model.safetensors from huggingface.co/LiquidAI/LFM3-VL-2B) and lfm3-vl-2b-tokenizer.json (its tokenizer.json) in ComfyUI/models/lfm3. Needs transformers 5.21+. Crackio's Local page sets it up for you. The system prompt is Crackio's own prompt writer: your words in any language become one precise English image prompt."
+   ]
+  }
+ ],
+ "links": [
+  [
+   1,
+   100,
+   0,
+   101,
+   0,
+   "STRING"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {},
+ "version": 0.4
+}

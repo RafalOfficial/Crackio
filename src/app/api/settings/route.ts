@@ -15,6 +15,14 @@ async function publicSettings() {
     defaultEngine: s.defaultEngine,
     textEffort: s.textEffort ?? "xhigh",
     localVision: s.localVision ?? "4b",
+    swapChecker: s.swapChecker ?? "auto",
+    swapStrictness: s.swapStrictness ?? "lenient",
+    retouchEyes: s.retouchEyes ?? "auto",
+    // Read here too, so Settings shows every preference from one answer; each is still changed through its own route
+    // (run-on and pooling: POST /api/local; auto-connect: POST /api/local/cloud).
+    pooling: s.pooling ?? "auto",
+    runOn: s.runOn ?? "auto",
+    cloudAutoConnect: s.cloudAutoConnect !== false,
   };
 }
 
@@ -27,12 +35,15 @@ const Patch = z.object({
   defaultEngine: z.string().max(40).optional(),
   textEffort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
   localVision: z.enum(["4b", "8b"]).optional(),
+  swapChecker: z.enum(["auto", "local", "cloud"]).optional(),
+  swapStrictness: z.enum(["strict", "normal", "lenient"]).optional(),
+  retouchEyes: z.enum(["auto", "local", "cloud"]).optional(),
 });
 
 export async function PATCH(request: Request) {
   const parsed = Patch.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid settings" }, { status: 400 });
-  const { key, defaultEngine, textEffort, localVision } = parsed.data;
+  const { key, defaultEngine, textEffort, localVision, swapChecker, swapStrictness, retouchEyes } = parsed.data;
   // The full demo takes only the keys for the visitor's own Comfy account and GPU clouds.
   if (key && demoFull() && !["comfy", "runpod", "vast"].includes(key.name)) return Response.json({ error: "That key isn't part of the live demo." }, { status: 403 });
   await updateSettings((s) => {
@@ -45,6 +56,9 @@ export async function PATCH(request: Request) {
     if (defaultEngine) next.defaultEngine = defaultEngine;
     if (textEffort) next.textEffort = textEffort;
     if (localVision) next.localVision = localVision;
+    if (swapChecker) next.swapChecker = swapChecker;
+    if (swapStrictness) next.swapStrictness = swapStrictness;
+    if (retouchEyes) next.retouchEyes = retouchEyes;
     return next;
   });
   forgetVerdicts();

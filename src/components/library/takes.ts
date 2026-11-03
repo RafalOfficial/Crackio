@@ -11,15 +11,15 @@ export type Take = {
   key: TakeKey;
   /** GENERAL or the project it's filed in. */
   folder: string;
-  /** What it is, or will be once it renders. */
-  kind: "image" | "video";
+  /** What it is, or will be once it renders ("audio": a Voice take). */
+  kind: "image" | "video" | "audio";
   /** The tool it came from, as the filter knows it (see toolOf). */
   tool: string;
   /** Width over height. */
   ratio: number;
 };
 
-const VIDEO_TOOLS = new Set(["motion", "recast", "video"]);
+const VIDEO_TOOLS = new Set(["motion", "recast", "video", "lipsync"]);
 
 /** Quick shots from the home composer were once saved as "home"; clips made before the Video page existed, under Motion. */
 export const toolOf = (g: Generation) => (g.tool === "home" ? "image" : g.tool === "motion" && g.params?.kind === "video" ? "video" : g.tool);
@@ -38,7 +38,7 @@ export function takesOf(gen: Generation, folderOf: (key: TakeKey) => string): Ta
   const tool = toolOf(gen);
   const aspect = aspectById(gen.aspect);
   if (gen.status !== "done" || !gen.outputs.length) {
-    const kind = gen.params?.kind === "video" || VIDEO_TOOLS.has(gen.tool) ? "video" : "image";
+    const kind = gen.params?.kind === "voice" ? "audio" : gen.params?.kind === "video" || VIDEO_TOOLS.has(gen.tool) ? "video" : "image";
     // Still rendering, or failed: it shows in General until there's a take to file.
     return [{ gen, index: 0, key: takeKey(gen.id, 0), folder: GENERAL, kind, tool, ratio: aspect.w / aspect.h }];
   }
@@ -59,7 +59,7 @@ export function matches(take: Take, words: string[]) {
     hay = [g.prompt, g.compiledPrompt, g.modelName, toolName(toolOf(g)), g.aspect].filter(Boolean).join(" \n ").toLowerCase();
     haystacks.set(g, hay);
   }
-  const h = `${hay} ${take.kind === "video" ? "video clip" : "image still photo"}`;
+  const h = `${hay} ${take.kind === "video" ? "video clip" : take.kind === "audio" ? "voice speech audio" : "image still photo"}`;
   return words.every((w) => h.includes(w));
 }
 
@@ -91,7 +91,7 @@ export function span(ms: number) {
 /** A name to save a take under: "crackio-storyboard-2026-10-21-1432-2.mp4". */
 export function downloadName(take: Take) {
   const url = take.gen.outputs[take.index]?.url ?? "";
-  const ext = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(url)?.[1] ?? (take.kind === "video" ? "mp4" : "png");
+  const ext = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(url)?.[1] ?? (take.kind === "video" ? "mp4" : take.kind === "audio" ? "wav" : "png");
   const d = new Date(take.gen.createdAt);
   const p = (n: number) => String(n).padStart(2, "0");
   const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;

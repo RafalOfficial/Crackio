@@ -31,7 +31,7 @@ const BRIA_RATIOS = RATIOS(["16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2
 
 async function apiKey() {
   const key = (await getSettings()).keys.comfy || process.env.COMFY_API_KEY;
-  if (!key) throw new EngineError("No Comfy API key is set.", "Add one in Connections (platform.comfy.org → API keys).");
+  if (!key) throw new EngineError("No Comfy API key is set.", "Add one in Settings → Accounts (platform.comfy.org → API keys).");
   return key;
 }
 
@@ -42,7 +42,7 @@ function explain(err: unknown): never {
   if (err instanceof ComfyError || routed) {
     const e = err as { message: string; httpStatus?: number | null; requestId?: string | null; code?: string; errorType?: string };
     const code = (routed ? e.errorType : e.code) ?? "";
-    if (/^unauthorized$/i.test(code) || e.httpStatus === 401) throw new EngineError("Comfy rejected the API key.", "Check the key in Connections, or create a new one at platform.comfy.org.");
+    if (/^unauthorized$/i.test(code) || e.httpStatus === 401) throw new EngineError("Comfy rejected the API key.", "Check the key in Settings → Accounts, or create a new one at platform.comfy.org.");
     if (/not_enabled/i.test(code)) throw new EngineError(`This isn't available on your Comfy account yet: ${e.message}`, "Pick another model, or check your Comfy workspace.");
     if (/forbidden/i.test(code) || e.httpStatus === 403) throw new EngineError("Your Comfy workspace can't use this model.", "Pick another model.");
     if (/insufficient_credits/i.test(code) || e.httpStatus === 402)

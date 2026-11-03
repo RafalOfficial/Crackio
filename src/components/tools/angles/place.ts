@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BackSide,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -13,6 +14,7 @@ import {
   RedFormat,
   Scene,
   ShaderMaterial,
+  SphereGeometry,
   SRGBColorSpace,
   type Texture,
   TextureLoader,
@@ -36,8 +38,10 @@ import { openCurtains, subjectSurface } from "@/lib/angles/surface";
 
 /** Around the set on screen. */
 export const SCREEN_VOID = "#101114";
-/** Around the set in the guide: flat mid-gray, which the prompt calls "never seen". */
+/** Around the set in the guide: mid-gray, what the model reads as "never seen" (a lighter sky over a darker ground). */
 const GUIDE_GRAY = 0.5;
+const GUIDE_SKY = 0.56;
+const GUIDE_GROUND = 0.44;
 
 const vertex = /* glsl */ `
   attribute vec3 flatPos;
@@ -61,6 +65,18 @@ const vertex = /* glsl */ `
   }
 `;
 
+/** The void as the guide shows it: a darker gray below a level horizon, a lighter one above. */
+const horizon = /* glsl */ `
+  uniform float horizon;
+  uniform vec3 skyColor;
+  uniform vec3 groundColor;
+  vec3 backdrop(vec3 world, vec3 fallback) {
+    if (horizon < 0.5) return fallback;
+    float up = normalize(world - cameraPosition).y;
+    return mix(groundColor, skyColor, smoothstep(-0.012, 0.012, up));
+  }
+`;
+
 const fragment = /* glsl */ `
   uniform sampler2D map;
   uniform sampler2D mask;
@@ -72,6 +88,7 @@ const fragment = /* glsl */ `
   varying float vStretch;
   varying float vBack;
   varying vec3 vWorld;
+  ${horizon}
 
   vec3 toSrgb(vec3 c) {
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
@@ -83,19 +100,43 @@ const fragment = /* glsl */ `
       float subject = texture2D(mask, vec2(vUv.x, 1.0 - vUv.y)).r;
       if (cut < 1.5 ? subject > 0.5 : subject <= 0.5) discard;
     }
+    vec3 void_ = backdrop(vWorld, background);
     // How squarely the photo saw this surface (1 = head-on, 0 = edge-on, from where it was taken).
     // Surfaces it only grazed hold almost no detail: they blur and fade into the void, not streak.
     vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
     float seen = smoothstep(0.06, 0.3, abs(dot(n, normalize(vWorld - eye))));
     vec3 c = texture2D(map, vUv, vStretch * 4.5 + (1.0 - seen) * 3.0).rgb * (1.0 - 0.25 * vStretch);
-    c = mix(background, c, seen);
+    c = mix(void_, c, seen);
     // Backs were never photographed: only a wash of their colors, so no face ends up on the back of a head.
-    if (vBack > 0.5 || !gl_FrontFacing) c = mix(texture2D(map, vUv, 7.0).rgb, background, 0.3);
+    if (vBack > 0.5 || !gl_FrontFacing) c = mix(texture2D(map, vUv, 7.0).rgb, void_, 0.3);
     // Past the photo's edges, the stretched border fades into the void.
-    c = mix(c, background, smoothstep(0.0, 1.0, vOutside) * 0.9);
+    c = mix(c, void_, smoothstep(0.0, 1.0, vOutside) * 0.9);
     gl_FragColor = vec4(toSrgb(c), 1.0);
   }
 `;
+
+const skyVertex = /* glsl */ `
+  varying vec3 vWorld;
+  void main() {
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+const skyFragment = /* glsl */ `
+  varying vec3 vWorld;
+  ${horizon}
+  vec3 toSrgb(vec3 c) {
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+  }
+  void main() {
+    gl_FragColor = vec4(toSrgb(backdrop(vWorld, groundColor)), 1.0);
+  }
+`;
+
+/** The guide's void colors (linear) above and below the horizon. */
+export type Backdrop = { sky: Color; ground: Color };
 
 /** Photos are sRGB; set once when a texture first loads (drei caches it by URL, Director shares it). */
 export function asPhoto(texture: Texture | Texture[]) {
@@ -168,9 +209,10 @@ export function disposeSet(set: AngleSet) {
 
 /**
  * One material per mesh. `part` says what the mask cuts: the place loses the subject, the subject
- * keeps only itself. `background` is the void everything fades into.
+ * keeps only itself. `background` is the void everything fades into, or with a `backdrop`, the sky
+ * and ground around a level horizon.
  */
-export function setMaterial(texture: Texture, set: AngleSet, part: "place" | "subject", background: Color, reveal = 1) {
+export function setMaterial(texture: Texture, set: AngleSet, part: "place" | "subject", background: Color, reveal = 1, backdrop?: Backdrop) {
   return new ShaderMaterial({
     vertexShader: vertex,
     fragmentShader: fragment,
@@ -182,6 +224,9 @@ export function setMaterial(texture: Texture, set: AngleSet, part: "place" | "su
       reveal: { value: reveal },
       background: { value: background },
       eye: { value: set.eye },
+      horizon: { value: backdrop ? 1 : 0 },
+      skyColor: { value: backdrop?.sky ?? background },
+      groundColor: { value: backdrop?.ground ?? background },
     },
   });
 }
@@ -204,6 +249,10 @@ function toBlob(pixels: Uint8Array, width: number, height: number): Promise<Blob
 /**
  * The set seen from the shot camera, at the photo's shape: the picture the model finishes.
  * Rendered off screen with its own renderer, so it doesn't depend on what the page is showing.
+ * What the photo never saw is gray, as in the renders Qwen Angles' camera LoRA learned from, a shade
+ * lighter above a level horizon than below it: with one flat gray the edges of the photo's view read
+ * as a slanted horizon, and the take came out tilted. (The photo's own sky and ground colors there
+ * lost the camera: a 30° high shot came back at eye level.)
  */
 export async function renderGuide(opts: {
   url: string;
@@ -223,15 +272,17 @@ export async function renderGuide(opts: {
   asPhoto(texture);
   const renderer = new WebGLRenderer({ canvas: document.createElement("canvas"), antialias: false });
   const set = buildSet(opts.depth, opts.place, opts.aspect, opts.mask);
-  // The shader encodes to sRGB itself, so it gets the gray as a color; the clear below is raw.
+  // The shader encodes to sRGB itself, so it gets its colors as colors; the clear below is raw.
   const gray = new Color().setRGB(GUIDE_GRAY, GUIDE_GRAY, GUIDE_GRAY, SRGBColorSpace);
-  const materials = [setMaterial(texture, set, "place", gray)];
+  const tone = (v: number) => new Color().setRGB(v, v, v, SRGBColorSpace);
+  const backdrop: Backdrop = { sky: tone(GUIDE_SKY), ground: tone(GUIDE_GROUND) };
+  const materials = [setMaterial(texture, set, "place", gray, 1, backdrop)];
   const scene = new Scene();
   const placeMesh = new Mesh(set.place, materials[0]);
   placeMesh.frustumCulled = false;
   scene.add(placeMesh);
   if (set.subject) {
-    materials.push(setMaterial(texture, set, "subject", gray));
+    materials.push(setMaterial(texture, set, "subject", gray, 1, backdrop));
     const subjectMesh = new Mesh(set.subject, materials[1]);
     subjectMesh.frustumCulled = false;
     scene.add(subjectMesh);
@@ -242,6 +293,23 @@ export async function renderGuide(opts: {
   camera.position.copy(cam.position);
   camera.quaternion.copy(cam.quaternion);
   camera.updateMatrixWorld(true);
+
+  // The backdrop: a sphere around the camera, drawn first and behind everything.
+  const skyMaterial = new ShaderMaterial({
+    vertexShader: skyVertex,
+    fragmentShader: skyFragment,
+    side: BackSide,
+    depthWrite: false,
+    depthTest: false,
+    uniforms: { horizon: { value: 1 }, skyColor: { value: backdrop.sky }, groundColor: { value: backdrop.ground } },
+  });
+  materials.push(skyMaterial);
+  const skyGeometry = new SphereGeometry((cam.distance + opts.place.far) * 3, 48, 24);
+  const skyMesh = new Mesh(skyGeometry, skyMaterial);
+  skyMesh.position.copy(cam.position);
+  skyMesh.renderOrder = -1;
+  skyMesh.frustumCulled = false;
+  scene.add(skyMesh);
 
   const target = new WebGLRenderTarget(width, height, { samples: 4 });
   try {
@@ -257,6 +325,7 @@ export async function renderGuide(opts: {
     renderer.setRenderTarget(null);
     target.dispose();
     disposeSet(set);
+    skyGeometry.dispose();
     for (const m of materials) m.dispose();
     texture.dispose();
     renderer.dispose();

@@ -271,7 +271,7 @@ export async function redescribeCharacter(id: string) {
   const c = loadCharacter(id);
   if (!c) return null;
   const r = await read(c);
-  if (!r?.traits) throw new Error("No text model answered. Add a Comfy key in Connections, or sign in to ChatGPT or Grok, or write it yourself.");
+  if (!r?.traits) throw new Error("No text model answered. Add a Comfy key in Settings → Accounts, set up a text model in Settings → Tools, or write it yourself.");
   const next: Character = { ...c, noun: r.noun ?? c.noun, traits: r.traits, height: c.heightSet ? c.height : (r.height ?? c.height), updatedAt: Date.now() };
   saveCharacter(next);
   return next;

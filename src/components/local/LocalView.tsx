@@ -568,7 +568,7 @@ function Chip({ icon: Icon, children }: { icon: typeof Cpu; children: React.Reac
 }
 
 /** Another computer running ComfyUI on the same network (a Mac next to the PC): its models run from here too. */
-function AddMachine({ onAdded }: { onAdded: () => void }) {
+export function AddMachine({ onAdded }: { onAdded: () => void }) {
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
   const [working, setWorking] = useState(false);
@@ -710,7 +710,7 @@ function Recommendations({ rows, machine, commercial }: { rows: Row[]; machine: 
 }
 
 /** Gated repos: accept the licence on Hugging Face once, and give Crackio a token to download with. */
-function GatedNote({ repo, hasToken, onSaved }: { repo: string; hasToken: boolean; onSaved: () => void }) {
+function GatedNote({ repos, hasToken, onSaved }: { repos: string[]; hasToken: boolean; onSaved: () => void }) {
   const [token, setToken] = useState("");
   const [saving, setSaving] = useState(false);
   async function save() {
@@ -724,10 +724,16 @@ function GatedNote({ repo, hasToken, onSaved }: { repo: string; hasToken: boolea
   return (
     <div className="rounded-[12px] bg-white/[0.03] px-3 py-2.5 text-[12.5px] leading-relaxed text-haze">
       <p>
-        Its maker asks you to accept the licence first:{" "}
-        <a href={`https://huggingface.co/${repo}`} target="_blank" rel="noreferrer" className="font-semibold text-fog underline-offset-2 hover:underline">
-          open it on Hugging Face
-        </a>
+        {repos.length > 1 ? "Its makers ask you to accept their licences first: open " : "Its maker asks you to accept the licence first: "}
+        {repos.map((repo, i) => (
+          <span key={repo}>
+            {i ? (i === repos.length - 1 ? " and " : ", ") : null}
+            <a href={`https://huggingface.co/${repo}`} target="_blank" rel="noreferrer" className="font-semibold text-fog underline-offset-2 hover:underline">
+              {repos.length > 1 ? repo.split("/")[1] : "open it on Hugging Face"}
+            </a>
+          </span>
+        ))}
+        {repos.length > 1 ? " on Hugging Face" : null}
         {hasToken ? ", sign in and accept. Your token is set." : ", sign in, accept, and paste a read token here."}
       </p>
       {hasToken ? null : (
@@ -905,7 +911,7 @@ function ModelCard({
             Its licence leaves out where you are ({status.region}){model.licence.note ? `: ${model.licence.note.toLowerCase().replace(/\.$/, "")}` : ""}. Crackio won&rsquo;t install it here.
           </p>
         ) : null}
-        {model.gated && installsHere && !installed && !blocked ? <GatedNote repo={model.gated.repo} hasToken={status.hfToken} onSaved={onChange} /> : null}
+        {model.gated && installsHere && !installed && !blocked ? <GatedNote repos={[model.gated.repo, ...(model.gated.also ?? [])]} hasToken={status.hfToken} onSaved={onChange} /> : null}
 
         {active.length ? (
           <div>

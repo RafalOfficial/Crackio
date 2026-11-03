@@ -64,10 +64,8 @@ const LTX_VAES = [
   file("vae", "vae", "ltx-2.5-video-vae-bf16.safetensors", "Lightricks/LTX-2.5", "vae/ltx-2.5-video-vae-bf16.safetensors", 1_472_223_346),
   file("audio", "vae", "ltx-2.5-audio-vae-bf16.safetensors", "Lightricks/LTX-2.5", "vae/ltx-2.5-audio-vae-bf16.safetensors", 364_866_540),
 ];
-const LTX_REST = [
-  ...LTX_VAES,
-  file("upscaler", "latent_upscale_models", "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", "Lightricks/LTX-2.5", "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", 995_778_752),
-];
+const LTX_UPSCALER = file("upscaler", "latent_upscale_models", "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", "Lightricks/LTX-2.5", "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", 995_778_752);
+const LTX_REST = [...LTX_VAES, LTX_UPSCALER];
 const LTX_INT8 = file("model", "diffusion_models", "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors", "Lightricks/LTX-2.5", "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors", 21_504_034_224);
 const LTX_NVFP4 = file("model", "diffusion_models", "ltx-2.5-22b-distilled-transformer-nvfp4.safetensors", "Lightricks/LTX-2.5", "diffusion_models/ltx-2.5-22b-distilled-transformer-nvfp4.safetensors", 18_721_548_408);
 const LTX_TEXT_INT8 = file("text", "text_encoders", "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", "Lightricks/LTX-2.5", "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", 15_372_969_374);
@@ -79,6 +77,18 @@ const LTX_LICENCE: LocalModel["licence"] = {
 };
 /** WepeNerd's first-frame-all-frames IC-LoRA for LTX-2.5 (v1.1, under the LTX-2 licence): an edited first frame carried through a clip. */
 const RIPPLE_LORA = file("lora", "loras", "LTX25_Ripple_v11.safetensors", "WepeNerd/LTX-Ripple", "LTX25_Ripple_v11.safetensors", 654_443_392, "bde543610144e5bba78782fb0ac18daa663fc087c2212244b8116deb1925ee2a");
+/** Lightricks' in/outpainting IC-LoRA (LTX-2.3, gated; their own LTX-2.5 workflows use it): a removal draws what was behind. */
+const INPAINT_LORA = file("inpaint", "loras", "ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors", "Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting", "ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors", 1_308_778_338, "73dd0841c0d4f0eb26fb1f017781b841b2752021944ac5ecefe57917f6dae6b5");
+const KLEIN_INT8 = file("model", "diffusion_models", "flux3-image-klein-int8-convrot.safetensors", "black-forest-labs/flux-3-image-klein-comfy", "diffusion_models/flux3-image-klein-int8-convrot.safetensors", 5_827_874_779, "847d8933548afd93df4af2cac2498e70891bf28d9dae06d695f536992e168fe2");
+const QWEN3VL_4B_INT8 = file("text", "text_encoders", "qwen3vl_4b_int8_convrot.safetensors", "black-forest-labs/flux-3-image-klein-comfy", "text_encoders/qwen3vl_4b_int8_convrot.safetensors", 4_858_559_240);
+/** The same file under the role a recipe asks for it by. */
+const as = (role: string, f: LocalFile): LocalFile => ({ ...f, role });
+/**
+ * Everything a swap runs besides LTX-2.5 and Ripple, under roles of their own (the swap reads LTX's files by theirs):
+ * SAM 3.1 follows who you clicked, FLUX 3 Klein redraws the frames with your Cast (its Qwen3-VL 4B checks the drawings
+ * when there's no Comfy key), the in/outpainting LoRA makes removals, and LTX's ×2 upscaler serves Sharp.
+ */
+const SWAP_KIT = [as("sam", SAM31), as("editor", KLEIN_INT8), as("editor-text", QWEN3VL_4B_INT8), as("editor-vae", FLUX2_VAE), INPAINT_LORA, LTX_UPSCALER];
 
 const scailGguf = (quant: string, bytes: number, sha256: string) =>
   file("model", "diffusion_models", `SCAIL-2-${quant}.gguf`, "realrebelai/SCAIL-2_GGUF", `SCAIL-2-${quant}.gguf`, bytes, sha256);
@@ -292,16 +302,22 @@ export const LOCAL_MODELS: LocalModel[] = [
     ],
   },
   {
+    // A pack: LTX-2.5 and Ripple alone can't swap anything (SAM 3.1 finds who you clicked, FLUX 3 Klein draws them anew),
+    // so one install brings every file a swap runs, on whichever machine you pick.
     id: "ltx-2.5-ripple",
-    name: "LTX-2.5 Ripple",
-    maker: "Lightricks · WepeNerd",
+    name: "Character Swap v1",
+    maker: "Lightricks · WepeNerd · Black Forest Labs · Meta",
     tasks: ["swap"],
     blurb:
-      "Swaps anyone or anything in a clip: your picture model redraws its first frame with your Cast in place, and LTX-2.5 with the Ripple IC-LoRA carries that change through every frame. The moves, mouth, camera and place stay; people, pets, cars and objects.",
+      "Everything a swap needs in one install: SAM 3.1 follows who you click, FLUX 3 Klein redraws them as your Cast, and LTX-2.5 with WepeNerd's Ripple LoRA carries that through every frame. The moves, mouth, camera and place stay; people, pets, cars and objects.",
     quality: 86,
     unit: "clip",
-    licence: { ...LTX_LICENCE, note: `${LTX_LICENCE.note} The Ripple LoRA is under the same licence.` },
-    gated: { repo: "Lightricks/LTX-2.5" },
+    licence: {
+      ...LTX_LICENCE,
+      name: "LTX-2 Community · FLUX Kommunity",
+      note: "LTX-2.5 and Ripple: free under $10M yearly revenue, no products that compete with Lightricks. FLUX 3 Klein: free under $5M. Label AI output.",
+    },
+    gated: { repo: "Lightricks/LTX-2.5", also: ["black-forest-labs/flux-3-image-klein-comfy", "Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting"] },
     crackio: "local:ltx-2.5-ripple",
     variants: [
       {
@@ -314,7 +330,7 @@ export const LOCAL_MODELS: LocalModel[] = [
         steps: 8,
         measured: true,
         requires: NVIDIA,
-        files: [LTX_INT8, LTX_TEXT_INT8, ...LTX_VAES, RIPPLE_LORA],
+        files: [LTX_INT8, LTX_TEXT_INT8, ...LTX_VAES, RIPPLE_LORA, ...SWAP_KIT],
       },
       {
         id: "nvfp4",
@@ -324,7 +340,7 @@ export const LOCAL_MODELS: LocalModel[] = [
         seconds5090: 96,
         steps: 8,
         requires: RTX50,
-        files: [LTX_NVFP4, LTX_TEXT_INT8, ...LTX_VAES, RIPPLE_LORA],
+        files: [LTX_NVFP4, LTX_TEXT_INT8, ...LTX_VAES, RIPPLE_LORA, ...SWAP_KIT],
       },
     ],
   },
@@ -358,11 +374,7 @@ export const LOCAL_MODELS: LocalModel[] = [
         seconds5090: 1.6,
         steps: 16,
         requires: NVIDIA,
-        files: [
-          file("model", "diffusion_models", "flux3-image-klein-int8-convrot.safetensors", "black-forest-labs/flux-3-image-klein-comfy", "diffusion_models/flux3-image-klein-int8-convrot.safetensors", 5_827_874_779, "847d8933548afd93df4af2cac2498e70891bf28d9dae06d695f536992e168fe2"),
-          file("text", "text_encoders", "qwen3vl_4b_int8_convrot.safetensors", "black-forest-labs/flux-3-image-klein-comfy", "text_encoders/qwen3vl_4b_int8_convrot.safetensors", 4_858_559_240),
-          FLUX2_VAE,
-        ],
+        files: [KLEIN_INT8, QWEN3VL_4B_INT8, FLUX2_VAE],
       },
       {
         id: "bf16",
@@ -492,6 +504,55 @@ export const LOCAL_MODELS: LocalModel[] = [
           file("text", "text_encoders", "qwen3vl_8b_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 9_350_798_360, "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"),
           file("vae", "vae", "qwen_image_2.1_vae_bf16.safetensors", "Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", 675_509_688, "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"),
           file("control", "model_patches", "Qwen-Image-2.1-Fun-Controlnet-Union.safetensors", "alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union", "Qwen-Image-2.1-Fun-Controlnet-Union.safetensors", 7_550_979_904),
+        ],
+      },
+    ],
+  },
+  {
+    // Angles' re-shoots (engines/comfy-local-recipes QWEN_ANGLES): Qwen-Image 2.1 Turbo, the Director's base files, with
+    // a camera LoRA of its own, so Angles is tuned without touching the Director.
+    id: "qwen-angles",
+    name: "Qwen Angles",
+    maker: "Alibaba Qwen + lilylilith (AnyAngle) + gribbliest (QMA)",
+    tasks: ["image"],
+    blurb: "Angles' re-shoots: Qwen-Image 2.1 Turbo with two camera LoRAs takes the camera from Angles' 3D view and everything else from your photo. Research and non-commercial use only.",
+    quality: 80,
+    unit: "image",
+    licence: { name: "Qwen Research", url: "https://huggingface.co/Qwen/Qwen-Image-2.1", commercial: "no" },
+    crackio: "local:qwen-angles",
+    tool: "angles",
+    thumb: "image_qwen_image_2_1_image_edit",
+    variants: [
+      {
+        id: "int8-turbo",
+        label: "INT8 Turbo",
+        needGb: 17,
+        fidelity: 0.97,
+        seconds5090: 15,
+        steps: 8,
+        requires: NVIDIA,
+        files: [
+          file("model", "diffusion_models", "qwen_image_2.1_turbo_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors", 7_256_787_829, "8144a0182964aa8403ad6dbc011db837304167d235161b9aabaa8532e967314c"),
+          file("text", "text_encoders", "qwen3vl_8b_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 9_350_798_360, "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"),
+          file("vae", "vae", "qwen_image_2.1_vae_bf16.safetensors", "Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", 675_509_688, "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"),
+          // lilylilith's AnyAngle (Apache-2.0), pinned: trained on rough 3D renders paired with the real shot.
+          {
+            role: "angles",
+            folder: "loras",
+            name: "QI2.1_AnyAngle.safetensors",
+            url: "https://huggingface.co/lilylilith/QI_2.1_AnyAngle/resolve/5c8b4c8e05ba6328d54bf8d34ec724fef5a414ae/QI2.1_AnyAngle.safetensors",
+            bytes: 119_590_312,
+            sha256: "e4d7a0d44a45ed62daabd0f2484a1a59046618a4c47e76b1eab5e386a7a35d8a",
+          },
+          // gribbliest's QMA camera angles (Apache-2.0), pinned: 96 named views, for the backs of things.
+          {
+            role: "views",
+            folder: "loras",
+            name: "qwen-image-2.1-qma-camera-angles.safetensors",
+            url: "https://huggingface.co/gribbliest/qwen-image-2.1-qma-camera-angles/resolve/13007eec2648c09529e930164c2ccc9c8c12428c/qwen-image-2.1-qma-camera-angles.safetensors",
+            bytes: 318_820_224,
+            sha256: "ad2c20e0e103b6ad3ffffc56ab4e89c0822263c488aa4dd70e7e03091ff37b8d",
+          },
         ],
       },
     ],
@@ -814,6 +875,42 @@ export const LOCAL_MODELS: LocalModel[] = [
         fixedShare: 0.8,
         oldGpuCost: 2.5,
         files: [file("model", "upscale_models", "4xNomos2_hq_dat2.safetensors", "Phips/4xNomos2_hq_dat2", "4xNomos2_hq_dat2.safetensors", 139_792_588, "278c78ba9fd333ace4b02b3aeaa0254428baea20a63d3e995e2e4f8a60173f6f")],
+      },
+    ],
+  },
+  {
+    // Lip Sync's best quality (bridge CrackioMouthRefine, server/lipsync/run refineNodes): HuMo redraws LatentSync's
+    // mouths lightly with the person's own teeth frame as its reference, and only its lips and teeth go back, onto
+    // LatentSync's skin (bridge 1.10.3). 27 GB peak on the RTX 5090 at 832x832, 97 frames.
+    id: "humo-lipsync",
+    name: "HuMo 17B",
+    maker: "ByteDance (HuMo) + Comfy-Org (repack)",
+    tasks: ["video"],
+    blurb: "Lip Sync's best quality: redraws the new mouth's teeth and lips so they're the person's own, keeping LatentSync's mouth shapes and skin.",
+    quality: 85,
+    unit: "clip",
+    licence: { name: "Apache-2.0", url: "https://huggingface.co/Comfy-Org/HuMo", commercial: "yes" },
+    crackio: "local:humo-lipsync",
+    tool: "lipsync",
+    variants: [
+      {
+        id: "fp8",
+        label: "FP8",
+        needGb: 28,
+        fidelity: 0.97,
+        // A 4 s stretch (97 frames) as Lip Sync draws it (bridge 1.10.2+: window 1.5x the face at 832, denoise 0.42,
+        // 6 steps, CFG 5, INT8 attention): about 345 s on the RTX 5090 with the loads (2026-11-03; at 8 steps the old
+        // way 530 s). Crackio's MXFP8 build of it, where a machine has it, about 245 s.
+        seconds5090: 345,
+        measured: true,
+        steps: 6,
+        requires: NVIDIA,
+        files: [
+          file("model", "diffusion_models", "humo_17B_fp8_e4m3fn.safetensors", "Comfy-Org/HuMo", "split_files/diffusion_models/humo_17B_fp8_e4m3fn.safetensors", 17_058_372_152, "222ddeac4dea6b78363cb5be78c47660c92963a69386026cd6dc0de4d3094f66"),
+          file("audio", "audio_encoders", "whisper_large_v3_fp16.safetensors", "Comfy-Org/HuMo", "split_files/audio_encoders/whisper_large_v3_fp16.safetensors", 3_087_130_976, "a8e94b85976e5864ba3e9525c7e6c83b2a1eca42d4b797a0c7c24d778e40fd95"),
+          UMT5_FP8,
+          file("vae", "vae", "wan_2.1_vae.safetensors", "Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/vae/wan_2.1_vae.safetensors", 253_815_318, "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"),
+        ],
       },
     ],
   },

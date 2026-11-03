@@ -154,8 +154,8 @@ export function VideoUpscale({ tool, modeSwitch }: { tool: Tool; modeSwitch: Rea
                       <span className="mt-1.5 flex items-center justify-between gap-2 text-[11.5px]">
                         <span className="text-haze">About {r.needGb} GB of GPU memory</span>
                         {have ? null : (
-                          <Link href="/local" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-0.5 font-semibold text-fog hover:text-paper">
-                            Install on Local <ArrowUpRight size={11} />
+                          <Link href="/settings/tools?tool=upscale" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-0.5 font-semibold text-fog hover:text-paper">
+                            Set up in Settings <ArrowUpRight size={11} />
                           </Link>
                         )}
                       </span>
@@ -250,8 +250,8 @@ export function VideoUpscale({ tool, modeSwitch }: { tool: Tool; modeSwitch: Rea
             {!chosen ? (
               <p className="text-[12.5px] leading-relaxed text-haze">
                 None of your machines has a video upscaler yet:{" "}
-                <Link href="/local" className="font-semibold text-fog underline-offset-2 hover:underline">
-                  install one on the Local page
+                <Link href="/settings/tools?tool=upscale" className="font-semibold text-fog underline-offset-2 hover:underline">
+                  set one up in Settings → Tools
                 </Link>
                 .
               </p>

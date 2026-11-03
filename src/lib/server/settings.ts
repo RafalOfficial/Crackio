@@ -23,6 +23,22 @@ export type Settings = {
    * wherever Klein is; or "8b", sharper and about twice the memory. Missing means 4b.
    */
   localVision?: "4b" | "8b";
+  /**
+   * Who checks a swap's drawings (server/swap-checker): "local", Crackio's judge on your GPU; "cloud", Gemini 3.5 Flash
+   * on the Comfy key; "auto", the judge where it's installed, else Gemini. Missing means auto.
+   */
+  swapChecker?: "auto" | "local" | "cloud";
+  /**
+   * How sure Crackio's judge must be before a swap keeps a drawing (server/swap-checker): "lenient" keeps acceptable
+   * swaps with small flaws (the user's own standard), "strict" redraws anything doubtful. Missing means lenient.
+   */
+  swapStrictness?: "strict" | "normal" | "lenient";
+  /**
+   * Who finds the things in a picture and their parts (Retouch, Recast, a template's pick; server/detect): "local",
+   * Crackio's own eyes (LFM3-VL 2B with the Retouch LoRA) on your GPU; "cloud", Gemini 3.5 Flash on the Comfy key;
+   * "auto", your GPU where the eyes are installed, else Gemini. Missing means auto.
+   */
+  retouchEyes?: "auto" | "local" | "cloud";
   /** Engine used when a tool doesn't pin one. "auto" picks the first connected engine. */
   defaultEngine: string;
   onboarding: { connected?: boolean; directed?: boolean; cast?: boolean };
@@ -48,10 +64,22 @@ export type Settings = {
    */
   cloudAutoConnect?: boolean;
   /**
+   * Rented boxes that stop themselves once idle, by "vast:58824818" (Settings → Machines): after `minutes` with their GPU
+   * load under `load` % (10 when missing) and nothing else running there; `then` "delete" deletes the box instead (for a
+   * one-time box). A bare number is the minutes (from before `load`).
+   */
+  autoStop?: Record<string, number | { minutes: number; load?: number; then?: "stop" | "delete" }>;
+  /**
    * RunPod Serverless endpoints running Crackio's ComfyUI worker (serverless/worker), with the RunPod key above: they join
    * your machines as ComfyUIs that start a GPU per job (server/serverless). Picked under Run on, never by Auto.
    */
   serverless?: { endpointId: string; label?: string }[];
+  /**
+   * The most Crackio may keep on each machine (Settings → Storage), in GB: its models there, plus Crackio's own data on
+   * this computer. Keyed by the machine's id (the bridge's stable machine id when it has one, else the ComfyUI target id).
+   * Installs past it stop and ask; nothing already made is ever deleted for it.
+   */
+  storageCaps?: Record<string, number>;
 };
 
 const DEFAULTS: Settings = { keys: {}, models: {}, defaultEngine: "auto", onboarding: {} };
@@ -65,8 +93,18 @@ export async function getSettings(): Promise<Settings> {
   }
 }
 
-export async function updateSettings(patch: (s: Settings) => Settings): Promise<Settings> {
-  const next = patch(await getSettings());
-  await writeFileAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2), { mode: 0o600 });
-  return next;
+/**
+ * Writes take turns: each reads the file the previous one wrote. Several write at once (a saved key, Run on, the cloud
+ * watcher adding a box), and a read-modify-write that overlapped another dropped its change.
+ */
+const queue = globalThis as unknown as { __crackioSettingsWrites?: Promise<unknown> };
+
+export function updateSettings(patch: (s: Settings) => Settings): Promise<Settings> {
+  const run = (queue.__crackioSettingsWrites ?? Promise.resolve()).then(async () => {
+    const next = patch(await getSettings());
+    await writeFileAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2), { mode: 0o600 });
+    return next;
+  });
+  queue.__crackioSettingsWrites = run.catch(() => undefined);
+  return run;
 }

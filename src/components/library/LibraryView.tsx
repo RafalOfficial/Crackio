@@ -41,7 +41,7 @@ import { byDay, dayKey, dayLabel, GAP, justify, PER_PAGE, targetHeight, type Den
 import { matches, takesOf, toolIcon, toolName, type Take } from "./takes";
 
 /** What the grid shows: everything that rendered, only stills, only clips, or the runs that failed. */
-type Kind = "all" | "image" | "video" | "failed";
+type Kind = "all" | "image" | "video" | "audio" | "failed";
 
 const failed = (t: Take) => t.gen.status === "error";
 const kindFits = (t: Take, k: Kind) => (k === "failed" ? failed(t) : !failed(t) && (k === "all" || t.kind === k));
@@ -160,7 +160,7 @@ export function LibraryView() {
   }, [searched, kind]);
   const activeTool = tool !== "all" && toolCounts.has(tool) ? tool : "all";
   const kindCounts = useMemo(() => {
-    const c: Record<Kind, number> = { all: 0, image: 0, video: 0, failed: 0 };
+    const c: Record<Kind, number> = { all: 0, image: 0, video: 0, audio: 0, failed: 0 };
     for (const t of searched) {
       if (!toolFits(t, activeTool)) continue;
       if (failed(t)) c.failed++;
@@ -604,6 +604,7 @@ export function LibraryView() {
               ["all", "All"],
               ["image", "Images"],
               ["video", "Clips"],
+              ...(kindCounts.audio ? ([["audio", "Voice"]] as const) : []),
               ...(kindCounts.failed ? ([["failed", "Failed"]] as const) : []),
             ] as const
           ).map(([id, label]) => (

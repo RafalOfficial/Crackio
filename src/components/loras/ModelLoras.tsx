@@ -379,7 +379,7 @@ function PickCard({ view, crackio, picks, status, model, targets }: { view: Lora
         <Plus size={13} strokeWidth={3} /> Switch on
       </button>
     );
-  else if (!targets.length) action = <span className="text-[11.5px] text-haze">Connect a GPU on the Local page to add it.</span>;
+  else if (!targets.length) action = <span className="text-[11.5px] text-haze">Connect a GPU in Settings → Machines to add it.</span>;
   else if (needsToken)
     action = (
       <a href={`https://huggingface.co/${entry.repo}`} target="_blank" rel="noreferrer" className="press inline-flex h-8 items-center gap-1.5 rounded-full bg-white/[0.1] px-3 text-[12px] font-bold text-paper hover:bg-white/[0.16]">

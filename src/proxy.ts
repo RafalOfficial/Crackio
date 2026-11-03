@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { demoOn, demoPage, demoTools } from "@/lib/demo/config";
 import { demoApi } from "@/lib/demo/routes";
 import { sessionOf } from "@/lib/demo/session";
+import { ourHost } from "@/lib/server/our-host";
 
 /**
  * Helpers that use the GPU or disk without costing credits (a clip's frame, outlines, reading a picture, uploads): 60
@@ -21,12 +22,44 @@ function overHelperLimit(code: string) {
 const STATIC = /^\/(_next\/|assets\/|icons\/|favicon\.ico$|icon\.svg$|apple-icon\.png$|robots\.txt$)/;
 
 /**
- * Runs before every request. Outside the live demo it lets everything through untouched. In the demo (lib/demo) it's
- * the front door: a page or API route that isn't on the demo's lists doesn't exist, and anything that spends the GPU or
- * stores a file needs a signed-in access code. The routes check the code again themselves.
+ * Another website can't drive Crackio from your browser. A browser sends Origin with every POST, PATCH or DELETE, and it
+ * must be the address Crackio answers on (behind the LAN https address too, which passes Host through). Scripts and curl
+ * send no Origin; reading (GET) stays open.
+ */
+function fromAnotherSite(request: NextRequest) {
+  const method = request.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return false;
+  const origin = request.headers.get("origin");
+  if (origin === null) return false;
+  let host: string;
+  try {
+    host = new URL(origin).host;
+  } catch {
+    // "null": a sandboxed frame or a file.
+    return true;
+  }
+  return host !== request.headers.get("host") && host !== request.headers.get("x-forwarded-host");
+}
+
+/**
+ * Runs before every request. Outside the live demo it only turns away API calls another website makes from your
+ * browser. In the demo (lib/demo) it's the front door: a page or API route that isn't on the demo's lists doesn't exist,
+ * and anything that spends the GPU or stores a file needs a signed-in access code. The routes check the code again
+ * themselves.
  */
 export async function proxy(request: NextRequest) {
-  if (!demoOn()) return NextResponse.next();
+  if (!demoOn()) {
+    // A website whose own name resolves to this computer (DNS rebinding) gets nothing: Crackio answers only as this
+    // computer (localhost, its network addresses and name, CRACKIO_ALLOWED_ORIGINS).
+    const forwarded = request.headers.get("x-forwarded-host");
+    if (!ourHost(request.headers.get("host")) || (forwarded !== null && !ourHost(forwarded))) {
+      return new Response("Crackio only answers on this computer's own addresses. To reach it under another name, add that name to CRACKIO_ALLOWED_ORIGINS.", { status: 421 });
+    }
+    if (request.nextUrl.pathname.startsWith("/api/") && fromAnotherSite(request)) {
+      return Response.json({ error: "Crackio only takes changes from its own page." }, { status: 403 });
+    }
+    return NextResponse.next();
+  }
   const { pathname } = request.nextUrl;
   const method = request.method.toUpperCase();
   const tools = demoTools();

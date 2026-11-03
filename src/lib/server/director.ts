@@ -767,7 +767,7 @@ export async function liftThings(photoUrl: string, place: string, model: string,
     effort: "low",
     timeoutMs: 60_000,
   }).catch(() => null);
-  if (!answer) throw new EngineError("No vision model answered.", "Connect ChatGPT or Grok in Connections.");
+  if (!answer) throw new EngineError("No vision model answered.", "Add a Comfy key in Settings → Accounts, or set up a text model in Settings → Tools.");
   const raw = jsonObject<{ things?: { kind?: string; box?: unknown }[] }>(answer);
   // Some vision models answer in percent whatever they're asked: boxes that all fit in 0-100 are read that way.
   const all = (raw?.things ?? []).flatMap((t) => (Array.isArray(t.box) ? t.box.map(Number) : []));

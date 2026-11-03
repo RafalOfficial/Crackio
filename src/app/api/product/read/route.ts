@@ -12,6 +12,6 @@ export async function POST(request: Request) {
   if (!files.length) return Response.json({ error: "Send the URL of a product photo Crackio stores." }, { status: 400 });
   // Not tied to this request: the reading is cached, so it's ready for the shoot even if the page moves on.
   const read = await readProduct(files).catch(() => null);
-  if (!read) return Response.json({ error: "Couldn't read the product. Connect ChatGPT or Grok in Connections, or say what it is." }, { status: 503 });
+  if (!read) return Response.json({ error: "Couldn't read the product. Add a Comfy key in Settings → Accounts, or say what it is." }, { status: 503 });
   return Response.json({ read }, { headers: { "Cache-Control": "no-store" } });
 }

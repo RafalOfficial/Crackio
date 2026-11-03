@@ -843,7 +843,7 @@ export async function castClipJob(
   if (!job.start && takesStart && mode !== "words" && drawFirst) {
     const { model: image, instead } = await frameModel(gen.params?.frameModel, def.via === "comfy-local");
     const engine = image?.via ? engineFor(image.via) : null;
-    if (!image || !engine) throw new EngineError("Drawing the first frame with your cast needs an image model that takes pictures.", "Connect one in Connections, or add a start frame.");
+    if (!image || !engine) throw new EngineError("Drawing the first frame with your cast needs an image model that takes pictures.", "Set one up in Settings → Tools, or add a start frame.");
     const who = cast.map((c) => c.name).join(" and ");
     ctx.progress(0.02, instead ? `${instead}: drawing the first frame with ${who} on ${image.name}` : `Drawing the first frame with ${who} on ${image.name}`);
     // The first moment of the shot, before its action (drawn from the whole description, a model draws where it ends).

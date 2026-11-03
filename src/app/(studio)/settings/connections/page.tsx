@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { ConnectionsView } from "@/components/settings/ConnectionsView";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Connections" };
-
+/** Connections moved into Settings: keys under Accounts, machines under Machines. */
 export default function ConnectionsPage() {
-  return <ConnectionsView />;
+  redirect("/settings/accounts");
 }

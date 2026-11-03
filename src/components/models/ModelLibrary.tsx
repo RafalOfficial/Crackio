@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, memo, useCallback, useContext, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowUpRight, Check, Cloud, CornerDownLeft, Cpu, Download, KeyRound, Layers, LoaderCircle, Monitor, Search, Sparkles, Square, TriangleAlert, X } from "lucide-react";
@@ -36,7 +36,7 @@ import { cn } from "@/lib/cn";
  * and Get models: the open models that fit a GPU, installed in one click. Full screen on a phone.
  */
 
-type Tab = "all" | "cloud" | "plans" | "get" | `gpu:${string}`;
+export type Tab = "all" | "cloud" | "plans" | "get" | `gpu:${string}`;
 
 /** A machine whose ComfyUI runs your open models. */
 type Gpu = {
@@ -52,7 +52,7 @@ type Gpu = {
   target: TargetStatus;
 };
 
-type Card = {
+export type Card = {
   key: string;
   /** What picking it sets; null when it has to be installed first. */
   id: string | null;
@@ -61,7 +61,8 @@ type Card = {
   /** A ComfyUI template's preview (api/models/preview), or a picture's own address. */
   /** `clip`: a video template's loop plays on hover; `compare`: an upscaler's starting picture wipes to its result. */
   /** `text`: a text model's card types out a sample of its work instead (TextCardPreview). */
-  preview: { template: string; clip: boolean; compare?: boolean } | { src: string } | { text: string } | null;
+  /** `node`: art of its own (Voice models draw their sky and play a sample: components/voice/VoiceModelLibrary). */
+  preview: { template: string; clip: boolean; compare?: boolean } | { src: string } | { text: string } | { node: ReactNode } | null;
   home: ModelHome;
   /** Top-right: where it runs ("RTX 5090", "Comfy Cloud", "Grok"), or how well it fits a GPU. */
   badge?: { text: string; tone?: "good" | "ok" | "slow" | "no" };
@@ -81,6 +82,10 @@ type Card = {
   useOn?: Gpu;
   /** A model to install on a GPU. */
   install?: { row: Row; gpu: Gpu | null; hfToken: boolean };
+  /** What it offers instead of Use or Install (a voice model getting itself onto a GPU, with its progress). */
+  actions?: ReactNode;
+  /** A round button beside Use in its details (a voice model's "Hear it"). */
+  extra?: ReactNode;
   /** An open model that takes LoRAs (its `LocalModel.id`): its card opens its LoRA page. */
   lora?: string;
 };
@@ -102,6 +107,8 @@ export type LibraryProps = {
   anchor: HTMLElement | null;
   kind: ModelKind;
   task?: ModelTask;
+  /** The tool it opens from (its slug): an open model made for it (`LocalModel.tool`) comes first in Get models. */
+  tool?: string;
   value: string;
   onChange: (id: string) => void;
   /** This tool's models (already narrowed to what it can use). */
@@ -251,7 +258,7 @@ const hoverless = (changed: () => void) => {
   q.addEventListener("change", changed);
   return () => q.removeEventListener("change", changed);
 };
-function useTouch() {
+export function useTouch() {
   return useSyncExternalStore(
     hoverless,
     () => window.matchMedia("(hover: none)").matches,
@@ -280,17 +287,9 @@ let warmed = false;
  * stays inside (Tab wraps), Escape and a click on the shade close it, focus goes back to the picker.
  */
 export function ModelLibrary({ open, primed = false, warm = false, onClose, anchor, glass, ...content }: LibraryProps) {
-  const root = useRef<HTMLDivElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const shade = useRef<HTMLDivElement>(null);
-  const shown = useRef(false);
-  const closing = useRef(false);
-  const back = useRef<HTMLElement | null>(null);
   // A model's LoRA page, opened from its card (its LocalModel id); closing the sheet goes back to the cards.
   const [loraOf, setLoraOf] = useState<string | null>(null);
-  // It lives where its trigger does: inside a modal dialog when the picker sits in one (the rest of the page is inert then).
-  const host = (open || primed) && anchor ? floatingHost(anchor) : null;
-  useCoverPage(open);
+  const kind = content.kind;
   // Your machines stay fresh while it's open (the cards read them from the shared store); the first look waits until it has
   // slid in, so new numbers don't redraw it mid-slide.
   useLocalWatch(open, 700);
@@ -300,9 +299,63 @@ export function ModelLibrary({ open, primed = false, warm = false, onClose, anch
     const t = setTimeout(() => revalidateModels(), 700);
     return () => clearTimeout(t);
   }, [open]);
+  return (
+    <LibraryDrawer
+      open={open}
+      primed={primed}
+      warm={warm}
+      onClose={onClose}
+      onClosed={() => setLoraOf(null)}
+      anchor={anchor}
+      glass={glass}
+      label={`Choose ${kind === "image" ? "an image" : kind === "upscale" ? "an upscale" : kind === "video" ? "a video" : kind === "text" ? "a text" : "a"} model`}
+    >
+      <LibraryContent {...content} loraOf={loraOf} onLoraOf={setLoraOf} />
+    </LibraryDrawer>
+  );
+}
+
+/**
+ * The library's sheet without its cards: the slide, the shade, focus kept inside, Escape. Other pickers fill it with
+ * cards of their own (Voice's models: components/voice/VoiceModelLibrary) from the pieces exported below.
+ */
+export function LibraryDrawer({
+  open,
+  primed = false,
+  warm = false,
+  onClose,
+  onClosed,
+  anchor,
+  glass,
+  label,
+  children,
+}: {
+  open: boolean;
+  primed?: boolean;
+  warm?: boolean;
+  onClose: () => void;
+  /** After it has slid out, before `onClose`. */
+  onClosed?: () => void;
+  anchor: HTMLElement | null;
+  glass?: boolean;
+  label: string;
+  /** What fills it; it closes the sheet (sliding out) with useLibraryClose(). */
+  children: ReactNode;
+}) {
+  const root = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const shade = useRef<HTMLDivElement>(null);
+  const shown = useRef(false);
+  const closing = useRef(false);
+  const back = useRef<HTMLElement | null>(null);
+  // It lives where its trigger does: inside a modal dialog when the picker sits in one (the rest of the page is inert then).
+  const host = (open || primed) && anchor ? floatingHost(anchor) : null;
+  useCoverPage(open);
   const onCloseRef = useRef(onClose);
+  const onClosedRef = useRef(onClosed);
   useLayoutEffect(() => {
     onCloseRef.current = onClose;
+    onClosedRef.current = onClosed;
   });
 
   // The unseen first draw: shown in place at all but no opacity, out of reach of the pointer and the keyboard, then hidden.
@@ -389,7 +442,7 @@ export function ModelLibrary({ open, primed = false, warm = false, onClose, anch
         const to = back.current;
         back.current = null;
         if (to?.isConnected) to.focus({ preventScroll: true });
-        setLoraOf(null);
+        onClosedRef.current?.();
         onCloseRef.current();
       });
   }, []);
@@ -426,25 +479,26 @@ export function ModelLibrary({ open, primed = false, warm = false, onClose, anch
   return createPortal(
     <div ref={root} hidden className="model-library-root" data-glass={glass || undefined}>
       <div ref={shade} className="model-library-shade" onClick={close} aria-hidden="true" />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Choose ${content.kind === "image" ? "an image" : content.kind === "upscale" ? "an upscale" : content.kind === "video" ? "a video" : content.kind === "text" ? "a text" : "a"} model`}
-        tabIndex={-1}
-        className="model-library outline-none"
-      >
-        <Library {...content} onClose={close} loraOf={loraOf} onLoraOf={setLoraOf} />
+      <div ref={panel} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} className="model-library outline-none">
+        <CloseSheet.Provider value={close}>{children}</CloseSheet.Provider>
       </div>
     </div>,
     host,
   );
 }
 
+/** Closes the sheet it's in: slides it out, then calls its onClose. */
+const CloseSheet = createContext<() => void>(() => {});
+export const useLibraryClose = () => useContext(CloseSheet);
+
 type ContentProps = Omit<LibraryProps, "open" | "primed" | "anchor" | "glass"> & { loraOf: string | null; onLoraOf: (id: string | null) => void };
 
+function LibraryContent(props: Omit<ContentProps, "onClose">) {
+  return <Library {...props} onClose={useLibraryClose()} />;
+}
+
 /** What's in the sheet. Memoized: opening and closing it doesn't render a single card again. */
-const Library = memo(function Library({ kind, task, value, onChange, onClose, list, picks, tags, fit, loraOf, onLoraOf: setLoraOf }: ContentProps) {
+const Library = memo(function Library({ kind, task, tool, value, onChange, onClose, list, picks, tags, fit, loraOf, onLoraOf: setLoraOf }: ContentProps) {
   const { status, catalog, error: localError } = useLocalStore();
   // The first frames carry only the header and placeholders, so the slide starts at once; the cards follow.
   const [settled, setSettled] = useState(false);
@@ -477,8 +531,15 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
   const listed = useMemo(() => new Map(list.map((m) => [m.id, m])), [list]);
   const knownIds = useMemo(() => new Set(known.map((m) => m.id)), [known]);
   // The open models this tool can use: what it does, and once Crackio knows one (installed somewhere), what the tool's
-  // list allows (an edit tool leaves out models that only make pictures from words).
-  const fitsTool = (m: LocalModel) => m.tasks.some((t) => wants.includes(t)) && (!m.crackio || listed.has(m.crackio) || !knownIds.has(m.crackio));
+  // list allows (an edit tool leaves out models that only make pictures from words). One made for a tool is its alone.
+  const fitsTool = (m: LocalModel) => (m.tool ? m.tool === tool : m.tasks.some((t) => wants.includes(t)) && (!m.crackio || listed.has(m.crackio) || !knownIds.has(m.crackio)));
+  // Made for this tool and runs well there: first to install, and says so.
+  const ownRow = (r: Row) => Boolean(tool) && r.model.tool === tool && runsWell(r.fit) && !r.blocked;
+  const toGetFirst = (a: Row, b: Row) => Number(ownRow(b)) - Number(ownRow(a)) || byBest(a, b);
+  const getCard = (r: Row, g: Gpu) => {
+    const c = rowCard(r, g, undefined, Boolean(status?.hfToken), kind);
+    return ownRow(r) ? { ...c, tag: "Made for this tool" } : c;
+  };
 
   // Every model on each GPU (local/rows), for the GPU tabs and Get models.
   const rowsByGpu = useMemo(() => {
@@ -512,8 +573,8 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
     const here = rows.filter((r) => installedVariant(r.model, g.target)).map((r) => rowCard(r, g, r.model.crackio ? listed.get(r.model.crackio) : undefined, Boolean(status?.hfToken), kind));
     const toGet = rows
       .filter((r) => !installedVariant(r.model, g.target) && !r.blocked && runsWell(r.fit))
-      .sort(byBest)
-      .map((r) => rowCard(r, g, undefined, Boolean(status?.hfToken), kind));
+      .sort(toGetFirst)
+      .map((r) => getCard(r, g));
     return { here: here.sort(byQuality), toGet };
   };
 
@@ -525,8 +586,8 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
       .filter((r) => fitsTool(r.model) && !r.blocked && !installedVariant(r.model, g.target))
       .filter((r) => !onlyRuns || runsWell(r.fit))
       .filter((r) => !onlyCommercial || r.model.licence.commercial !== "no")
-      .sort(byBest);
-    return rows.map((r) => rowCard(r, g, undefined, Boolean(status?.hfToken), kind));
+      .sort(toGetFirst);
+    return rows.map((r) => getCard(r, g));
   })();
 
   const matches = (c: Card) => {
@@ -611,7 +672,7 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
                     <Download size={15} /> Get models
                   </button>
                 )}
-                <Link href="/settings/connections" className="press inline-flex h-10 items-center gap-2 rounded-btn bg-white/[0.07] px-4 text-[13px] font-semibold hover:bg-white/[0.12]">
+                <Link href="/settings/accounts#comfy" className="press inline-flex h-10 items-center gap-2 rounded-btn bg-white/[0.07] px-4 text-[13px] font-semibold hover:bg-white/[0.12]">
                   <KeyRound size={15} /> Add a Comfy key
                 </Link>
               </>
@@ -630,7 +691,7 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
     const g = gpus.find((x) => `gpu:${x.id}` === tab);
     if (!g) body = null;
     else if (!g.online)
-      body = <Empty title={`${g.where} is offline`} body="Its models come back when its ComfyUI does. Start it, or check it on the Local page." actions={<GhostLink href="/local">Open Local</GhostLink>} />;
+      body = <Empty title={`${g.where} is offline`} body="Its models come back when its ComfyUI does. Start it, or check it in Settings → Machines." actions={<GhostLink href="/settings/machines">Open Machines</GhostLink>} />;
     else {
       const { here, toGet } = gpuCards(g);
       body = (
@@ -663,7 +724,7 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
     body = (
       <>
         {comfyKey ? null : (
-          <Banner icon={<Cloud size={16} />} action={<GhostLink href="/settings/connections">Add a Comfy key</GhostLink>}>
+          <Banner icon={<Cloud size={16} />} action={<GhostLink href="/settings/accounts#comfy">Add a Comfy key</GhostLink>}>
             These run on Comfy Cloud: no GPU needed, paid per job in Comfy credits. Add your Comfy key to use them.
           </Banner>
         )}
@@ -714,8 +775,8 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
           </div>
         </div>
         {!online.length ? (
-          <Banner icon={<Monitor size={16} />} action={<GhostLink href="/local">Set up ComfyUI</GhostLink>}>
-            Open models run in ComfyUI. Crackio installs it for you on the Local page, then installs any model here in one click.
+          <Banner icon={<Monitor size={16} />} action={<GhostLink href="/settings/machines?add=1">Set up ComfyUI</GhostLink>}>
+            Open models run in ComfyUI. Crackio installs it for you in Settings → Machines, then installs any model here in one click.
           </Banner>
         ) : null}
         {grid(getCards, { install: true }) ?? (
@@ -795,7 +856,7 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:px-6">
           <ModelLoras model={loraModel} compact />
           <footer className="mt-8 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3 text-[12.5px]">
-            <Link href="/local#loras" onClick={onClose} className="inline-flex items-center gap-1 font-semibold text-haze hover:text-paper">
+            <Link href="/settings/models#loras" onClick={onClose} className="inline-flex items-center gap-1 font-semibold text-haze hover:text-paper">
               Every model&rsquo;s LoRAs <ArrowUpRight size={13} />
             </Link>
           </footer>
@@ -885,8 +946,8 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
           <Link href="/settings/models" onClick={onClose} className="font-semibold text-haze hover:text-paper">
             Default models
           </Link>
-          <Link href="/local" onClick={onClose} className="inline-flex items-center gap-1 font-semibold text-haze hover:text-paper">
-            Machines and installs <ArrowUpRight size={13} />
+          <Link href="/settings/tools" onClick={onClose} className="inline-flex items-center gap-1 font-semibold text-haze hover:text-paper">
+            Machines and set-ups <ArrowUpRight size={13} />
           </Link>
         </footer>
       </div>
@@ -894,7 +955,7 @@ const Library = memo(function Library({ kind, task, value, onChange, onClose, li
   );
 });
 
-function Section({ title, hint, action, items, search, render }: { title: string; hint?: string; action?: ReactNode; items: Card[]; search: string; render: (items: Card[]) => ReactNode }) {
+export function Section({ title, hint, action, items, search, render }: { title: string; hint?: string; action?: ReactNode; items: Card[]; search: string; render: (items: Card[]) => ReactNode }) {
   const shown = render(items);
   if (!items.length || !shown) return null;
   return (
@@ -912,7 +973,7 @@ function Section({ title, hint, action, items, search, render }: { title: string
 }
 
 /** Cards in as many columns as the sheet's width holds: 2 on a phone, 3 to 5 on a desktop. Arrow keys move between them. */
-function CardGrid({ children }: { children: ReactNode }) {
+export function CardGrid({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const onKey = (e: React.KeyboardEvent) => {
     const grid = ref.current;
@@ -933,10 +994,10 @@ function CardGrid({ children }: { children: ReactNode }) {
   );
 }
 
-type TabItem = { id: Tab; label: string; caption: string; icon: ReactNode; count?: number; dot?: "on" | "off"; off?: boolean };
+export type TabItem<T extends string = Tab> = { id: T; label: string; caption: string; icon: ReactNode; count?: number; dot?: "on" | "off"; off?: boolean };
 
 /** A tab: its icon on a small tile, its name over a line of detail, and the spike underline that slides to the open one. */
-function TabButton({ item, on, layout, onClick }: { item: TabItem; on: boolean; layout: string; onClick?: () => void }) {
+export function TabButton<T extends string = Tab>({ item, on, layout, onClick }: { item: TabItem<T>; on: boolean; layout: string; onClick?: () => void }) {
   return (
     <button
       type="button"
@@ -978,7 +1039,7 @@ function TabButton({ item, on, layout, onClick }: { item: TabItem; on: boolean; 
 }
 
 /** A filter that's on or off: a small check box and its words, not another pill. */
-function CheckToggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+export function CheckToggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button type="button" role="switch" aria-checked={on} onClick={onClick} className="press inline-flex h-8 items-center gap-2 rounded-[10px] px-2 text-[12.5px] font-semibold text-fog hover:bg-white/[0.04] hover:text-paper">
       <span
@@ -994,7 +1055,7 @@ function CheckToggle({ on, onClick, children }: { on: boolean; onClick: () => vo
   );
 }
 
-function LibraryCard({
+export function LibraryCard({
   card,
   selected,
   now,
@@ -1018,7 +1079,7 @@ function LibraryCard({
   const [pinned, setPinned] = useState(false);
   const loras = useLoraCount(card.lora ? card.id : null);
   const fresh = Boolean(now && card.released && now - Date.parse(card.released) < NEW_DAYS * 86_400_000);
-  const locked = !card.ready && !card.install;
+  const locked = !card.ready && !card.install && !card.actions;
   const fit = rowFit(selected, selected ? undefined : card.useOn?.gpu, Boolean(onLoras));
   // A local model's time leads: on a narrow card the maker is what gets cut.
   const meta = [card.fit ? null : card.time?.text, card.maker].filter(Boolean).join(" · ");
@@ -1085,7 +1146,9 @@ function LibraryCard({
         <div className="library-card-more grid">
           <div className="min-h-0 overflow-hidden">
             <Details card={card} />
-            {card.install ? (
+            {card.actions ? (
+              <div className="pointer-events-auto mt-2.5">{card.actions}</div>
+            ) : card.install ? (
               <InstallActions card={card} onUse={onUseInstalled} />
             ) : locked ? (
               <LockedNote card={card} />
@@ -1094,6 +1157,7 @@ function LibraryCard({
               <div className="@container mt-2.5 flex items-center gap-1.5">
                 <UseButton selected={selected} gpu={card.useOn?.gpu} fit={fit} onPick={onPick} />
                 {onLoras ? <LorasButton count={loras} fit={fit} onClick={onLoras} /> : null}
+                {card.extra}
               </div>
             )}
           </div>
@@ -1199,7 +1263,7 @@ function LockedNote({ card }: { card: Card }) {
   return (
     <span className="pointer-events-auto mt-2.5 flex flex-wrap items-center gap-2">
       <Link
-        href="/settings/connections"
+        href="/settings/accounts"
         className="press inline-flex h-8 items-center gap-1.5 rounded-full bg-white/[0.12] px-3 text-[12px] font-bold text-paper hover:bg-white/[0.18]"
       >
         <KeyRound size={13} /> {comfy ? "Add a Comfy key" : "Connect"}
@@ -1236,7 +1300,7 @@ function InstallActions({ card, onUse }: { card: Card; onUse: () => void }) {
   }
 
   let action: ReactNode;
-  if (!gpu) action = <span className="text-[11.5px] text-haze">Set up ComfyUI on the Local page to install.</span>;
+  if (!gpu) action = <span className="text-[11.5px] text-haze">Set up ComfyUI in Settings → Machines to install.</span>;
   else if (state.installed)
     action = (
       <button type="button" onClick={onUse} className="press inline-flex h-8 items-center gap-1.5 rounded-full bg-paper px-3 text-[12px] font-bold text-[#16131b]">
@@ -1269,8 +1333,8 @@ function InstallActions({ card, onUse }: { card: Card; onUse: () => void }) {
   else if (row.fit.state === "no") action = <span className="text-[11.5px] text-haze">Too big for {gpu.gpu}: {row.fit.why.toLowerCase()}.</span>;
   else if (gated)
     action = (
-      <Link href="/local" className="press inline-flex h-8 items-center gap-1.5 rounded-full bg-white/[0.12] px-3 text-[12px] font-bold text-paper hover:bg-white/[0.18]">
-        <KeyRound size={13} /> Accept its licence on Local
+      <Link href="/settings/accounts#hf" className="press inline-flex h-8 items-center gap-1.5 rounded-full bg-white/[0.12] px-3 text-[12px] font-bold text-paper hover:bg-white/[0.18]">
+        <KeyRound size={13} /> Its licence and your token
       </Link>
     );
   else if (!roomy) action = <span className="text-[11.5px] text-tungsten">Needs {gb(state.missingGb)} free on {gpu.where}.</span>;
@@ -1301,6 +1365,7 @@ function InstallActions({ card, onUse }: { card: Card; onUse: () => void }) {
 function CardMedia({ card }: { card: Card }) {
   const [failed, setFailed] = useState(false);
   const p = card.preview;
+  if (p && "node" in p) return <>{p.node}</>;
   if (p && "text" in p) return <TextCardPreview id={p.text} name={card.name} maker={card.maker} hue={`oklch(0.72 0.13 ${hueOf(card.name)})`} />;
   if (!p || failed) {
     // No official preview: its name over a color field of its own, so no two blank cards look alike.
@@ -1452,7 +1517,7 @@ function GpuLine({ g, runOn }: { g: Gpu; runOn: string }) {
   );
 }
 
-function Banner({ icon, children, action }: { icon: ReactNode; children: ReactNode; action?: ReactNode }) {
+export function Banner({ icon, children, action }: { icon: ReactNode; children: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] bg-white/[0.04] px-3.5 py-3 text-[13px] leading-relaxed text-fog">
       <span className="shrink-0 text-haze">{icon}</span>
@@ -1462,7 +1527,7 @@ function Banner({ icon, children, action }: { icon: ReactNode; children: ReactNo
   );
 }
 
-function Empty({ title, body, actions }: { title: string; body: string; actions?: ReactNode }) {
+export function Empty({ title, body, actions }: { title: string; body: string; actions?: ReactNode }) {
   return (
     <div className="rounded-[18px] bg-white/[0.025] px-5 py-8 text-center">
       <p className="text-[14.5px] font-semibold text-paper">{title}</p>
@@ -1472,7 +1537,7 @@ function Empty({ title, body, actions }: { title: string; body: string; actions?
   );
 }
 
-function GhostButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+export function GhostButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
     <button type="button" onClick={onClick} className="press inline-flex h-8 items-center gap-1 rounded-full bg-white/[0.06] px-3 text-[12.5px] font-semibold text-fog hover:bg-white/[0.1] hover:text-paper">
       {children}
