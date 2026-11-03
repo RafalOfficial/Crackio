@@ -37,9 +37,9 @@ export const LFM3_BYTES = LFM3_FILES.reduce((s, f) => s + f.bytes, 0);
 export type Lfm3LoraKey = "judge" | "retouch" | "chat";
 export type Lfm3Lora = { name: string; label: string; bytes: number; sha256: string; run: string; repo: string; revision: string; private: boolean };
 export const LFM3_LORAS: Record<Lfm3LoraKey, Lfm3Lora> = {
-  judge: { name: "lfm3-vl-2b-lora-judge.safetensors", label: "Crackio's swap judge", bytes: 131_788_304, sha256: "c4a76a5ef91f60fcb4e20a954c93e4b5f447899302844abe1687040956b70edb", run: "judge-v9", repo: "", revision: "", private: true },
-  retouch: { name: "lfm3-vl-2b-lora-retouch.safetensors", label: "Crackio's eyes for Retouch", bytes: 131_788_384, sha256: "66a588f0fcfc266331013fad8cf9618ca5224aa26e7863afb3d67b5f3d7ba33a", run: "retouch-v1", repo: "", revision: "", private: true },
-  chat: { name: "lfm3-vl-2b-lora-chat.safetensors", label: "Talk's chat voice", bytes: 131_788_312, sha256: "6579669a45c1799815d670c679cbbccde117522408328a4acac8386ed7cd9d91", run: "chat-v1", repo: "", revision: "", private: true },
+  judge: { name: "lfm3-vl-2b-lora-judge.safetensors", label: "Crackio's swap judge", bytes: 131_788_304, sha256: "c4a76a5ef91f60fcb4e20a954c93e4b5f447899302844abe1687040956b70edb", run: "judge-v9", repo: "TR4F/crackio-swap-judge", revision: "16c2c30dc8a620040fcdf8ac81be17bf967f45b7", private: false },
+  retouch: { name: "lfm3-vl-2b-lora-retouch.safetensors", label: "Crackio's eyes for Retouch", bytes: 131_788_384, sha256: "66a588f0fcfc266331013fad8cf9618ca5224aa26e7863afb3d67b5f3d7ba33a", run: "retouch-v1", repo: "TR4F/crackio-retouch", revision: "22a0fe1215ff53ee65325284903b556e35d4ff76", private: false },
+  chat: { name: "lfm3-vl-2b-lora-chat.safetensors", label: "Talk's chat voice", bytes: 131_788_312, sha256: "182746e8f22cbf77946943e84bf4dacc7b7584ab9d7066e1eab1c416f8efd7f0", run: "chat-v1b", repo: "TR4F/crackio-talk", revision: "55cff2c8724e72aa5e7e3107c77ea5b403f57294", private: false },
 };
 
 /** Where a fine-tune downloads from (its pinned commit, else main), or null while it isn't published. */
