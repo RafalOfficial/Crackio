@@ -1,6 +1,6 @@
 {
   "name": "crackio",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Open-source AI studio for images and video. Stage the shot instead of guessing the prompt. Built on ComfyUI.",
   "license": "MIT",

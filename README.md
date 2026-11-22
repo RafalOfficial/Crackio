@@ -2,16 +2,20 @@
 
 <p align="center"><b>The AI studio people pay for, free and open source, on whatever GPU you have. Built on ComfyUI.</b></p>
 
-<p align="center"><b>v1.1</b> · MIT · Windows, macOS and Linux · no account, no subscription</p>
+<p align="center"><b>v1.1.1</b> · MIT · Windows, macOS and Linux · no account, no subscription</p>
 
 <p align="center">
-  <a href="https://crackio.pages.dev"><b>Try it live</b></a> ·
   <a href="#get-started"><b>Get started</b></a> ·
   <a href="#whats-new-in-v11"><b>What's new</b></a> ·
   <a href="#tools"><b>Tools</b></a> ·
   <a href="#agents-mcp"><b>Agents</b></a> ·
   <a href="#hardware"><b>Hardware</b></a> ·
   <a href="#guides"><b>Guides</b></a>
+</p>
+
+<p align="center">
+  <a href="https://colab.research.google.com/github/RafalOfficial/Crackio/blob/main/colab/Crackio.ipynb"><img src="docs/colab-button.svg" alt="One-click setup: open Crackio in Google Colab" width="372"></a><br>
+  <sub>No GPU at home? One click starts Crackio on a Google Colab GPU.</sub>
 </p>
 
 ![Crackio: Home](docs/screenshots/home.webp)
@@ -28,6 +32,7 @@ Crackio is a full AI studio for pictures and video. Stage a shot on a 3D set, cu
 
 ## What's new in v1.1
 
+- **New in v1.1.1, one click on Colab:** no GPU at home? [Open the notebook](https://colab.research.google.com/github/RafalOfficial/Crackio/blob/main/colab/Crackio.ipynb), press play, and Crackio runs on a Google Colab GPU behind a private link. [How](#one-click-no-install-google-colab)
 - **[Train](docs/TRAIN.md):** make a LoRA of your own from a set of pictures: a person, a character, a thing, a look, or a change. Seven picture models.
 - **[Agents (MCP)](docs/AGENTS.md):** connect a coding agent in one click. It gets 22 tools and can work inside Motion projects. You decide what it may spend.
 - **Rent:** save the GPU you want and a price cap, and Crackio rents the first vast.ai box that fits.
@@ -41,7 +46,7 @@ Crackio is a full AI studio for pictures and video. Stage a shot on a 3D set, cu
 
 ![Settings → LoRAs: LoRAs for a model, most popular first, each with its example](docs/screenshots/tool-loras.webp)
 
-From v1.0, if you missed it: Voice and Talk, Lip Sync, Retouch, and one Settings for every machine and tool. The [live demo](https://crackio.pages.dev) still runs the first release.
+From v1.0, if you missed it: Voice and Talk, Lip Sync, Retouch, and one Settings for every machine and tool.
 
 ## Get started
 
@@ -50,7 +55,17 @@ From v1.0, if you missed it: Voice and Talk, Lip Sync, Retouch, and one Settings
 | **A computer** | Windows 10 or 11, or macOS 13+ on Apple silicon. Linux works from the terminal |
 | **Node.js 22.13+** | the LTS installer from [nodejs.org](https://nodejs.org/en/download) |
 | **Disk** | about 5 GB for Crackio and ComfyUI, plus 0.1 to 40 GB per model (shown before you install) |
-| **A GPU (optional)** | NVIDIA GTX 10 or newer, Apple silicon, AMD or Intel Arc. No GPU? Use RunPod Serverless, a rented GPU or Comfy's cloud |
+| **A GPU (optional)** | NVIDIA GTX 10 or newer, Apple silicon, AMD or Intel Arc. No GPU? Use Google Colab (one click, below), RunPod Serverless, a rented GPU or Comfy's cloud |
+
+### One click, no install (Google Colab)
+
+<a href="https://colab.research.google.com/github/RafalOfficial/Crackio/blob/main/colab/Crackio.ipynb"><img src="docs/colab-button.svg" alt="One-click setup: open Crackio in Google Colab" width="372"></a>
+
+1. Click the button. The notebook opens in Colab with an L4 GPU picked (for another one: **Runtime → Change runtime type**; when Colab has no L4 free it gives you another GPU, and Crackio runs on that too).
+2. Press the notebook's play button. Colab asks once whether to run a notebook from GitHub: **Run anyway**.
+3. About 3 minutes later, click **Open Crackio**.
+
+Crackio then runs on that GPU, behind a private link made for your session. It needs a Google account with Colab compute units (Pro or Pay As You Go; Colab's free plan often stops apps like this one). Everything is gone when the runtime ends, so download what you want to keep.
 
 ### Windows
 
@@ -159,7 +174,7 @@ Times per card, Macs, rented GPUs, upscalers and pooling two computers: [docs/HA
 - **LoRAs:** of the about 440 listed, about 30 were run on a GPU (FLUX 3 Klein, Krea 2, SDXL, Qwen-Image 2.1, all ten Wan 2.2 14B picks and more); the rest are checked by their file format against ComfyUI's loader. A gated LoRA downloads only after you accept its terms on Hugging Face with the account whose token is in Settings.
 - **Video models:** LTX-2.5, Wan 2.2 5B, Wan 2.2 14B, Causal Forcing and Kandinsky 5 Lite were run at every setting they offer. The other open video models from ComfyUI's templates (LTX-2.3, LTX-2, Wan VACE, Capybara) weren't run for this release. Hosted video models were checked setting by setting against Comfy's own price check, not each run. Models made for five seconds (Wan 2.2 14B, Kandinsky 5 Lite) stop at 5 s.
 - **Rent** hunts on vast.ai only.
-- **The live demo** runs the first release, not v1.1.
+- **Colab:** run on an L4 and a T4 (set-up, a picture, a clip, uploads). Other Colab GPUs weren't run. Colab sometimes has no L4 free and connects a T4 instead. What you make there is gone when the runtime ends.
 
 ## Guides
 
