@@ -12,7 +12,7 @@ import { busyCount } from "./comfy-busy";
 import { installedVariant } from "@/lib/local/rows";
 import { LFM3_FILES, LFM3_FOLDER, LFM3_LORAS, LFM3_NAME, type Lfm3LoraKey } from "@/lib/local/lfm3";
 import { LIPSYNC_FILES } from "@/lib/lipsync/machines";
-import { KITS } from "@/lib/setup/kits";
+import { KITS, kitsUsing } from "@/lib/setup/kits";
 import { HEARING, VOICE_MODELS } from "@/lib/voice/models";
 import type { LocalFile, LocalModel, TargetStatus } from "@/lib/local/types";
 import {
@@ -128,7 +128,7 @@ function updateHint(t: ComfyTarget) {
 async function existing(p: string): Promise<string | null> {
   let at = path.resolve(/*turbopackIgnore: true*/ p);
   for (;;) {
-    if (await fs.stat(at).then(() => true, () => false)) return at;
+    if (await fs.stat(/*turbopackIgnore: true*/ at).then(() => true, () => false)) return at;
     const up = path.dirname(at);
     if (up === at) return null;
     at = up;
@@ -141,11 +141,11 @@ async function mountOf(p: string): Promise<string | null> {
   if (!at) return null;
   if (process.platform === "win32") return path.parse(at).root;
   try {
-    const dev = (await fs.stat(at)).dev;
+    const dev = (await fs.stat(/*turbopackIgnore: true*/ at)).dev;
     let cur = at;
     for (;;) {
       const up = path.dirname(cur);
-      if (up === cur || (await fs.stat(up)).dev !== dev) return cur;
+      if (up === cur || (await fs.stat(/*turbopackIgnore: true*/ up)).dev !== dev) return cur;
       cur = up;
     }
   } catch {
@@ -190,7 +190,7 @@ async function walk(root: string, onFile: (f: Seen) => void) {
     const [dir, rel] = stack.pop()!;
     const files: string[] = [];
     try {
-      for await (const e of await fs.opendir(dir, { bufferSize: 256 })) {
+      for await (const e of await fs.opendir(/*turbopackIgnore: true*/ dir, { bufferSize: 256 })) {
         if (e.isSymbolicLink()) continue;
         if (e.isDirectory()) stack.push([path.join(/*turbopackIgnore: true*/ dir, e.name), rel ? `${rel}/${e.name}` : e.name]);
         else if (e.isFile()) files.push(e.name);
@@ -201,7 +201,7 @@ async function walk(root: string, onFile: (f: Seen) => void) {
     for (let i = 0; i < files.length; i += 64) {
       await Promise.all(
         files.slice(i, i + 64).map(async (name) => {
-          const st = await fs.lstat(path.join(/*turbopackIgnore: true*/ dir, name)).catch(() => null);
+          const st = await fs.lstat(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, name)).catch(() => null);
           if (st?.isFile()) onFile({ rel: rel ? `${rel}/${name}` : name, size: st.size, mtimeMs: st.mtimeMs });
         }),
       );
@@ -335,7 +335,7 @@ export async function clearCache(kind: CacheKind) {
   let files = 0;
   for (const k of kind === "all" ? REBUILDABLE_CACHE : [kind]) {
     const dir = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", k);
-    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    const entries = await fs.readdir(/*turbopackIgnore: true*/ dir, { withFileTypes: true }).catch(() => []);
     for (const e of entries) {
       if (KEPT.has(`cache/${k}/${e.name}`)) continue;
       const at = path.join(/*turbopackIgnore: true*/ dir, e.name);
@@ -347,11 +347,11 @@ export async function clearCache(kind: CacheKind) {
           count += 1;
         });
       } else if (e.isFile()) {
-        bytes = (await fs.lstat(at).catch(() => null))?.size ?? 0;
+        bytes = (await fs.lstat(/*turbopackIgnore: true*/ at).catch(() => null))?.size ?? 0;
         count = 1;
       }
       try {
-        await fs.rm(at, { recursive: true, force: true });
+        await fs.rm(/*turbopackIgnore: true*/ at, { recursive: true, force: true });
         freed += bytes;
         files += count;
       } catch {
@@ -494,7 +494,7 @@ async function look(t: ComfyTarget | null, opts: { walk: boolean; fresh?: boolea
   if (storage) {
     for (const f of Object.values(storage.folders)) for (const p of f.paths) if (p.exists && p.files > 0) present.add(p.path);
   } else if (here) {
-    await Promise.all(Object.values(folders).flat().map(async (p) => void ((await fs.stat(p).then((s) => s.isDirectory(), () => false)) && present.add(p))));
+    await Promise.all(Object.values(folders).flat().map(async (p) => void ((await fs.stat(/*turbopackIgnore: true*/ p).then((s) => s.isDirectory(), () => false)) && present.add(p))));
   } else if (modelsDir) {
     present.add(modelsDir);
   }
@@ -503,21 +503,23 @@ async function look(t: ComfyTarget | null, opts: { walk: boolean; fresh?: boolea
 
 /* ------------------------------------------------------------------ what's on a machine */
 
-const KIT_IDS_BY_MODEL = new Map<string, Set<string>>();
-for (const kit of KITS) {
-  for (const r of kit.needs) {
-    if (r.need.kind !== "model") continue;
-    for (const id of r.need.anyOf) KIT_IDS_BY_MODEL.set(id, (KIT_IDS_BY_MODEL.get(id) ?? new Set()).add(kit.id));
-  }
-}
+/** Each catalog model's tools by its id, worked out once (what a model does doesn't change while the server runs). */
+const TOOLS_OF = new Map<string, string[]>();
 const kitsWhere = (test: (need: (typeof KITS)[number]["needs"][number]["need"]) => boolean) => KITS.filter((k) => k.needs.some((r) => test(r.need))).map((k) => k.id as string);
 
-/** The tools (kit ids) a catalog model is in: those that list it, else the page its pickers offer it on. */
+/**
+ * The tools (kit ids) a catalog model is in: those whose parts can use it (setup/kits: the ones that name it, and the
+ * ones that take any open model for its job), else the page its pickers offer it on.
+ */
 function toolsOf(m: LocalModel): string[] {
-  const out = new Set<string>(m.crackio ? (KIT_IDS_BY_MODEL.get(m.crackio) ?? []) : []);
-  if (m.tool) out.add(m.tool);
-  if (!out.size && m.crackio) out.add(m.tasks.includes("upscale") ? "upscale" : m.tasks.includes("swap") ? "recast" : m.unit === "clip" ? "video" : "image");
-  return [...out];
+  let tools = TOOLS_OF.get(m.id);
+  if (!tools) {
+    const out = new Set<string>(m.crackio ? kitsUsing(m, allLocalModels()) : []);
+    if (m.tool) out.add(m.tool);
+    if (!out.size && m.crackio) out.add(m.tasks.includes("upscale") ? "upscale" : m.tasks.includes("swap") ? "recast" : m.unit === "clip" ? "video" : "image");
+    TOOLS_OF.set(m.id, (tools = [...out]));
+  }
+  return tools;
 }
 
 /** Every model file on a machine as `folder/name` (any format, every model folder), from its bridge or ComfyUI's lists. */
@@ -548,7 +550,7 @@ async function sizesOn(lk: Look, have: Set<string>): Promise<Map<string, number>
       const folder = key.slice(0, cut);
       const name = key.slice(cut + 1);
       for (const p of lk.folders[folder] ?? []) {
-        const st = await fs.lstat(path.join(/*turbopackIgnore: true*/ p, name)).catch(() => null);
+        const st = await fs.lstat(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ p, name)).catch(() => null);
         if (st?.isFile()) {
           out.set(key, st.size);
           return;
@@ -756,7 +758,7 @@ async function inventory(lk: Look): Promise<Inventory> {
       partial: lfm3Files.length < LFM3_FILES.length || undefined,
     });
   }
-  const LORA_NAMES: Record<Lfm3LoraKey, string> = { judge: "Crackio's swap judge (LFM3-VL)", retouch: "Crackio's eyes for Retouch (LFM3-VL)", chat: "Talk's chat voice (LFM3-VL)" };
+  const LORA_NAMES: Record<Lfm3LoraKey, string> = { judge: "Crackio's swap judge (LFM3-VL)", retouch: "Crackio's eyes for Retouch (LFM3-VL)", chat: "Talk's chat voice (LFM3-VL)", enhance: "Crackio's prompt enhancer (LFM3-VL)" };
   for (const [k, lora] of Object.entries(LFM3_LORAS) as [Lfm3LoraKey, (typeof LFM3_LORAS)[Lfm3LoraKey]][]) {
     const key = fileKey(LFM3_FOLDER, lora.name);
     if (!have.has(key) || known.has(key)) continue;
@@ -944,7 +946,7 @@ async function buildReport(targetId: string | null | undefined, opts: { fresh?: 
     const candidates = new Set<string>();
     for (const [name, paths] of Object.entries(lk.folders)) for (const p of paths) if (baseName(p) === name && !(lk.modelsDir && inside(p, lk.modelsDir)) && !(lk.base && inside(p, lk.base))) candidates.add(parentOf(p));
     for (const p of lk.also) candidates.add(p);
-    if (lk.here) candidates.add(path.join(os.homedir(), "Crackio-models"));
+    if (lk.here) candidates.add(path.join(/*turbopackIgnore: true*/ os.homedir(), "Crackio-models"));
     if (lk.root) candidates.delete(lk.root);
     const scored: { dir: string; free: number }[] = [];
     for (const dir of candidates) {

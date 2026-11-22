@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { ASPECTS, aspectById, type AspectId } from "@/lib/shot";
+import { parseRatio } from "@/lib/models/caps";
 import { frameAt, probe, runFfmpeg } from "@/lib/motion/ffmpeg";
 import { urlToPath } from "@/lib/server/media";
 import { withSubjectMatte } from "@/lib/server/vision";
@@ -12,7 +13,7 @@ import { installedFiles } from "@/lib/server/local-models";
 import { localModel } from "@/lib/local/catalog";
 import { pictureWork, WORK_POWER } from "@/lib/local/work";
 import { IMAGE_RESOLUTIONS, imagePixels, pixelsAt } from "@/lib/local/resolution";
-import { nativeMp, templateGraph, templateIO, templateModels } from "@/lib/server/local-templates";
+import { madeFor720p, nativeMp, templateGraph, templateIO, templateModels } from "@/lib/server/local-templates";
 import { detail, fill, fillFor, freeLatent, growImages, grownRoom, growsImages, isLink, maskLatent, redrawLatent, settle, stockAttention, type ApiGraph } from "./comfy-local-templates";
 import type { LocalModel, TemplateMode } from "@/lib/local/types";
 import { EngineError, type EngineJob, type EngineReference } from "./types";
@@ -156,18 +157,47 @@ function clipLoader(name: string, type: string): [string, Record<string, unknown
 }
 
 /** A picture at most `edge` px on its long side, as a PNG upload. */
-async function picture(ref: EngineReference, tools: RecipeTools, tag: string, edge: number, enlarge = false) {
+async function picture(ref: EngineReference, tools: RecipeTools, tag: string, edge: number, enlarge = false, cover?: number) {
+  let source = await fs.readFile(/*turbopackIgnore: true*/ ref.path);
+  // `cover`: a clip's frame cropped to the shape picked for the clip (width over height), from its middle.
+  if (cover) {
+    const upright = await sharp(source).rotate().toBuffer();
+    const { width = 0, height = 0 } = await sharp(upright).metadata();
+    if (width && height) {
+      const wide = width / height > cover;
+      source = await sharp(upright)
+        .resize({ width: wide ? Math.max(1, Math.round(height * cover)) : width, height: wide ? height : Math.max(1, Math.round(width / cover)), fit: "cover" })
+        .toBuffer();
+    }
+  }
   // `enlarge`: a picture that sets the result's size is brought up to it as well as down.
-  const png = await sharp(await fs.readFile(ref.path)).rotate().resize({ width: edge, height: edge, fit: "inside", withoutEnlargement: !enlarge }).png().toBuffer();
+  const png = await sharp(source).rotate().resize({ width: edge, height: edge, fit: "inside", withoutEnlargement: !enlarge }).png().toBuffer();
   return tools.uploadData(png, `${tag}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.png`);
 }
 
-/** The clip's shape: its start frame's, else the shot's. */
+/**
+ * The shape picked for a clip beside its first frame, when the frames are to be cropped to it (`cropFrames`): until
+ * Nov 2026 the own-GPU models ignored it, and a 9:16 clip asked from a 16:9 frame came out 16:9.
+ */
+function cropShape(job: EngineJob): number | undefined {
+  if (!job.options?.cropFrames || !job.start) return undefined;
+  const picked = typeof job.options.aspectValue === "string" ? parseRatio(job.options.aspectValue) : null;
+  const a = aspectById(job.aspect);
+  return picked ?? a.w / a.h;
+}
+
+/** The clip's shape: the one picked beside its start frame, else its start frame's, else the shot's. */
 async function ratioOf(job: EngineJob) {
+  const cropped = cropShape(job);
+  if (cropped) return cropped;
   if (job.start) {
     const { width = 0, height = 0 } = await sharp(job.start.path).metadata();
     if (width && height) return width / height;
   }
+  // A shape the model names itself ("4:3", "3:4"): Crackio's own seven have no such one, and read from those alone
+  // LTX-2.5 asked for 4:3 made 3:2 (seen Nov 2026).
+  const picked = typeof job.options?.aspectValue === "string" ? parseRatio(job.options.aspectValue) : null;
+  if (picked) return picked;
   const a = aspectById(job.aspect);
   return a.w / a.h;
 }
@@ -237,7 +267,7 @@ const LTX_VIDEO: Recipe = {
 
     // The start frame, at most 1536 px, compressed the way LTX was trained to see first frames.
     const start = job.start
-      ? at(g.add("LTXVPreprocess", { img_compression: 18, image: at(g.add("LoadImage", { image: (await picture(job.start, tools, "start", 1536)).name })) }))
+      ? at(g.add("LTXVPreprocess", { img_compression: 18, image: at(g.add("LoadImage", { image: (await picture(job.start, tools, "start", 1536, false, cropShape(job))).name })) }))
       : null;
     const pin = (latent: Link, strength: number) => (start ? at(g.add("LTXVImgToVideoInplace", { vae, image: start, latent, strength, bypass: false })) : latent);
 
@@ -348,7 +378,7 @@ export function swapBox(people: Box | null, W: number, H: number, mp: number) {
 
 /** A picture's subject trimmed to its matte (RGBA), or null when its alpha isn't a usable matte. */
 async function figureOf(file: string): Promise<Buffer | null> {
-  const { data, info } = await sharp(await fs.readFile(file)).rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { data, info } = await sharp(await fs.readFile(/*turbopackIgnore: true*/ file)).rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
   let on = 0;
   let [x0, y0, x1, y1] = [width, height, -1, -1];
@@ -490,7 +520,7 @@ async function posedCast(job: EngineJob, tools: RecipeTools, first: Buffer, W: n
   const data = await sharp(first).removeAlpha().raw().toBuffer();
   const people = job.references.slice(0, SCAIL.colors.length);
   const shape = ASPECTS.reduce((best, a) => (Math.abs(Math.log(a.w / a.h / (W / H))) < Math.abs(Math.log(best.w / best.h / (W / H))) ? a : best)).id;
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-pose-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-pose-"));
   try {
     const drawn = await Promise.all(
       people.map(async (ref, k) => {
@@ -506,12 +536,12 @@ async function posedCast(job: EngineJob, tools: RecipeTools, first: Buffer, W: n
           `Keep everything about ${noun} from image 2: face, body, costume and colours.`,
           `Show only ${noun} on a plain white background: leave out everything else in the frame.`,
         ].join(" ");
-        const person = path.join(dir, `frame-${k}.png`);
-        await fs.writeFile(person, await sharp(frame, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer());
+        const person = path.join(/*turbopackIgnore: true*/ dir, `frame-${k}.png`);
+        await fs.writeFile(/*turbopackIgnore: true*/ person, await sharp(frame, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer());
         const picture = await tools.edit!(prompt, [person, ref.path], shape);
         if (!picture) throw new Error("no picture model is connected");
-        const file = path.join(dir, `drawn-${k}.png`);
-        await fs.writeFile(file, await sharp(picture).rotate().removeAlpha().resize(W, H, { fit: "cover" }).png().toBuffer());
+        const file = path.join(/*turbopackIgnore: true*/ dir, `drawn-${k}.png`);
+        await fs.writeFile(/*turbopackIgnore: true*/ file, await sharp(picture).rotate().removeAlpha().resize(W, H, { fit: "cover" }).png().toBuffer());
         const matted = await withSubjectMatte(file);
         if (!matted) throw new Error("the drawn character couldn't be cut out");
         return sharp(matted).raw().toBuffer();
@@ -532,7 +562,7 @@ async function posedCast(job: EngineJob, tools: RecipeTools, first: Buffer, W: n
       sharp(raw, { raw: { width: W, height: H, channels: 3 } }).extract({ left: box.x, top: box.y, width: box.w, height: box.h }).resize(width, height, { fit: "fill", kernel }).png().toBuffer();
     return { image: await cut(image, "lanczos3"), mask: await cut(mask, "nearest") };
   } finally {
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -549,7 +579,7 @@ async function scailCast(g: Graph, files: string[], views: string[][], W: number
   const mains = await Promise.all(files.map((f) => figureOf(f).catch(() => null)));
   if (mains.some((m) => !m) && !posed) {
     const slot = Math.floor(W / files.length);
-    const tiles = await Promise.all(files.map(async (f) => sharp(await fs.readFile(f)).rotate().removeAlpha().resize(slot, H, { fit: "contain", background: "#000000" }).png().toBuffer()));
+    const tiles = await Promise.all(files.map(async (f) => sharp(await fs.readFile(/*turbopackIgnore: true*/ f)).rotate().removeAlpha().resize(slot, H, { fit: "contain", background: "#000000" }).png().toBuffer()));
     const png = await sharp({ create: { width: W, height: H, channels: 3, background: "#000000" } })
       .composite(tiles.map((input, i) => ({ input, left: i * slot, top: 0 })))
       .png()
@@ -802,14 +832,14 @@ const RIPPLE = {
   // Its author's setting: higher carries the edit further, lower changes less of the rest.
   strength: 1.35,
   /**
-   * Its author runs 8. The user first picked 6 (2026-11-01: almost the same as 8 on Pigeongoo), then 8 with PyTorch's
+   * Its author runs 8. 6 was picked first (2026-11-01: almost the same as 8 on Pigeongoo), then 8 with PyTorch's
    * attention (2026-11-03): side by side on truck × Freya (same drawings and seed) against 6 with INT8 attention, 12, 15,
    * and LTX's dev model at 30 steps with CFG 3.5 (38 min), it looked best. The LTX step takes 4.4 min instead of 2.5.
    */
   steps: 8,
   /**
    * ComfyUI's INT8 attention (comfy-kitchen) when a job asks for it (`extra.attention: "int8"`): 15 s at 720p sampled
-   * in 116 s instead of 241 s on the 5090, alike by SSIM (0.990), but the user's pick is PyTorch's (above).
+   * in 116 s instead of 241 s on the 5090, alike by SSIM (0.990), but PyTorch's won the side-by-side tests (above).
    */
   attention: "comfy kitchen attention",
   /** Frames a pass makes from the first frame (5 s at 24 fps, 8n + 1); a longer clip continues from each pass's last frame. */
@@ -1270,7 +1300,7 @@ async function motionOf(file: string, signal: AbortSignal) {
 
 /** A clip played backwards (a new file in `dir`). */
 async function backwards(file: string, dir: string, signal: AbortSignal) {
-  const out = path.join(dir, "reversed.mp4");
+  const out = path.join(/*turbopackIgnore: true*/ dir, "reversed.mp4");
   const run = await runFfmpeg(["-hide_banner", "-loglevel", "error", "-y", "-i", file, "-vf", "reverse", "-an", "-c:v", "libx264", "-crf", "14", "-pix_fmt", "yuv420p", out], { signal, timeoutMs: 5 * 60_000 });
   if (run.code !== 0) throw new EngineError("Couldn't play the clip backwards.");
   return out;
@@ -1280,12 +1310,12 @@ async function backwards(file: string, dir: string, signal: AbortSignal) {
 async function maskClip(masks: Buffer[], order: number[], size: Size, file: string, signal: AbortSignal, fps: number = LTX.fps) {
   const raw = `${file}.gray`;
   const blank = Buffer.alloc(size.width * size.height);
-  await fs.writeFile(raw, Buffer.concat(order.map((f) => masks[f] ?? blank)));
+  await fs.writeFile(/*turbopackIgnore: true*/ raw, Buffer.concat(order.map((f) => masks[f] ?? blank)));
   const run = await runFfmpeg(
     ["-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", `${size.width}x${size.height}`, "-r", String(fps), "-i", raw, "-c:v", "libx264", "-qp", "0", "-pix_fmt", "yuv420p", file],
     { signal, timeoutMs: 2 * 60_000 },
   );
-  await fs.rm(raw, { force: true });
+  await fs.rm(/*turbopackIgnore: true*/ raw, { force: true });
   if (run.code !== 0) throw new EngineError("Couldn't save the outlines of what you picked.");
   return file;
 }
@@ -1321,9 +1351,9 @@ Answer with JSON only: {"best": the take's image number, "replaced": true or fal
  * When Crackio's swap judge (LFM3-VL, v9) passes a take, by the strictness picked on the Swap page: its chance that the
  * take is fully the new one (`replaced`) at least `once` for one look (the whole frame, or a redraw that is a close-up
  * already), or `twice` averaged over the whole frame and a close look (closeUps), and its chance that the pose was kept
- * at least `pose`. Measured on the user's held-out picks (two looks): strict 0.55 caught 177 of 188 bad takes and passed
- * 35 of 64 good ones; normal 0.47, 174 and 39; lenient 0.30, 165 and 47. Lenient is the user's standard ("acceptable
- * passes": a swap with small flaws is kept; redraws that dropped good keyframes cost the Ozil swap ~7 minutes).
+ * at least `pose`. Measured on held-out rated takes (two looks): strict 0.55 caught 177 of 188 bad takes and passed
+ * 35 of 64 good ones; normal 0.47, 174 and 39; lenient 0.30, 165 and 47. Lenient is the default: a swap with small
+ * flaws is kept, and redraws that dropped good keyframes cost one test swap ~7 minutes.
  */
 const JUDGE_PASS = {
   strict: { once: 0.6, twice: 0.55, pose: 0.5 },
@@ -1352,7 +1382,7 @@ async function closeUps(frame: string, files: string[], near: Box, dir: string) 
     const [left, top] = [Math.round(x0 * w), Math.round(y0 * h)];
     const area = { left, top, width: Math.min(w - left, Math.round(x1 * w) - left), height: Math.min(h - top, Math.round(y1 * h) - top) };
     if (area.width < 16 || area.height < 16) return null;
-    const out = path.join(dir, name);
+    const out = path.join(/*turbopackIgnore: true*/ dir, name);
     await sharp(file).extract(area).resize({ width: 1024, height: 1024, fit: "inside" }).png().toFile(out);
     return out;
   };
@@ -1369,15 +1399,15 @@ async function closeUps(frame: string, files: string[], near: Box, dir: string) 
 async function bestTake(frame: string, takes: Buffer[], picture: string, who: string, costume: string, dir: string, signal: AbortSignal, checks: Checks, extra: { near?: Box | null; prompt?: string; pose?: string; keyframe?: boolean; changed?: number[] } = {}) {
   const files = await Promise.all(
     takes.map(async (take, k) => {
-      const file = path.join(dir, `take-${k}.png`);
-      await fs.writeFile(file, take);
+      const file = path.join(/*turbopackIgnore: true*/ dir, `take-${k}.png`);
+      await fs.writeFile(/*turbopackIgnore: true*/ file, take);
       return file;
     }),
   );
   // Loaded here: the text models' module reaches the engines, which load these recipes.
   const [{ askText }, { lfm3Machine }] = await Promise.all([import("@/lib/engines/refine"), import("@/lib/engines/comfy-text")]);
   // Crackio's own judge reads one take at a time (a keyframe's single take too). Asked about two at once, judge v5 passed
-  // every pair where both takes were bad (0 of 105 of the user's; the stock poses in crackio-22's swaps); one at a time,
+  // every pair where both takes were bad (0 of 105 rated takes; the stock poses in earlier test swaps); one at a time,
   // v8 fails 95 of 105.
   const judgeAt = checks.judges[0] === "local:lfm3-judge" ? await lfm3Machine("judge").catch(() => null) : null;
   if (judgeAt) {
@@ -1485,7 +1515,7 @@ async function bestTake(frame: string, takes: Buffer[], picture: string, who: st
 async function rippleRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: number, H: number, checks: Checks, focus: Box | null = null, tries = 1): Promise<Buffer> {
   const firstUrl = job.options?.extra?.firstFrame;
   const given = typeof firstUrl === "string" ? urlToPath(firstUrl) : null;
-  if (given) return sharp(await fs.readFile(given)).resize(W, H, { fit: "fill" }).removeAlpha().png().toBuffer();
+  if (given) return sharp(await fs.readFile(/*turbopackIgnore: true*/ given)).resize(W, H, { fit: "fill" }).removeAlpha().png().toBuffer();
   if (!tools.edit) throw new EngineError("No picture model is connected to redraw the clip's frame.", "Install FLUX 3 Klein on the Local page, or connect one.");
   const extra = job.options?.extra ?? {};
   const list = (key: string) => (Array.isArray(extra[key]) ? (extra[key] as unknown[]) : []).map((v) => (typeof v === "string" ? v.trim() : ""));
@@ -1525,11 +1555,11 @@ async function rippleRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W
       ].join(" ")
     : `Image 1 is ${what}. ${change.replace(/[.\s]+$/, "")}. ${keep}`;
   const part = focus ?? { x: 0, y: 0, w: W, h: H };
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-ripple-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-ripple-"));
   let edited: Buffer | null = null;
   try {
-    const file = path.join(dir, "frame.png");
-    await fs.writeFile(file, focus ? await sharp(frame).extract({ left: part.x, top: part.y, width: part.w, height: part.h }).png().toBuffer() : frame);
+    const file = path.join(/*turbopackIgnore: true*/ dir, "frame.png");
+    await fs.writeFile(/*turbopackIgnore: true*/ file, focus ? await sharp(frame).extract({ left: part.x, top: part.y, width: part.w, height: part.h }).png().toBuffer() : frame);
     const shape = ASPECTS.reduce((best, a) => (Math.abs(Math.log(a.w / a.h / (part.w / part.h))) < Math.abs(Math.log(best.w / best.h / (part.w / part.h))) ? a : best)).id;
     const draw = (words: string) => tools.edit!(words, [file, ...pictures], shape, { prefer: RIPPLE.editors, stage: focus ? "Redrawing the subject up close" : "Redrawing the frame" });
     // All at once: each queues on the GPU while the others' pictures travel.
@@ -1548,7 +1578,7 @@ async function rippleRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W
       }
     }
   } finally {
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => {});
   }
   if (!edited) throw new EngineError("No picture model is connected to redraw the clip's frame.", "Install FLUX 3 Klein on the Local page, or connect one.");
   return laidBack(frame, edited, part, Boolean(focus));
@@ -1581,8 +1611,8 @@ Answer with JSON only: {"best": the take's image number, "done": true or false f
 async function bestEdit(frame: string, takes: Buffer[], asked: string, dir: string, signal: AbortSignal, checks: Checks) {
   const files = await Promise.all(
     takes.map(async (take, k) => {
-      const file = path.join(dir, `edit-${k}.png`);
-      await fs.writeFile(file, take);
+      const file = path.join(/*turbopackIgnore: true*/ dir, `edit-${k}.png`);
+      await fs.writeFile(/*turbopackIgnore: true*/ file, take);
       return file;
     }),
   );
@@ -1729,10 +1759,10 @@ async function redrawPart(
   const { focus } = ask;
   const part = focus ?? { x: 0, y: 0, w: W, h: H };
   const keep = ask.keep ?? "Keep everything else in image 1 exactly as it is: the place, the light, the other people and things, the framing and any text over the picture.";
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-ripple-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-ripple-"));
   try {
-    const file = path.join(dir, "frame.png");
-    await fs.writeFile(file, focus ? await sharp(frame).extract({ left: part.x, top: part.y, width: part.w, height: part.h }).png().toBuffer() : frame);
+    const file = path.join(/*turbopackIgnore: true*/ dir, "frame.png");
+    await fs.writeFile(/*turbopackIgnore: true*/ file, focus ? await sharp(frame).extract({ left: part.x, top: part.y, width: part.w, height: part.h }).png().toBuffer() : frame);
     const pose = ask.pose ? await poseOf(file, ask.who, tools.signal, ask.checks) : "";
     const held = pose ? ` Their exact position, kept as it is: ${pose.replace(/[.\s]+$/, "")}.` : "";
     const prompt = `Image 1 is ${focus ? "a close-up of part of a frame from a video" : "a frame from a video"}. ${ask.sentence}${held} ${keep}`;
@@ -1743,7 +1773,7 @@ async function redrawPart(
     if (!drawn.length) throw new EngineError("No picture model is connected to redraw the clip's frame.", "Install FLUX 3 Klein on the Local page, or connect one.");
     // A take handed back as it was is dropped before any check and drawn once more: the judge only ever turned those
     // down, and a retry then compared them against the next one.
-    const before = await fs.readFile(file);
+    const before = await fs.readFile(/*turbopackIgnore: true*/ file);
     const redrawn = async (take: Buffer | null) => Boolean(take) && (await changedInside(before, take!, focus ? null : (ask.near ?? null), part.w, part.h)) >= REDRAWN;
     let takes: Buffer[] = [];
     for (const take of drawn) if (await redrawn(take)) takes.push(take);
@@ -1786,7 +1816,7 @@ async function redrawPart(
     const placed = await laidBack(frame, edited, part, Boolean(focus));
     return ask.guard ? keepWhere(frame, placed, ask.guard, W, H) : placed;
   } finally {
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -1840,11 +1870,11 @@ async function editRedraw(job: EngineJob, tools: RecipeTools, frame: Buffer, W: 
 /** The clip at `rate` frames a second (a new file in a folder of its own), or the clip itself when it already is. */
 async function atRate(file: string, fps: number | undefined, rate: number, signal: AbortSignal) {
   if (fps && Math.abs(fps - rate) < 0.05) return { file, done: async () => {} };
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-ripple-"));
-  const out = path.join(dir, "clip.mp4");
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-ripple-"));
+  const out = path.join(/*turbopackIgnore: true*/ dir, "clip.mp4");
   const run = await runFfmpeg(["-hide_banner", "-loglevel", "error", "-y", "-i", file, "-vf", `fps=${rate}`, "-an", "-c:v", "libx264", "-crf", "14", "-pix_fmt", "yuv420p", out], { signal, timeoutMs: 5 * 60_000 });
   if (run.code !== 0) throw new EngineError(`Couldn't turn the clip into ${rate} fps for LTX-2.5.`);
-  return { file: out, done: () => fs.rm(dir, { recursive: true, force: true }).catch(() => {}) };
+  return { file: out, done: () => fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => {}) };
 }
 
 /** A batch of n frames in reverse order (ComfyUI has no node for it): one frame at a time, 50 to a batch. */
@@ -2212,7 +2242,7 @@ const RIPPLE_SWAP: Recipe = {
     // picture was the one left out), and a wrong pose or outfit is drawn once more.
     const tries = typeof extra.tries === "number" ? Math.min(4, Math.max(1, Math.round(extra.tries))) : subjects.length ? 2 : 1;
     const clipped = await atRate(job.source.path, info.fps, fps, tools.signal);
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-ripple-"));
+    const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-ripple-"));
     let clipName: string;
     let backName: string | null = null;
     let anchorAt = 0;
@@ -2257,7 +2287,7 @@ const RIPPLE_SWAP: Recipe = {
       const given = typeof extra.firstFrame === "string" ? urlToPath(extra.firstFrame) : null;
       if (given && look) {
         // A redrawn frame given with the job (comparing settings on the same drawing).
-        first = await sharp(await fs.readFile(given)).resize(W, H, { fit: "fill" }).removeAlpha().png().toBuffer();
+        first = await sharp(await fs.readFile(/*turbopackIgnore: true*/ given)).resize(W, H, { fit: "fill" }).removeAlpha().png().toBuffer();
       } else if (edits.length && !look && !v1) {
         // A template's one character, nothing clicked: the same redraw (its pose read first, the whole outfit, three
         // takes judged), on the first frame.
@@ -2279,8 +2309,8 @@ const RIPPLE_SWAP: Recipe = {
       // to the first (not for a new background, which each redraw would draw differently, or sharp mode).
       const most = Math.max(count - anchorAt, anchorAt + 1);
       if (edits.length && !sharp2 && !v1 && !background && extra.refresh !== false && most > keyGaps.every + keyGaps.edge - keyGaps.window) {
-        const firstFile = path.join(dir, "first.png");
-        await fs.writeFile(firstFile, first);
+        const firstFile = path.join(/*turbopackIgnore: true*/ dir, "first.png");
+        await fs.writeFile(/*turbopackIgnore: true*/ firstFile, first);
         // Each character's own part of the first drawing (its box and a fifth more around it): the whole frame had the
         // picture model copy the other character into the scene (Alors on Danse: a second Pigeongoo behind the one
         // leaning into the camera, who was then drawn away). A person's only down to the shoulders: shown whole, the
@@ -2294,8 +2324,8 @@ const RIPPLE_SWAP: Recipe = {
             const [left, top] = [Math.max(0, Math.floor(b.x - b.w * (person ? 0.1 : 0.2))), Math.max(0, Math.floor(b.y - b.h * (person ? 0.1 : 0.2)))];
             const [width, height] = [Math.min(W - left, Math.ceil(b.w * (person ? 1.2 : 1.4))), Math.min(H - top, Math.ceil(b.h * (person ? 0.5 : 1.4)))];
             if (width < 16 || height < 16) return firstFile;
-            const file = path.join(dir, `first-${k}.png`);
-            await fs.writeFile(file, await sharp(first).extract({ left, top, width, height }).png().toBuffer());
+            const file = path.join(/*turbopackIgnore: true*/ dir, `first-${k}.png`);
+            await fs.writeFile(/*turbopackIgnore: true*/ file, await sharp(first).extract({ left, top, width, height }).png().toBuffer());
             return file;
           }),
         );
@@ -2342,7 +2372,7 @@ const RIPPLE_SWAP: Recipe = {
       const people = look ? edits.flatMap((e, k) => (e.to === "cast" && (!e.kind || e.kind === "person" || e.kind === "face") && look.masks[k] ? [look.masks[k]] : [])) : [];
       if (look && people.length && extra.soften !== false && !background) {
         const union = unionOf(people, look.small);
-        const clipOf = async (masks: Buffer[], order: number[], name: string) => (await tools.upload(await maskClip(masks, order, look.small, path.join(dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
+        const clipOf = async (masks: Buffer[], order: number[], name: string) => (await tools.upload(await maskClip(masks, order, look.small, path.join(/*turbopackIgnore: true*/ dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
         const [aheadOrder, behindOrder] = [Array.from({ length: count - anchorAt }, (_, i) => anchorAt + i), Array.from({ length: anchorAt + 1 }, (_, i) => anchorAt - i)];
         // Only the swapped people's mouths (not a removed one's, which the look found too).
         const mouths = look.mouths ? look.mouths.map((m, f) => Buffer.from(m.map((v, i) => (v && union[f]?.[i] >= 128 ? 255 : 0)))) : null;
@@ -2357,7 +2387,7 @@ const RIPPLE_SWAP: Recipe = {
       // not where the whole frame changes (a new background) or the clip's people are put back already (extra.keep).
       if (look && extra.paste !== false && !background && !everyone) {
         const all = unionOf(look.masks, look.small);
-        const clipOf = async (order: number[], name: string) => (await tools.upload(await maskClip(all, order, look.small, path.join(dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
+        const clipOf = async (order: number[], name: string) => (await tools.upload(await maskClip(all, order, look.small, path.join(/*turbopackIgnore: true*/ dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
         paste = {
           ahead: count - anchorAt > 1 ? await clipOf(Array.from({ length: count - anchorAt }, (_, i) => anchorAt + i), "paste-ahead") : null,
           behind: anchorAt > 0 ? await clipOf(Array.from({ length: anchorAt + 1 }, (_, i) => anchorAt - i), "paste-behind") : null,
@@ -2369,7 +2399,7 @@ const RIPPLE_SWAP: Recipe = {
         const ahead = Array.from({ length: count - anchorAt }, (_, i) => anchorAt + i);
         const behind = Array.from({ length: anchorAt + 1 }, (_, i) => anchorAt - i);
         const union = unionOf(look.masks, look.small);
-        const clipOf = async (masks: Buffer[], order: number[], name: string) => (await tools.upload(await maskClip(masks, order, look.small, path.join(dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
+        const clipOf = async (masks: Buffer[], order: number[], name: string) => (await tools.upload(await maskClip(masks, order, look.small, path.join(/*turbopackIgnore: true*/ dir, `${name}.mp4`), tools.signal, fps), "outline")).name;
         outlines = {
           ahead: await clipOf(union, ahead, "ahead"),
           behind: anchorAt > 0 ? await clipOf(union, behind, "behind") : null,
@@ -2384,7 +2414,7 @@ const RIPPLE_SWAP: Recipe = {
           const masksFor = async (order: number[], name: string) =>
             Promise.all(
               passesOf(order.length, RIPPLE.long).map(async (pass, p) => {
-                const file = await passMask(union, others, order, pass.from, pass.length, look.small, small, { width: size.width / 32, height: size.height / 32 }, path.join(dir, `${name}-${p}.mp4`), tools.signal);
+                const file = await passMask(union, others, order, pass.from, pass.length, look.small, small, { width: size.width / 32, height: size.height / 32 }, path.join(/*turbopackIgnore: true*/ dir, `${name}-${p}.mp4`), tools.signal);
                 return (await tools.upload(file, "outline")).name;
               }),
             );
@@ -2395,13 +2425,13 @@ const RIPPLE_SWAP: Recipe = {
       // A clip bigger than this 720p copy (Templates prepared it at its own size too: extra.finish): the paste-back's
       // outline in the clip's own frame order, for the runner to lay the made people onto it at that size (clip.finishAtSize).
       if (look && paste && !outlines && extra.finish === true && !sharp2) {
-        const own = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-paste-"));
+        const own = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-paste-"));
         const order = Array.from({ length: count }, (_, i) => i);
-        keepPasteMask(job.source.path, { file: await maskClip(unionOf(look.masks, look.small), order, look.small, path.join(own, "paste.mp4"), tools.signal, fps), reach: paste.reach, height: H });
+        keepPasteMask(job.source.path, { file: await maskClip(unionOf(look.masks, look.small), order, look.small, path.join(/*turbopackIgnore: true*/ own, "paste.mp4"), tools.signal, fps), reach: paste.reach, height: H });
       }
     } finally {
       await clipped.done();
-      await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => {});
     }
 
     const f = await filesFor("ltx-2.5-ripple");
@@ -2412,7 +2442,7 @@ const RIPPLE_SWAP: Recipe = {
     const lora = inpaint
       ? at(g.add("LoraLoaderModelOnly", { model: at(g.add(...unetLoader(f.model ?? LTX.unet))), lora_name: INPAINT.lora, strength_model: num(extra.strength, 0.3, 2.5, INPAINT.strength) }))
       : at(g.add("LoraLoaderModelOnly", { model: at(g.add(...unetLoader(f.model ?? LTX.unet))), lora_name: f.lora ?? RIPPLE.lora, strength_model: num(extra.strength, 0.3, 2.5, RIPPLE.strength) }));
-    // PyTorch's attention (the user's pick); `extra.attention: "int8"` takes ComfyUI's INT8 one where it has the node.
+    // PyTorch's attention (it looked best side by side); `extra.attention: "int8"` takes ComfyUI's INT8 one where it has the node.
     const tuned = extra.attention === "int8" && (await tools.hasNode?.("ModelAttentionBackend")) ? at(g.add("ModelAttentionBackend", { model: lora, attention: RIPPLE.attention })) : lora;
     // Fast mode: ComfyUI's EasyCache reuses a step's work when the next would barely change it.
     const cache = num(extra.cache, 0, 3, 0);
@@ -2527,7 +2557,7 @@ const Z_CONTROL = "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensor
  * The Director's shots (server/director-fresh `runDirectorControl`): Z-Image Turbo drawing the set's depth (`job.depth`,
  * white near) through the Fun ControlNet, a model patch ComfyUI's core loads (ModelPatchLoader) and puts on the model
  * (QwenImageDiffsynthControlnet). The model draws a whole new picture that keeps the set's camera and where everyone
- * stands, where the reference-picture shots copied their pixels: a real film still, not a flat one (the user's A/B on the
+ * stands, where the reference-picture shots copied their pixels: a real film still, not a flat one (an A/B test on a
  * motorbike scene, Oct 2026). 4 s warm on an RTX 5090 at 1536x864 (nvfp4), against 32 to 46 s for Qwen-Image 2.1's shot.
  */
 const Z_IMAGE_DIRECTOR: Recipe = {
@@ -2552,7 +2582,7 @@ const Z_IMAGE_DIRECTOR: Recipe = {
     let model = at(g.add("ModelSamplingAuraFlow", { shift: 3, model: at(g.add(...unetLoader(f.model ?? "z_image_turbo_int8_convrot.safetensors"))) }));
     if (job.depth?.path) {
       // The depth at the picture's own size; how hard it holds (0.9 kept the camera and the marks, the people real).
-      const png = await sharp(await fs.readFile(job.depth.path)).resize(width, height, { fit: "fill" }).png().toBuffer();
+      const png = await sharp(await fs.readFile(/*turbopackIgnore: true*/ job.depth.path)).resize(width, height, { fit: "fill" }).png().toBuffer();
       const depth = await tools.uploadData(png, `director-depth-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.png`);
       const strength = typeof job.options?.control === "number" ? Math.max(0.3, Math.min(1, job.options.control)) : 0.9;
       model = at(
@@ -2586,6 +2616,31 @@ const Z_IMAGE_DIRECTOR: Recipe = {
 const Q_CONTROL = "Qwen-Image-2.1-Fun-Controlnet-Union.safetensors";
 /** Qwen-Image 2.1 Turbo's own schedule (its ComfyUI template). */
 const QWEN_TURBO_SIGMAS = "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0";
+/** Qwen-Image 2.1's full model (25 steps), as the challenge winner ran it; its template installs it ('int8'). */
+const FULL_QWEN_21 = "qwen_image_2.1_int8_convrot.safetensors";
+const TURBO_QWEN_21 = "qwen_image_2.1_turbo_int8_convrot.safetensors";
+
+/**
+ * The full Qwen-Image 2.1 where the machine running the job has it (the RunPod volume; the Director's set-up gets it on
+ * cards that run it well), else null: Turbo stands in on its own 8 steps (smaller cards, which its shot model uses too).
+ */
+async function fullQwenHere() {
+  const have = await installedFiles().catch(() => new Set<string>());
+  return have.has(`diffusion_models/${FULL_QWEN_21}`) ? FULL_QWEN_21 : null;
+}
+
+/** Qwen-Image 2.1's sampling at CFG 1: the full model's 25 euler steps, or Turbo's own 8-step schedule. */
+function qwenSampler(g: Graph, full: boolean, model: Link, positive: Link, negative: Link, latent: Link) {
+  return full
+    ? g.add("KSampler", { seed: seed(), steps: 25, cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1, model, positive, negative, latent_image: latent })
+    : g.add("SamplerCustomAdvanced", {
+        noise: at(g.add("RandomNoise", { noise_seed: seed() })),
+        guider: at(g.add("CFGGuider", { cfg: 1, model, positive, negative })),
+        sampler: at(g.add("KSamplerSelect", { sampler_name: "euler" })),
+        sigmas: at(g.add("ManualSigmas", { sigmas: QWEN_TURBO_SIGMAS })),
+        latent_image: latent,
+      });
+}
 
 /**
  * The Director's shots that keep who the cast are (server/director-fresh `runDirectorControl`): Qwen-Image 2.1 Turbo
@@ -2611,9 +2666,9 @@ const QWEN_DIRECTOR: Recipe = {
     const clip = at(g.add(...clipLoader(f.text ?? "qwen3vl_8b_int8_convrot.safetensors", "qwen_image")));
     let model = at(g.add("ModelAttentionBackend", { model: at(g.add(...unetLoader(f.model ?? "qwen_image_2.1_turbo_int8_convrot.safetensors"))), attention: "pytorch attention" }));
     if (job.depth?.path) {
-      const png = await sharp(await fs.readFile(job.depth.path)).resize(width, height, { fit: "fill" }).png().toBuffer();
+      const png = await sharp(await fs.readFile(/*turbopackIgnore: true*/ job.depth.path)).resize(width, height, { fit: "fill" }).png().toBuffer();
       const depth = await tools.uploadData(png, `director-depth-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.png`);
-      // The user's A/B/C on three sets (cafe, Lena at the Eiffel Tower, the Tesla on the moon), five setups each: the set's
+      // An A/B/C test on three sets (cafe, Lena at the Eiffel Tower, the Tesla on the moon), five setups each: the set's
       // view in grey held at 0.7 for the first half won. Held to the end, the stand-ins came through (a bald Lena from the
       // mannequin's head, a boxy car from the box); edges lost the framing.
       const strength = typeof job.options?.control === "number" ? Math.max(0.3, Math.min(1, job.options.control)) : 0.7;
@@ -2632,7 +2687,8 @@ const QWEN_DIRECTOR: Recipe = {
     }
     model = at(g.add("QwenImage21Cache", { model, device: "auto", dtype: "default" }));
     const images: Record<string, unknown> = {};
-    for (const [i, ref] of job.references.slice(0, 4).entries()) images[`images.image_${i + 1}`] = at(g.add("LoadImage", { image: (await picture(ref, tools, "director-ref", 1024)).name }));
+    const directorRefs = await Promise.all(job.references.slice(0, 4).map((ref) => picture(ref, tools, "director-ref", 1024)));
+    for (const [i, up] of directorRefs.entries()) images[`images.image_${i + 1}`] = at(g.add("LoadImage", { image: up.name }));
     const encoded = g.add("TextEncodeQwenImage21", { prompt: job.prompt, negative_prompt: "", resolution: 1024, clip, vae, ...images });
     const sampled = g.add("SamplerCustomAdvanced", {
       noise: at(g.add("RandomNoise", { noise_seed: seed() })),
@@ -2672,13 +2728,21 @@ const QWEN_ANGLES: Recipe = {
   maxEdge: 2048,
   detailable: false,
   async build(job, tools) {
+    if (job.options?.studio && job.references[0]) return studioWorld(job, tools, job.options.studio);
     if (!job.guide?.path || !job.references[0]) throw new EngineError("Qwen Angles re-shoots a photo from Angles' 3D view.", "Use it in Angles.");
     const { width, height } = tools.size ?? imageSize(job);
     const f = await filesFor("qwen-angles");
     const g = new Graph();
     const vae = at(g.add("VAELoader", { vae_name: f.vae ?? "qwen_image_2.1_vae_bf16.safetensors" }));
     const clip = at(g.add(...clipLoader(f.text ?? "qwen3vl_8b_int8_convrot.safetensors", "qwen_image")));
-    let model = at(g.add("ModelAttentionBackend", { model: at(g.add(...unetLoader(f.model ?? "qwen_image_2.1_turbo_int8_convrot.safetensors"))), attention: "pytorch attention" }));
+    // The Director's re-shoots (`frame`) run as the challenge winner's 3D World workflow does: AnyAngle at 1, CFG 1, each
+    // picture at its own size, the take at the view's framing (asked for the best, on the full model's 25 steps).
+    const frame = job.options?.frame === true;
+    // On Turbo's 8 steps unless asked for the best: the A40 A/B (an astronaut test photo moved 25° round, and with a
+    // woman added) came out as clean or cleaner on Turbo, in half the time. The best needs the full model on the
+    // machine: where only Turbo is (the Director's own set-up), Turbo.
+    const full = frame && job.options?.quality === "best" ? await fullQwenHere() : null;
+    let model = at(g.add("ModelAttentionBackend", { model: at(g.add(...unetLoader(full ?? f.model ?? TURBO_QWEN_21))), attention: "pytorch attention" }));
     const strength = typeof job.options?.lora === "number" ? Math.max(0, Math.min(1.5, job.options.lora)) : 1;
     model = at(g.add("LoraLoaderModelOnly", { model, lora_name: f.angles ?? "QI2.1_AnyAngle.safetensors", strength_model: strength }));
     // Any other words (a job from before) get AnyAngle's sentence; QMA goes on only where its words are (the far side).
@@ -2687,23 +2751,271 @@ const QWEN_ANGLES: Recipe = {
     model = at(g.add("QwenImage21Cache", { model, device: "auto", dtype: "default" }));
     // The encoder brings both pictures to about resolution² pixels and makes the take picture 1's (the photo's) shape at
     // that size: twice the pixels planned (2 MP for 1K), up to 1536² (the detail a re-shoot keeps grows with them).
-    const resolution = Math.min(1536, Math.max(768, Math.round((1.4 * Math.sqrt(width * height)) / 32) * 32));
-    const photo = at(g.add("LoadImage", { image: (await picture(job.references[0], tools, "angles-photo", 2048)).name }));
-    const view = at(g.add("LoadImage", { image: (await picture(job.guide, tools, "angles-view", 1536)).name }));
+    const resolution = frame ? 0 : Math.min(1536, Math.max(768, Math.round((1.4 * Math.sqrt(width * height)) / 32) * 32));
+    const [photoUp, viewUp] = await Promise.all([picture(job.references[0], tools, "angles-photo", 2048), picture(job.guide, tools, "angles-view", frame ? 2048 : 1536)]);
+    const photo = at(g.add("LoadImage", { image: photoUp.name }));
+    const view = at(g.add("LoadImage", { image: viewUp.name }));
     const encoded = g.add("TextEncodeQwenImage21", { prompt, negative_prompt: "", resolution, clip, vae, "images.image_1": photo, "images.image_2": view });
-    let latent = at(encoded, 2);
+    // The take in the view's framing (an empty latent at the render's size, as the winner's 3D World); Angles keeps the
+    // photo's shape.
+    let latent = frame ? at(g.add("EmptyLatentImage", { width, height, batch_size: 1 })) : at(encoded, 2);
     if (count(job) > 1) latent = at(g.add("RepeatLatentBatch", { samples: latent, amount: count(job) }));
-    const sampled = g.add("SamplerCustomAdvanced", {
-      noise: at(g.add("RandomNoise", { noise_seed: seed() })),
-      guider: at(g.add("CFGGuider", { cfg: 1, model, positive: at(encoded, 0), negative: at(encoded, 1) })),
-      sampler: at(g.add("KSamplerSelect", { sampler_name: "euler" })),
-      sigmas: at(g.add("ManualSigmas", { sigmas: QWEN_TURBO_SIGMAS })),
-      latent_image: latent,
-    });
+    const sampled = qwenSampler(g, Boolean(full), model, at(encoded, 0), at(encoded, 1), latent);
     g.add("SaveImage", { images: at(g.add("VAEDecode", { samples: at(sampled), vae })), filename_prefix: "crackio/angles" });
     return g.nodes;
   },
 };
+
+/**
+ * The Director's re-shoot from a moved Camera, the challenge winner's own 3D World workflow node for node
+ * (ComfyUI-Panorama-Stickers' example `qwen-image-2.1-moge3-anyangle.json`, which ran well on an A40 in testing):
+ * MoGe-3 ViT-G measures the photo (resolution level 9, its own field of view, batch 4, points on their rays, sky and
+ * misses masked out, 3 refine steps); their Panorama Studio renders that 3D world from the Director's Camera (`studio`:
+ * its state, the camera in the photo camera's frame, server/director-real `studioState`) with what it never saw flat
+ * #949494, 2 MP; Qwen-Image 2.1 with lilylilith's AnyAngle at 1 then takes the camera from the render and everything
+ * else from the photo ("Change the camera angle from <image2> to <image1>.", 25 steps, CFG 1, euler, simple) on an empty
+ * latent the render's size. Needs the Panorama Stickers custom node and MoGe-3 on the machine (the Director's set-up
+ * gets them: local/catalog `director-world`). Where the full model isn't there, Turbo on its own 8 steps.
+ */
+function studioWorld(job: EngineJob, tools: RecipeTools, studio: Record<string, unknown>) {
+  return (async () => {
+    const [full, f] = await Promise.all([fullQwenHere(), filesFor("director-world")]);
+    const g = new Graph();
+    const photoUp = await picture(job.references[0], tools, "studio-photo", 4096);
+    const photo = at(g.add("LoadImage", { image: photoUp.name }));
+    const geometry = g.add("MoGeInference", {
+      moge_model: at(g.add("LoadMoGeModel", { model_name: "moge_3_vitg_fp16.safetensors" })),
+      image: photo,
+      resolution_level: 9,
+      // The set's own field of view for the photo when the Director gives it (their workflow: 0, MoGe guesses).
+      fov_x_degrees: typeof job.options?.mogeFov === "number" ? Math.round(job.options.mogeFov * 10) / 10 : 0,
+      batch_size: 4,
+      force_projection: true,
+      apply_mask: true,
+      refine_steps: 3,
+    });
+    const render = g.add("PanoramaStudio", {
+      background_color: "#949494",
+      background_range: "360",
+      megapixels: 2,
+      multiple: 8,
+      state_json: JSON.stringify(studio),
+      world: at(geometry),
+    });
+    const size = g.add("GetImageSize", { image: at(render, 1) });
+    const vae = at(g.add("VAELoader", { vae_name: f.vae ?? "qwen_image_2.1_vae_bf16.safetensors" }));
+    const clip = at(g.add("CLIPLoader", { clip_name: f.text ?? "qwen3vl_8b_int8_convrot.safetensors", type: "qwen_image", device: "default" }));
+    const model = at(
+      g.add("LoraLoaderModelOnly", {
+        model: at(g.add("UNETLoader", { unet_name: full ?? f.model ?? TURBO_QWEN_21, weight_dtype: "default" })),
+        lora_name: f.angles ?? "QI2.1_AnyAngle.safetensors",
+        strength_model: 1,
+      }),
+    );
+    const encoded = g.add("TextEncodeQwenImage21", { prompt: ANY_ANGLE, negative_prompt: "", resolution: 0, clip, vae, "images.image_1": photo, "images.image_2": at(render, 1) });
+    const latent = at(g.add("EmptyLatentImage", { width: at(size, 0), height: at(size, 1), batch_size: 1 }));
+    const sampled = qwenSampler(g, Boolean(full), model, at(encoded, 0), at(encoded, 1), latent);
+    g.add("SaveImage", { images: at(g.add("VAEDecode", { samples: at(sampled), vae })), filename_prefix: "crackio/studio-world" });
+    return g.nodes;
+  })();
+}
+
+/**
+ * The Director's moved-camera shots on the machine its set-up got them on (local/catalog `director-world`: Qwen-Image
+ * 2.1 Turbo, AnyAngle, MoGe-3 and the Panorama Stickers node): the winner's 3D World when the Director sends its Camera
+ * (`studio`), else Qwen Angles' re-shoot from the stage's own view (a flat painting's).
+ */
+const DIRECTOR_WORLD: Recipe = {
+  ...QWEN_ANGLES,
+  id: "director-world",
+  name: "Director 3D World",
+  async build(job, tools) {
+    if (job.options?.studio && job.references[0]) return studioWorld(job, tools, job.options.studio);
+    return QWEN_ANGLES.build(job, tools);
+  },
+};
+
+/**
+ * Lightricks' Layout to Render IC-LoRA for LTX-2.5 as their own two-stage workflow runs it
+ * (LTX-2.5_ICLoRA_Layout_To_Render_Two_Stage_Distilled.json): 8 distilled steps at about 0.5 MP, the latent doubled,
+ * 3 more at the full size; CFG 1, euler ancestral, seed 42, the LoRA at 1.
+ */
+const L2R = {
+  lora: "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors",
+  stage1: "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0",
+  stage2: "0.909375, 0.725, 0.421875, 0.0",
+  seed: 42,
+  // A clay layout's light (tests only): Crackio MoGe Clay's own defaults; holes and sky a light sky gray, as in a viewport.
+  gray: 0.62,
+  ambient: 0.32,
+  sky: "#cfcfcf",
+};
+
+/** A video re-shoot's frame count: 8k+1 (LTX's grid), from the clip the server prepared (server/director-video). */
+const reshootFrames = (job: EngineJob) => {
+  const n = Number(job.options?.extra?.frames);
+  return Number.isFinite(n) && n >= 9 ? Math.floor((n - 1) / 8) * 8 + 1 : 121;
+};
+
+/**
+ * The Director's video re-shoot (local/catalog `director-video`), the Crackio challenge winner's video re-shoot with
+ * Lightricks' Layout to Render in place of his MiniMax H3 (his `pika-h3-flex-moge3-crossview` workflow). Two jobs, so a
+ * finished layout is kept when the film fails and the page can show it:
+ * - `extra.step` "layout": the clip (`source`, prepared by the server: 24 fps, 8k+1 frames) at the stage-1 size, MoGe-3
+ *   on every frame (lighter than his resolution 9 with 2 refine steps: see below; told the set's lens, `mogeFov`), and his
+ *   Panorama Studio rendering it along your Camera (`studio`: keyed on every frame), the footage's own pixels with his
+ *   key gray where nothing was seen, as his own video re-shoot feeds his model.
+ * - `extra.step` "film": that layout at frame 0 and the look still (`start`: the first frame from the new angle) just
+ *   before the clip (Crackio IC-LoRA Guide at -1), more stills at their frames (`keyframes`), then their two stages
+ *   (the first only, for a draft: `quality` "draft").
+ */
+const DIRECTOR_VIDEO: Recipe = {
+  id: "director-video",
+  name: "Director video re-shoot",
+  output: "video",
+  expectedMs: (job) => {
+    const n = reshootFrames(job);
+    if (job.options?.extra?.step === "layout") return 40_000 + n * 700;
+    return 50_000 + n * (job.options?.quality === "draft" ? 250 : 900);
+  },
+  units: (job) => (reshootFrames(job) / 121) * (job.options?.extra?.step === "layout" ? 0.5 : job.options?.quality === "draft" ? 0.6 : 1.6),
+  async build(job, tools) {
+    if (!job.source) throw new EngineError("Drop a video in the Director first.");
+    if (tools.pool) throw new EngineError("The video re-shoot runs on one GPU with about 24 GB.", "Run it on a bigger card (Advanced → Run on).");
+    const f = await filesFor("director-video");
+    const W = Math.max(256, Math.round(job.width / 32) * 32);
+    const H = Math.max(256, Math.round(job.height / 32) * 32);
+    const n = reshootFrames(job);
+    const fps = typeof job.options?.extra?.fps === "number" ? job.options.extra.fps : 24;
+    const g = new Graph();
+    const clip = await tools.upload(job.source.path, "director-video");
+    const loaded = at(g.add("GetVideoComponents", { video: at(g.add("LoadVideo", { file: clip.name })) }));
+    // The film's layout, at the size it's drawn at.
+    const frames = at(g.add("ImageScale", { image: loaded, upscale_method: "lanczos", width: W, height: H, crop: "disabled" }));
+    const save = (images: Link, prefix: string) => g.add("SaveVideo", { video: at(g.add("CreateVideo", { images, fps, bit_depth: 8, color_space: "sRGB", codec: "none" })), filename_prefix: prefix, ...COMPACT_MP4 });
+
+    if (job.options?.extra?.step === "layout") {
+      if (!job.options.studio) throw new EngineError("This re-shoot is missing its Camera path.");
+      const geometry = g.add("MoGeInference", {
+        moge_model: at(g.add("LoadMoGeModel", { model_name: f.geometry ?? "moge_3_vitg_fp16.safetensors" })),
+        // The clip in its own shape at about the size it's filmed at (the winner's 0.5 MP): stretched to the frame's shape,
+        // MoGe would measure a squashed picture.
+        image: at(g.add("ImageScaleToTotalPixels", { image: loaded, upscale_method: "lanczos", megapixels: Math.round(((W * H) / 1024 ** 2) * 100) / 100, resolution_steps: 8 })),
+        // Lighter than his (9 with 2 refine steps): the layout is drawn at about 0.5 MP, where the two looked the same on
+        // a test clip, and MoGe went from about 140 s to a few seconds of a 76 s draft (121 frames, RunPod 4090, Nov 14).
+        resolution_level: 6,
+        fov_x_degrees: typeof job.options.mogeFov === "number" ? Math.round(job.options.mogeFov * 10) / 10 : 0,
+        batch_size: 4,
+        force_projection: true,
+        apply_mask: true,
+        refine_steps: 0,
+      });
+      // The footage's own pixels from the new camera, the winner's way (his key gray where nothing was seen): it carries
+      // how things look through the clip (dark sunglasses stayed dark; drawn from clay they came out clear, Nov 14).
+      // Lightricks' own gray clay (`extra.layout` "clay") is kept for tests.
+      const clay = job.options.extra?.layout === "clay";
+      const world = clay ? at(g.add("CrackioMoGeClay", { moge_geometry: at(geometry), gray: L2R.gray, ambient: L2R.ambient })) : at(geometry);
+      const studio = g.add("PanoramaStudio", {
+        background_color: clay ? L2R.sky : "#949494",
+        background_range: "360",
+        megapixels: Math.round(((W * H) / 1024 ** 2) * 1000) / 1000,
+        multiple: 8,
+        state_json: JSON.stringify(job.options.studio),
+        world,
+      });
+      save(at(g.add("ImageScale", { image: at(g.add("GetVideoComponents", { video: at(studio, 3) })), upscale_method: "lanczos", width: W, height: H, crop: "disabled" })), "crackio/director-video-layout");
+      return g.nodes;
+    }
+
+    if (!job.start) throw new EngineError("This re-shoot is missing its first frame.");
+    const model = at(
+      g.add("LoraLoaderModelOnly", {
+        model: at(g.add("UNETLoader", { unet_name: f.model ?? LTX.unet, weight_dtype: "default" })),
+        lora_name: f.layout ?? L2R.lora,
+        strength_model: 1,
+      }),
+    );
+    const clipModel = at(g.add("CLIPLoader", { clip_name: f.text ?? LTX.textEncoder, type: "ltxv", device: "default" }));
+    const vae = at(g.add("VAELoader", { vae_name: f.vae ?? LTX.videoVae }));
+    const cond = g.add("LTXVConditioning", {
+      positive: at(g.add("CLIPTextEncode", { text: job.prompt, clip: clipModel })),
+      negative: at(g.add("CLIPTextEncode", { text: "", clip: clipModel })),
+      frame_rate: fps,
+    });
+    const look = at(g.add("LoadImage", { image: (await picture(job.start, tools, "reshoot-look", 2048)).name }));
+    const keys = await Promise.all(
+      (job.keyframes ?? []).filter((k) => k.t > 0 && k.t < n).map(async (k) => ({ t: Math.round(k.t), image: at(g.add("LoadImage", { image: (await picture(k, tools, "reshoot-key", 2048)).name })) })),
+    );
+    // Each stage adds the guides again at its own size (their positions are recorded in pixels), from the prompt's
+    // conditioning: the layout lined up with the clip, the look just before it, any more stills at their frames.
+    const guided = (latent: Link) => {
+      let at0 = g.add("CrackioICLoRAGuide", { positive: at(cond, 0), negative: at(cond, 1), vae, latent, image: frames, frame_idx: 0, strength: 1, crop: "disabled" });
+      at0 = g.add("CrackioICLoRAGuide", { positive: at(at0, 0), negative: at(at0, 1), vae, latent: at(at0, 2), image: look, frame_idx: -1, strength: 1, crop: "center" });
+      for (const k of keys) at0 = g.add("CrackioICLoRAGuide", { positive: at(at0, 0), negative: at(at0, 1), vae, latent: at(at0, 2), image: k.image, frame_idx: k.t, strength: 1, crop: "center" });
+      return at0;
+    };
+    const stage = (guides: string, sigmas: string) =>
+      g.add("LTXVCropGuides", {
+        positive: at(guides, 0),
+        negative: at(guides, 1),
+        latent: at(
+          g.add("SamplerCustomAdvanced", {
+            noise: at(g.add("RandomNoise", { noise_seed: typeof job.options?.seed === "number" ? job.options.seed : L2R.seed })),
+            guider: at(g.add("CFGGuider", { model, positive: at(guides, 0), negative: at(guides, 1), cfg: 1 })),
+            sampler: at(g.add("KSamplerSelect", { sampler_name: "euler_ancestral" })),
+            sigmas: at(g.add("ManualSigmas", { sigmas })),
+            latent_image: at(guides, 2),
+          }),
+        ),
+      });
+    let done = stage(guided(at(g.add("EmptyLTXVLatentVideo", { width: W, height: H, length: n, batch_size: 1 }))), L2R.stage1);
+    if (job.options?.quality !== "draft") {
+      const upscaled = at(g.add("LTXVLatentUpsampler", { samples: at(done, 2), upscale_model: at(g.add("LatentUpscaleModelLoader", { model_name: f.upscaler ?? LTX.upscaler })), vae }));
+      done = stage(guided(upscaled), L2R.stage2);
+    }
+    save(at(g.add("VAEDecodeTiled", { samples: at(done, 2), vae, tile_size: 512, overlap: 64, temporal_size: 128, temporal_overlap: 32 })), "crackio/director-video");
+    return g.nodes;
+  },
+};
+
+/** The model name a warm-up job goes under (server/serverless/shim `keepWarm`), so a shot behind it can say what it waits for. */
+export const WARM_UP = "crackio-warm-up";
+
+/**
+ * The Director's moved-camera shot's models loaded ahead of it (`studioWorld`'s loaders exactly, so ComfyUI's cache
+ * hands them to the shot as they are), with one step at 256² to put them through the GPU once. On a RunPod Serverless
+ * worker that just started they're read from its network volume (about 20 GB: Qwen-Image 2.1, its Qwen3-VL text
+ * encoder, MoGe-3): the first shot ran 85–109 s, against about 30 s on a worker that had them (Nov 13). Sent while you
+ * frame the shot, so that wait happens before you press Shoot.
+ */
+export function studioWarmGraph() {
+  const g = new Graph();
+  g.add("PreviewAny", { source: at(g.add("LoadMoGeModel", { model_name: "moge_3_vitg_fp16.safetensors" })) });
+  const vae = at(g.add("VAELoader", { vae_name: "qwen_image_2.1_vae_bf16.safetensors" }));
+  const clip = at(g.add("CLIPLoader", { clip_name: "qwen3vl_8b_int8_convrot.safetensors", type: "qwen_image", device: "default" }));
+  const model = at(
+    g.add("LoraLoaderModelOnly", {
+      model: at(g.add("UNETLoader", { unet_name: FULL_QWEN_21, weight_dtype: "default" })),
+      lora_name: "QI2.1_AnyAngle.safetensors",
+      strength_model: 1,
+    }),
+  );
+  const encoded = g.add("TextEncodeQwenImage21", { prompt: ANY_ANGLE, negative_prompt: "", resolution: 1024, clip, vae });
+  const sampled = g.add("KSampler", {
+    seed: 0,
+    steps: 1,
+    cfg: 1,
+    sampler_name: "euler",
+    scheduler: "simple",
+    denoise: 1,
+    model,
+    positive: at(encoded, 0),
+    negative: at(encoded, 1),
+    latent_image: at(g.add("EmptyLatentImage", { width: 256, height: 256, batch_size: 1 })),
+  });
+  g.add("PreviewImage", { images: at(g.add("VAEDecode", { samples: at(sampled), vae })) });
+  return g.nodes;
+}
 
 /**
  * The size of klein's reference pictures. It reads every one at every step, so four at 1 MP (BFL's template) are five
@@ -2743,8 +3055,9 @@ const KLEIN: Recipe = {
     let positive = text;
     let negative = at(g.add("ConditioningZeroOut", { conditioning: text }));
     const megapixels = kleinRefMp(job, tools.perUnit ?? null);
-    for (const ref of job.references.slice(0, 4)) {
-      const image = at(g.add("LoadImage", { image: (await picture(ref, tools, "ref", Math.max(1024, Math.round(2048 * Math.sqrt(megapixels))))).name }));
+    const kleinRefs = await Promise.all(job.references.slice(0, 4).map((ref) => picture(ref, tools, "ref", Math.max(1024, Math.round(2048 * Math.sqrt(megapixels))))));
+    for (const up of kleinRefs) {
+      const image = at(g.add("LoadImage", { image: up.name }));
       const scaled = at(g.add("ImageScaleToTotalPixels", { upscale_method: "lanczos", megapixels, resolution_steps: 1, image }));
       const latent = at(g.add("VAEEncode", { pixels: scaled, vae }));
       positive = at(g.add("ReferenceLatent", { conditioning: positive, latent }));
@@ -2759,6 +3072,174 @@ const KLEIN: Recipe = {
     });
     g.add("SaveImage", { images: at(g.add("VAEDecode", { samples: at(out), vae })), filename_prefix: "crackio/flux2-klein" });
     return g.nodes;
+  },
+};
+
+/**
+ * nomadoor's 360 LoRA: the words it answers (its card: they open the prompt, a description of the place may follow), the
+ * 2:1 size it was trained at, its strength and its own workflow's negative prompt (people added: the Director's places
+ * stay empty for the cast; "people" alone still let it fill a cafe terrace with them).
+ */
+const KLEIN_360 = {
+  trigger: "Fill the green spaces according to the image. Outpaint as a seamless 360 equirectangular panorama (2:1). Keep the horizon level. Match left and right edges.",
+  width: 2048,
+  height: 1024,
+  negative: "people, person, pedestrians, crowd, figures, text, watermark, worst quality, blurry, ugly",
+  lora: "flux-2-klein-4B-360-erp-outpaint-lora_V1.safetensors",
+  strength: 0.9,
+};
+
+/** A job for the 360 LoRA: a 2:1 panorama to fill (server/world `erpWorld` asks with `options.extra.erp360`). */
+const isErp360 = (job: EngineJob) => job.options?.extra?.erp360 === true;
+
+/**
+ * FLUX.2 klein base 4B with nomadoor's 360 ERP outpaint LoRA (Apache-2.0): the Director's places drawn all around their
+ * photo. A place (`isErp360`) runs the LoRA's own workflow (workflow/flux-2-klein-4B-360-erp-outpaint.json in its
+ * repo): the 2:1 picture to fill (the photo where its camera pointed, #00FF00 everywhere else) encoded once, as the
+ * reference on both sides of the guidance and as the latent the sampler starts from (at full denoise only its size counts),
+ * the LoRA at 0.9 on the model, its trigger words first, KSampler 20 steps at CFG 5 (euler, simple), at the 2048×1024 it
+ * was trained on. Its card: the distilled klein draws badly with it, so it's the base model. Anything else the Director
+ * asks its place model (a place photo from words, an extend's redraw) is the base alone, as ComfyUI's template runs it
+ * (image_flux2_klein_image_edit_4b_base: 20 steps at CFG 5), with up to four references like klein 4B.
+ */
+const KLEIN_BASE_360: Recipe = {
+  id: "flux2-klein-base-4b-360",
+  name: "FLUX.2 klein 360",
+  output: "image",
+  expectedMs: (job) => (isErp360(job) ? 120_000 : 20_000 * count(job) + 8_000 * Math.min(4, job.references.length)),
+  // A place is a 2 MP panorama drawn beside the 2 MP one it fills.
+  units: (job, referenceMp) =>
+    isErp360(job)
+      ? pictureWork({ megapixels: (KLEIN_360.width * KLEIN_360.height) / 1e6, references: 1, referenceMp: (KLEIN_360.width * KLEIN_360.height) / 1e6 })
+      : pictureWork({ count: count(job), references: Math.min(4, job.references.length), referenceMp }),
+  referenceMp: kleinRefMp,
+  maxMp: 4.2,
+  detailable: false,
+  async build(job, tools) {
+    const erp = isErp360(job);
+    if (!erp && !job.prompt.trim()) throw new EngineError("Describe the picture, or the change.");
+    const f = await filesFor("flux2-klein-base-4b-360");
+    const g = new Graph();
+    const clip = at(g.add(...clipLoader(f.text ?? "qwen_3_4b.safetensors", "flux2")));
+    const vae = at(g.add("VAELoader", { vae_name: f.vae ?? "flux2-vae.safetensors" }));
+    const base = at(g.add(...unetLoader(f.model ?? "flux-2-klein-base-4b.safetensors")));
+    if (erp) {
+      const target = job.references.find((r) => r.role === "edit-target") ?? job.references[0];
+      if (!target) throw new EngineError("Give the 360 model the panorama to fill.");
+      const png = await sharp(await fs.readFile(/*turbopackIgnore: true*/ target.path)).removeAlpha().resize(KLEIN_360.width, KLEIN_360.height, { fit: "fill" }).png().toBuffer();
+      const up = await tools.uploadData(png, `erp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.png`);
+      const model = at(g.add("LoraLoaderModelOnly", { model: base, lora_name: f.lora ?? KLEIN_360.lora, strength_model: KLEIN_360.strength }));
+      const words = job.prompt.trim();
+      const prompt = words.startsWith(KLEIN_360.trigger) ? words : `${KLEIN_360.trigger} ${words}`.trim();
+      const latent = at(g.add("VAEEncode", { pixels: at(g.add("LoadImage", { image: up.name })), vae }));
+      const positive = at(g.add("ReferenceLatent", { conditioning: at(g.add("CLIPTextEncode", { text: prompt, clip })), latent }));
+      const negative = at(g.add("ReferenceLatent", { conditioning: at(g.add("CLIPTextEncode", { text: KLEIN_360.negative, clip })), latent }));
+      const sampled = g.add("KSampler", { seed: seed(), steps: 20, cfg: 5, sampler_name: "euler", scheduler: "simple", denoise: 1, model, positive, negative, latent_image: latent });
+      g.add("SaveImage", { images: at(g.add("VAEDecode", { samples: at(sampled), vae })), filename_prefix: "crackio/klein-360" });
+      return g.nodes;
+    }
+    const { width, height } = tools.size ?? imageSize(job);
+    let positive = at(g.add("CLIPTextEncode", { text: job.prompt, clip }));
+    let negative = at(g.add("CLIPTextEncode", { text: "", clip }));
+    const megapixels = kleinRefMp(job, tools.perUnit ?? null);
+    const refs = await Promise.all(job.references.slice(0, 4).map((ref) => picture(ref, tools, "ref", Math.max(1024, Math.round(2048 * Math.sqrt(megapixels))))));
+    for (const up of refs) {
+      const scaled = at(g.add("ImageScaleToTotalPixels", { upscale_method: "lanczos", megapixels, resolution_steps: 1, image: at(g.add("LoadImage", { image: up.name })) }));
+      const latent = at(g.add("VAEEncode", { pixels: scaled, vae }));
+      positive = at(g.add("ReferenceLatent", { conditioning: positive, latent }));
+      negative = at(g.add("ReferenceLatent", { conditioning: negative, latent }));
+    }
+    const out = g.add("SamplerCustomAdvanced", {
+      noise: at(g.add("RandomNoise", { noise_seed: seed() })),
+      guider: at(g.add("CFGGuider", { cfg: 5, model: base, positive, negative })),
+      sampler: at(g.add("KSamplerSelect", { sampler_name: "euler" })),
+      sigmas: at(g.add("Flux2Scheduler", { steps: 20, width, height })),
+      latent_image: at(g.add("EmptyFlux2LatentImage", { width, height, batch_size: count(job) })),
+    });
+    g.add("SaveImage", { images: at(g.add("VAEDecode", { samples: at(out), vae })), filename_prefix: "crackio/klein-base" });
+    return g.nodes;
+  },
+};
+
+/**
+ * nomadoor's 360 panorama outpaint LoRA for Qwen-Image 2.1, as his workflow runs it (ComfyUI-Panorama-Stickers
+ * example_workflows/qwen-image-2.1-360-erp-outpaint.json, the Crackio challenge's winner): the sentence it was trained on
+ * (its card: it opens every prompt, a description of what fills the green may follow), the 2880×1440 canvas Panorama
+ * Studio makes at 4 MP (multiples of 32), the LoRA at 0.8 on the full model, 25 steps at CFG 1.
+ */
+const QWEN_360 = {
+  trigger: "Fill the green areas to complete a seamless 360° equirectangular panorama.",
+  width: 2880,
+  height: 1440,
+  lora: "qwen_image_2_1_360_panorama_outpaint_lora_v0_1.safetensors",
+  strength: 0.8,
+  steps: 25,
+};
+
+/**
+ * Qwen-Image 2.1 with nomadoor's 360 LoRA (Qwen Research License: non-commercial): the Director's places drawn all around
+ * their photo the challenge winner's way. A place (`isErp360`) is his graph exactly: the 2:1 canvas (the photo where its
+ * camera pointed, #00FF00 everywhere else) as image 1 of TextEncodeQwenImage21 at resolution 0 (its own size: seen by the
+ * vision encoder and spliced in as a reference latent), an empty latent that size, the full model with the LoRA at 0.8,
+ * KSampler 25 steps at CFG 1 (euler, simple, denoise 1), no negative words. With a `mask` (white where to draw), the
+ * same graph holds the rest where it is: the canvas VAE-encoded and noise-masked (SetLatentNoiseMask) as the latent the
+ * sampler starts from (server/world draws a place again that way when the first drawing lost its photo). Anything else
+ * the Director asks its place model (a place photo from words, a fill, an extend's redraw) is plain Qwen-Image 2.1, the
+ * full model, from ComfyUI's own templates (masks and all).
+ */
+const QWEN_IMAGE_360: Recipe = {
+  id: "qwen-image-2.1-360",
+  name: "Qwen-Image 2.1 360",
+  output: "image",
+  // A place pass took 190 s on a rented A40 (seven passes, 2026-11-13).
+  expectedMs: (job) => (isErp360(job) ? 190_000 : 30_000 * count(job) + 10_000 * Math.min(4, job.references.length)),
+  // A place is a 4 MP panorama drawn beside the 4 MP one it fills.
+  units: (job, referenceMp) =>
+    isErp360(job)
+      ? pictureWork({ megapixels: (QWEN_360.width * QWEN_360.height) / 1e6, references: 1, referenceMp: (QWEN_360.width * QWEN_360.height) / 1e6 })
+      : pictureWork({ count: count(job), references: Math.min(4, job.references.length), referenceMp }),
+  maxMp: 4.25,
+  async build(job, tools) {
+    if (!isErp360(job)) {
+      const plain = templateRecipe("qwen-image-2.1");
+      if (!plain) throw new EngineError("Crackio can't find Qwen-Image 2.1's ComfyUI template.");
+      return plain.build({ ...job, options: { ...job.options, quality: "best" } }, tools);
+    }
+    const target = job.references.find((r) => r.role === "edit-target") ?? job.references[0];
+    if (!target) throw new EngineError("Give the 360 model the panorama to fill.");
+    const f = await filesFor("qwen-image-2.1-360");
+    const g = new Graph();
+    const vae = at(g.add("VAELoader", { vae_name: f.vae ?? "qwen_image_2.1_vae_bf16.safetensors" }));
+    const clip = at(g.add(...clipLoader(f.text ?? "qwen3vl_8b_int8_convrot.safetensors", "qwen_image")));
+    const base = at(g.add(...unetLoader(f.model ?? "qwen_image_2.1_int8_convrot.safetensors")));
+    const model = at(g.add("LoraLoaderModelOnly", { model: base, lora_name: f.lora ?? QWEN_360.lora, strength_model: QWEN_360.strength }));
+    const png = await sharp(await fs.readFile(/*turbopackIgnore: true*/ target.path)).removeAlpha().resize(QWEN_360.width, QWEN_360.height, { fit: "fill" }).png().toBuffer();
+    const up = await tools.uploadData(png, `erp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.png`);
+    const words = job.prompt.trim();
+    const prompt = words.startsWith(QWEN_360.trigger) ? words : `${QWEN_360.trigger} ${words}`.trim();
+    const canvas = at(g.add("LoadImage", { image: up.name }));
+    const encoded = g.add("TextEncodeQwenImage21", { prompt, negative_prompt: "", resolution: 0, clip, vae, "images.image_1": canvas });
+    let latent = at(g.add("EmptyLatentImage", { width: QWEN_360.width, height: QWEN_360.height, batch_size: 1 }));
+    if (job.mask?.path) {
+      const where = await sharp(await fs.readFile(/*turbopackIgnore: true*/ job.mask.path)).resize(QWEN_360.width, QWEN_360.height, { fit: "fill" }).png().toBuffer();
+      const held = await tools.uploadData(where, `erp-mask-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.png`);
+      latent = at(g.add("SetLatentNoiseMask", { samples: at(g.add("VAEEncode", { pixels: canvas, vae })), mask: at(g.add("LoadImageMask", { image: held.name, channel: "red" })) }));
+    }
+    const sampled = g.add("KSampler", {
+      seed: seed(),
+      steps: QWEN_360.steps,
+      cfg: 1,
+      sampler_name: "euler",
+      scheduler: "simple",
+      denoise: 1,
+      model,
+      positive: at(encoded, 0),
+      negative: at(encoded, 1),
+      latent_image: latent,
+    });
+    g.add("SaveImage", { images: at(g.add("VAEDecode", { samples: at(sampled), vae })), filename_prefix: "crackio/qwen-360" });
+    // His graph is made for stock ComfyUI: one started with SageAttention turns some models black (the templates' rule).
+    return (await tools.hasNode?.("ModelAttentionBackend")) ? stockAttention(g.nodes) : g.nodes;
   },
 };
 
@@ -2919,7 +3400,7 @@ const WAN5B: Recipe = {
     let unet = at(g.add(...unetLoader(f.model ?? "wan2.2_ti2v_5B_fp16.safetensors")));
     if (fast) unet = at(g.add("LoraLoaderModelOnly", { lora_name: f.lora, strength_model: 1, model: unet }));
     const model = at(g.add("ModelSamplingSD3", { shift: 8, model: unet }));
-    const start = job.start ? at(g.add("LoadImage", { image: (await picture(job.start, tools, "start", 1536)).name })) : null;
+    const start = job.start ? at(g.add("LoadImage", { image: (await picture(job.start, tools, "start", 1536, false, cropShape(job))).name })) : null;
     const latent = at(g.add("Wan22ImageToVideoLatent", { width, height, length, batch_size: 1, vae, ...(start ? { start_image: start } : {}) }));
     const positive = at(g.add("CLIPTextEncode", { text: job.prompt, clip }));
     // FastWan's own schedule (FastVideo: 3 DMD steps at timesteps 1000, 757, 522), each step predicting the clean clip and
@@ -2991,10 +3472,14 @@ const FLUX3_KLEIN: Recipe = {
     let big = false;
     if (refs.length) {
       const images: Record<string, Link> = {};
-      for (const [k, ref] of refs.entries()) images[`images.image${k}`] = at(g.add("LoadImage", { image: (await picture(ref, tools, "ref", 2048)).name }));
-      // The first picture sets the shape; the size is the one asked for (about 1 MP by default).
+      const ups = await Promise.all(refs.map((ref) => picture(ref, tools, "ref", 2048)));
+      for (const [k, up] of ups.entries()) images[`images.image${k}`] = at(g.add("LoadImage", { image: up.name }));
+      // The first picture sets the shape; the size is the one asked for (about 1 MP by default). `keepReference`: the
+      // picture at its own size, pixel for pixel (Director Small extend's gray canvas, made on the 32 grid as ausboss's
+      // outpaint workflow makes it: a resize lands off the VAE's grid and moves the picture a few pixels).
       const megapixels = tools.size ? Math.round((tools.size.width * tools.size.height) / 1e4) / 100 : 1;
-      const multi = g.add("ReferenceMultiLatent", { resolution: "resize", "resolution.megapixels": megapixels, positive: text, negative: at(g.add("ConditioningZeroOut", { conditioning: text })), vae, ...images });
+      const sizing = job.options?.keepReference === true ? { resolution: "keep resolution" } : { resolution: "resize", "resolution.megapixels": megapixels };
+      const multi = g.add("ReferenceMultiLatent", { ...sizing, positive: text, negative: at(g.add("ConditioningZeroOut", { conditioning: text })), vae, ...images });
       // References only (who, what, where): a new picture at the size asked; else the first picture's, to edit it.
       const size = tools.size ?? imageSize(job);
       const latent = !job.references.some((r) => r.role === "edit-target")
@@ -3162,7 +3647,7 @@ const FLASHVSR: Recipe = {
   },
 };
 
-const RECIPES: Recipe[] = [LTX_VIDEO, SCAIL_SWAP, RIPPLE_SWAP, Z_IMAGE, Z_IMAGE_DIRECTOR, QWEN_DIRECTOR, QWEN_ANGLES, KLEIN, FLUX3_KLEIN, SEEDVR2, SEEDVR2_7B, ESRGAN, NOMOS2_HQ, NOMOS_WEBPHOTO, FLASHVSR, WAN5B];
+const RECIPES: Recipe[] = [LTX_VIDEO, SCAIL_SWAP, RIPPLE_SWAP, Z_IMAGE, Z_IMAGE_DIRECTOR, QWEN_DIRECTOR, QWEN_ANGLES, DIRECTOR_WORLD, DIRECTOR_VIDEO, KLEIN, KLEIN_BASE_360, QWEN_IMAGE_360, FLUX3_KLEIN, SEEDVR2, SEEDVR2_7B, ESRGAN, NOMOS2_HQ, NOMOS_WEBPHOTO, FLASHVSR, WAN5B];
 
 /* ------------------------------------------------------------------ ComfyUI's official templates */
 
@@ -3304,7 +3789,8 @@ function templateRecipe(key: string): Recipe | null {
     output: clip ? "video" : "image",
     expectedMs: (job) => Math.max(5_000, (model.variants[0]?.seconds5090 ?? 20) * 2_000 * (clip ? Math.max(1, seconds(job) / 5) : count(job))),
     // An edit reads its pictures (about 1 MP each in the templates) next to the one it makes.
-    units: (job) => (clip ? seconds(job) / 5 : job.kind === "upscale" ? count(job) : pictureWork({ count: count(job), references: Math.min(job.references.length, editPictures()) })),
+    // (A 480p model asked for the 720p its makers also made it for: about 2.2 times the pixels, a little more work.)
+    units: (job) => (clip ? (seconds(job) / 5) * (madeFor720p(model.id) && String(job.options?.resolution) === "720p" ? 2.4 : 1) : job.kind === "upscale" ? count(job) : pictureWork({ count: count(job), references: Math.min(job.references.length, editPictures()) })),
     ...(clip ? {} : { maxMp: templateMaxMp(key, model), ...(TEMPLATE_NATIVE[key]?.edge ? { maxEdge: TEMPLATE_NATIVE[key].edge } : {}) }),
     // Every version's picture graph takes the detail pass, or none is promised (Qwen-Image 2.1 Turbo's few-step list doesn't).
     detailable: !clip && model.variants.every((v) => [v.templates?.t2i, v.templates?.edit].every((name) => !name || detail(templateGraph(name), { width: 64, height: 64 }, 0.3, 10, null) !== null)),
@@ -3331,7 +3817,9 @@ function templateRecipe(key: string): Recipe | null {
       const ratio = clip ? await ratioOf(job) : job.width / Math.max(1, job.height);
       // Pictures at the size planned from the resolution asked (comfy-local), else about 1 MP.
       // (A reference-to-video template's only literal size is its blank first picture's: its clip is the guide's size, 720p.)
-      const mp = clip ? Math.min(String(job.options?.resolution) === "480p" ? 0.4 : 0.9, mode === "r2v" ? 0.9 : (nativeMp(name) ?? 0.9)) : tools.size ? (tools.size.width * tools.size.height) / 1e6 : 1;
+      // (A model its makers made for 720p too goes there when 720p is asked; left unsaid, it keeps its template's size.)
+      const roof = mode === "r2v" || (madeFor720p(model.id) && String(job.options?.resolution) === "720p") ? 0.9 : (nativeMp(name) ?? 0.9);
+      const mp = clip ? Math.min(String(job.options?.resolution) === "480p" ? 0.4 : 0.9, roof) : tools.size ? (tools.size.width * tools.size.height) / 1e6 : 1;
       const h = Math.sqrt((mp * 1e6) / ratio);
       const grid = clip ? (Object.values(templateGraph(name)).some((n) => /LTXV/.test(n.class_type)) ? 64 : 32) : 16;
       const size = mode === "upscale" || mode === "vupscale" ? undefined : !clip && tools.size ? tools.size : { width: snap(h * ratio, grid), height: snap(h, grid) };
@@ -3342,11 +3830,14 @@ function templateRecipe(key: string): Recipe | null {
       // Pictures that are all references (who, what, where) make a new picture at the size asked; otherwise the first is
       // the one to edit, and sets the size.
       const editing = grows && job.references.some((r) => r.role === "edit-target");
-      const images: string[] = [];
-      for (const [i, ref] of pictures.slice(0, roomFor(name)).entries()) {
-        const fit = grows && size ? (i === 0 && editing ? Math.round(Math.sqrt(size.width * size.height) * Math.sqrt(Math.max(ratio, 1 / ratio))) : (tools.perUnit ?? 0) > 15 ? 640 : 1024) : 2048;
-        images.push((await picture(ref, tools, "in", fit, editing && i === 0)).name);
-      }
+      const images: string[] = (
+        await Promise.all(
+          pictures.slice(0, roomFor(name)).map((ref, i) => {
+            const fit = grows && size ? (i === 0 && editing ? Math.round(Math.sqrt(size.width * size.height) * Math.sqrt(Math.max(ratio, 1 / ratio))) : (tools.perUnit ?? 0) > 15 ? 640 : 1024) : 2048;
+            return picture(ref, tools, "in", fit, editing && i === 0, clip && (mode === "i2v" || mode === "flf2v") ? cropShape(job) : undefined);
+          }),
+        )
+      ).map((up) => up.name);
       if (io.images.length && !images.length) throw new EngineError("Add a picture first.");
       const video = mode === "vupscale" && job.source ? (await tools.upload(job.source.path, "clip")).name : undefined;
       const f = fillFor(job, images, video, `crackio/${key}`, size);
@@ -3357,7 +3848,7 @@ function templateRecipe(key: string): Recipe | null {
       // Or redrawn over itself (the Director's plate): the layout kept, every surface drawn fresh.
       const denoise = job.options?.denoise;
       const filled = mode === "edit" && !job.mask && typeof denoise === "number" && denoise > 0 && denoise < 1 ? redrawLatent(masked, denoise, io.images[0]?.id) : masked;
-      const referenced = mode === "r2v" ? referenceGraph(filled, size, job.start ? (await picture(job.start, tools, "start", 2048)).name : undefined) : filled;
+      const referenced = mode === "r2v" ? referenceGraph(filled, size, job.start ? (await picture(job.start, tools, "start", 2048, false, cropShape(job))).name : undefined) : filled;
       const gguf = variant.files.find((x) => x.role === "model")?.name;
       const graph = variant.replaces && gguf ? swapModel(referenced, variant.replaces, gguf, tools.pool, clip ? 1 : count(job)) : referenced;
       // Templates are made for stock ComfyUI: a ComfyUI started with SageAttention turns some of them black (Z-Image base).
@@ -3381,9 +3872,13 @@ export function picturePlan(recipe: Recipe, job: EngineJob, perUnit?: number | n
   const edge = recipe.maxEdge ?? Infinity;
   const capped = pixelsAt(max, ratio, edge);
   const native = target.mp <= max * 1.02 && Math.max(target.width, target.height) <= edge ? target : { ...capped, mp: (capped.width * capped.height) / 1e6 };
-  const factor = Math.sqrt(target.mp / native.mp);
+  // "Never enlarge" (Advanced): past what the model draws, the picture stays at the size it was drawn at. `asked` is
+  // the size that was picked, `kept` says it wasn't reached on purpose.
+  const kept = job.options?.nativeOnly === true && Math.sqrt(target.mp / native.mp) > 1.02;
+  const end = kept ? native : target;
+  const factor = Math.sqrt(end.mp / native.mp);
   // More than a lanczos fit hides.
-  return { native, target, factor, detail: recipe.detailable !== false && factor > 1.15 && (perUnit ?? 0) <= DETAIL_PASS.slowest };
+  return { native, target: end, asked: target, kept, factor, detail: recipe.detailable !== false && factor > 1.15 && (perUnit ?? 0) <= DETAIL_PASS.slowest };
 }
 
 /** A job's work in the Local catalog's units at the size it renders at (a recipe's own units count pictures of about 1 MP). */

@@ -1,5 +1,5 @@
 {
-  "$comment": "Crackio's own clips for the template formats with no single real clip to use (the rest of the library downloads each trend's real post, see src/lib/server/template-originals.ts). Made on your Grok plan by scripts/assets/templates.mjs: `still` is the opening frame (Grok Imagine 2.0, 9:16), `motion` animates it (Grok Imagine Video 1.5). Swap clips are the base a remix keeps, so the people in them must match each slot's `target` in src/lib/templates/library.ts. `pick` and `clipPick` are the takes that shipped. Entries with `imageModel` / `videoModel` are made on your own GPU instead (FLUX 3 Klein stills, LTX-2.5 clips with their own sound); `gain` (dB) lifts a soundtrack the model made too quiet.",
+  "$comment": "Crackio's own clips for the Templates page, made by scripts/assets/templates.mjs: `still` is the opening frame and `motion` animates it.",
   "templates": [
     {
       "id": "car-jump",

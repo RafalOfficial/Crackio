@@ -47,24 +47,40 @@ export function useDemoSession(): DemoSession {
     () => state,
     () => state,
   );
-  // Credits change as jobs run: check now, every 3 s while one of yours runs (so its charge or refund shows the moment
-  // it ends), every 20 s otherwise, and on coming back to the tab.
   useEffect(() => {
     if (!DEMO) return;
-    void refreshDemoSession();
-    let last = 0;
-    const timer = setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      if (!state.running && Date.now() - last < 20_000) return;
-      last = Date.now();
-      void refreshDemoSession();
-    }, 3000);
-    const onFocus = () => void refreshDemoSession();
-    window.addEventListener("focus", onFocus);
+    if (users++ === 0) stopWatching = watch();
     return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
+      if (--users === 0) {
+        stopWatching?.();
+        stopWatching = null;
+      }
     };
   }, []);
   return snapshot;
+}
+
+/** Everything on the page that shows the session (the sidebar card, its bar, the strip) shares one watch. */
+let users = 0;
+let stopWatching: (() => void) | null = null;
+
+/**
+ * Credits change as jobs run: checked now, every 3 s while one of yours runs (so its charge or refund shows the moment
+ * it ends), every 20 s otherwise, and on coming back to the tab.
+ */
+function watch() {
+  void refreshDemoSession();
+  let last = 0;
+  const timer = setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    if (!state.running && Date.now() - last < 20_000) return;
+    last = Date.now();
+    void refreshDemoSession();
+  }, 3000);
+  const onFocus = () => void refreshDemoSession();
+  window.addEventListener("focus", onFocus);
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener("focus", onFocus);
+  };
 }

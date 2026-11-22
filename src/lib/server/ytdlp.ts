@@ -17,7 +17,7 @@ const YOUTUBE_SINCE = "2025.11.12";
 export type Ytdlp = { cmd: string; pre: string[]; version: string };
 export type YtdlpRun = { code: number; out: string; err: string };
 
-type State = { tool: Promise<Ytdlp | null> | null; at: number };
+type State = { tool: Promise<Ytdlp | null> | null; at: number; found?: boolean };
 const g = globalThis as unknown as { __crackioYtdlp?: State };
 const state: State = (g.__crackioYtdlp ??= { tool: null, at: 0 });
 
@@ -75,8 +75,10 @@ const NO_WMI = "import platform, sys\ndef _skip(*a, **k):\n    raise OSError('sk
 
 /** yt-dlp on this computer: CRACKIO_YTDLP, Python's module (WMI-safe, above), or the yt-dlp command. */
 export function ytdlp(): Promise<Ytdlp | null> {
-  if (!(Date.now() - state.at < 60_000)) {
+  // Each look starts up to six programs: one that found yt-dlp holds 10 minutes, one that didn't a minute.
+  if (!(Date.now() - state.at < (state.found ? 10 * 60_000 : 60_000))) {
     state.tool = null;
+    state.found = false;
     state.at = Date.now();
   }
   state.tool ??= (async () => {
@@ -92,7 +94,10 @@ export function ytdlp(): Promise<Ytdlp | null> {
     for (const [cmd, pre] of tries) {
       const r = await runYtdlp(cmd, [...pre, "--version"], { timeoutMs: 20_000 });
       const version = r.out.trim().split(/\s+/)[0] ?? "";
-      if (r.code === 0 && /^\d{4}\.\d{2}\.\d{2}/.test(version)) return { cmd, pre, version };
+      if (r.code === 0 && /^\d{4}\.\d{2}\.\d{2}/.test(version)) {
+        state.found = true;
+        return { cmd, pre, version };
+      }
     }
     return null;
   })();
@@ -104,10 +109,10 @@ async function ownerPython(): Promise<string | null> {
   const exe = process.platform === "win32" ? ["yt-dlp.exe"] : ["yt-dlp"];
   for (const dir of (process.env.PATH ?? "").split(path.delimiter).filter(Boolean)) {
     for (const name of exe) {
-      if (!(await fs.stat(path.join(/*turbopackIgnore: true*/ dir, name)).catch(() => null))) continue;
+      if (!(await fs.stat(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, name)).catch(() => null))) continue;
       const python = path.join(/*turbopackIgnore: true*/ dir, "..", process.platform === "win32" ? "python.exe" : "python3");
       const sibling = path.join(/*turbopackIgnore: true*/ dir, process.platform === "win32" ? "python.exe" : "python3");
-      for (const p of [python, sibling]) if (await fs.stat(p).catch(() => null)) return p;
+      for (const p of [python, sibling]) if (await fs.stat(/*turbopackIgnore: true*/ p).catch(() => null)) return p;
     }
   }
   return null;

@@ -20,6 +20,7 @@ export function HoverPreview({
   width = 220,
   media,
   className,
+  off,
 }: {
   children: ReactNode;
   title: string;
@@ -31,6 +32,8 @@ export function HoverPreview({
   /** Custom content instead of a single clip. */
   media?: ReactNode;
   className?: string;
+  /** No preview (it has nothing new to show): the trigger works as usual. */
+  off?: boolean;
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
@@ -41,7 +44,7 @@ export function HoverPreview({
 
   const show = () => {
     if (timer.current) clearTimeout(timer.current);
-    if (pressed.current) return;
+    if (pressed.current || off) return;
     timer.current = setTimeout(() => {
       // A `display: contents` wrapper has no box of its own; measure what it wraps.
       const el = anchor.current;
@@ -96,7 +99,7 @@ export function HoverPreview({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: pos.below ? -4 : 4, scale: 0.97 }}
                     transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    className="overflow-hidden rounded-[16px] border border-white/12 bg-[#1b1820]/95 p-1.5 shadow-[0_24px_60px_-18px_rgb(0_0_0/0.85)] backdrop-blur-xl"
+                    className="overflow-hidden rounded-[16px] border border-white/12 bg-[#1b1820] p-1.5 shadow-[0_24px_60px_-18px_rgb(0_0_0/0.85)]"
                   >
                     <div className="relative overflow-hidden rounded-[11px] bg-black" style={{ aspectRatio: frame }}>
                       {media ?? (src ? <video src={src} autoPlay muted loop playsInline className="absolute inset-0 size-full object-cover" /> : null)}

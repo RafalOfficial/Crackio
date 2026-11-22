@@ -37,18 +37,18 @@ export const codeHash = (code: string) =>
     .digest("hex");
 
 async function load(): Promise<CodesFile> {
-  const stat = await fs.stat(FILE).catch(() => null);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ FILE).catch(() => null);
   if (!stat) return { version: 1, codes: {} };
   // The codes script may have added one while the server runs.
   if (g.__crackioDemoCodes && g.__crackioDemoCodes.mtime === stat.mtimeMs) return g.__crackioDemoCodes.file;
-  const file = JSON.parse(await fs.readFile(FILE, "utf8")) as CodesFile;
+  const file = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ FILE, "utf8")) as CodesFile;
   g.__crackioDemoCodes = { file, mtime: stat.mtimeMs };
   return file;
 }
 
 async function save(file: CodesFile) {
   await writeFileAtomic(FILE, JSON.stringify(file, null, 2));
-  const stat = await fs.stat(FILE).catch(() => null);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ FILE).catch(() => null);
   g.__crackioDemoCodes = { file, mtime: stat?.mtimeMs ?? 0 };
 }
 
@@ -74,8 +74,8 @@ export async function codeById(id: string): Promise<(DemoCode & { left: number }
 }
 
 async function note(entry: Record<string, unknown>) {
-  await fs.mkdir(DIR, { recursive: true });
-  await fs.appendFile(LEDGER, `${JSON.stringify({ t: Date.now(), ...entry })}\n`);
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+  await fs.appendFile(/*turbopackIgnore: true*/ LEDGER, `${JSON.stringify({ t: Date.now(), ...entry })}\n`);
 }
 
 /** Takes `credits` from a code for a job (a generation id), or says how many it has left. */

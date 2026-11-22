@@ -64,8 +64,13 @@ function rgb(hex: string): [number, number, number] {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
-export function Aurora({ hues, className }: { hues: [string, string]; className?: string }) {
+export function Aurora({ hues, className, slow = false }: { hues: [string, string]; className?: string; slow?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  // Half the frames while a glass drawer covers most of it: the drawer blurs whatever moves under it, every frame.
+  const pace = useRef(slow ? FRAME_MS * 2 : FRAME_MS);
+  useEffect(() => {
+    pace.current = slow ? FRAME_MS * 2 : FRAME_MS;
+  }, [slow]);
   const target = useRef({ a: rgb(hues[0]), b: rgb(hues[1]) });
   const redraw = useRef<(() => void) | null>(null);
   // The colours it eases to (and, for reduced motion, one more frame in them).
@@ -141,7 +146,7 @@ export function Aurora({ hues, className }: { hues: [string, string]; className?
     const loop = (ms: number) => {
       raf = 0;
       if (!visible || document.hidden) return;
-      if (ms - last >= FRAME_MS) {
+      if (ms - last >= pace.current) {
         last = ms;
         draw(ms);
       }

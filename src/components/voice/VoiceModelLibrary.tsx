@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useDeferredValue, useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { ArrowUpRight, AudioLines, Cpu, Download, LoaderCircle, Pause, Play, Search, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ArrowUpRight, Cpu, Download, LoaderCircle, Pause, Play, Search, Sparkles, TriangleAlert, X } from "lucide-react";
 import { Banner, CardGrid, Empty, LibraryCard, LibraryDrawer, Section, TabButton, useLibraryClose, useTouch, type Card, type Tab, type TabItem } from "@/components/models/ModelLibrary";
 import { ScrollRow } from "@/components/ui/ScrollRow";
 import { useNow } from "@/lib/hooks/use-now";
@@ -10,6 +10,7 @@ import { useVoiceStore } from "@/lib/hooks/use-voice";
 import { HEARING, VOICE_MODELS, gbOf, variantFor, type VoiceModel, type VoiceModelId } from "@/lib/voice/models";
 import type { VoiceMachine } from "@/lib/voice/types";
 import { Sky } from "./Orb";
+import { VoiceModelMark } from "./ModelMark";
 import { usePlayer } from "./player";
 import { cn } from "@/lib/cn";
 
@@ -47,30 +48,8 @@ export function VoiceModelLibrary({
   );
 }
 
-/**
- * A voice model's mark: the same plain sound mark for every one, its maker named in text beside it (no makers' logos:
- * Drama 3's licence allows Fish Audio's name but forbids its logo, and Crackio carries no other brands either).
- */
-export function VoiceModelMark({ model, size = 20, variant = "tile" }: { model: VoiceModel; size?: number; variant?: "tile" | "bare" }) {
-  const radius = Math.round(size * 0.28);
-  if (model.card.logo) {
-    return (
-      // A small logo; a plain img keeps it crisp and cheap.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={model.card.logo} alt="" aria-hidden="true" draggable={false} className="squircle shrink-0 object-cover shadow-[0_0_0_1px_rgb(255_255_255/0.1)]" style={{ width: size, height: size, borderRadius: radius }} />
-    );
-  }
-  const glyph = <AudioLines size={Math.round(size * (variant === "bare" ? 0.9 : 0.52))} strokeWidth={2.3} />;
-  return variant === "bare" ? (
-    <span className="inline-grid shrink-0 place-items-center text-paper" style={{ width: size, height: size }} aria-hidden="true">
-      {glyph}
-    </span>
-  ) : (
-    <span className="squircle inline-grid shrink-0 place-items-center bg-paper text-[#16131b] shadow-[0_0_0_1px_rgb(255_255_255/0.1)]" style={{ width: size, height: size, borderRadius: radius }} aria-hidden="true">
-      {glyph}
-    </span>
-  );
-}
+// The mark lives in ModelMark.tsx (chips show it without loading this library); kept importable from here.
+export { VoiceModelMark };
 
 const LICENCE = { yes: "Commercial OK", limited: "Commercial, with limits", no: "Non-commercial" } as const;
 

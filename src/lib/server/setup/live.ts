@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { comfyTargets, isHere, type ComfyTarget } from "../comfy-targets";
 import { allLocalModels } from "../local-templates";
-import { sshRun } from "../ssh";
+import { sshRun, viaJupyter } from "../ssh";
 import type { LiveGpu } from "@/lib/setup/types";
 
 /**
@@ -39,7 +39,8 @@ function parseSmi(out: string): Heat | null {
 /** A rented box's nvidia-smi over SSH, every 12 s at most (its helper doesn't say the temperature). */
 function sshHeat(t: ComfyTarget): Promise<Heat | null> {
   const login = t.cloud?.ssh;
-  if (!login) return Promise.resolve(null);
+  // A pod with no SSH straight in runs scripts through its JupyterLab: seconds each, too slow to ask every 12 s.
+  if (!login || viaJupyter(login)) return Promise.resolve(null);
   const hit = heats.get(t.id);
   if (hit && Date.now() - hit.at < 12_000) return hit.value;
   const value = sshRun(login, `nvidia-smi ${QUERY} --format=csv,noheader,nounits`, { timeoutMs: 8000 })

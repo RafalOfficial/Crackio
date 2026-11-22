@@ -25,14 +25,14 @@ import type { VoiceAsk, VoiceCard, VoiceHeard } from "@/lib/voice/types";
  */
 
 type Graph = Record<string, { class_type: string; inputs: Record<string, unknown> }>;
-const TMP = path.join(DATA_DIR, "cache", "voice");
+const TMP = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "voice");
 
 /** A take that missed more than this share of the script's words is made again (once). */
 const REDO_ABOVE = 0.3;
 
 async function tmpFile(ext: string) {
-  await fs.mkdir(TMP, { recursive: true });
-  return path.join(TMP, `${nanoid(10)}${ext}`);
+  await fs.mkdir(/*turbopackIgnore: true*/ TMP, { recursive: true });
+  return path.join(/*turbopackIgnore: true*/ TMP, `${nanoid(10)}${ext}`);
 }
 
 /** Lively, as the Drama 3 port's temperature: 0 keeps its own (natural). */
@@ -87,7 +87,7 @@ export async function runVoice(gen: Generation, ctx: EngineContext): Promise<{ o
           const wav = await tmpFile(".wav");
           await toWav(src, wav, { rate: 24000, signal: ctx.signal });
           const up = await withTarget(place.target, () => uploadFile(wav, ctx.signal, "voice"));
-          await fs.rm(wav, { force: true });
+          await fs.rm(/*turbopackIgnore: true*/ wav, { force: true });
           return up.name;
         }),
       )
@@ -142,7 +142,17 @@ export async function runVoice(gen: Generation, ctx: EngineContext): Promise<{ o
   const expected = 6000 + seconds * perSecond * ((place.machine.gpuGb ?? 8) >= 24 ? 1 : 3);
 
   const take = async (seed: number) => {
-    const { files } = await withTarget(place.target, () => runWorkflow(build(seed), ctx, expected, `Voice · ${model.name}`));
+    const run = () => withTarget(place.target, () => runWorkflow(build(seed), ctx, expected, `Voice · ${model.name}`));
+    const { files } = await run().catch(async (err: unknown) => {
+      // The voice engine (audio.cpp) is its own program: ComfyUI can't make room for it as it does for its own models. A
+      // picture model or an upscaler the job before left in the card's memory can leave too little (found on a 24 GB
+      // card after a SeedVR2 upscale). ComfyUI lets go of what it holds, and the take runs once more.
+      const said = err instanceof Error ? `${err.message} ${err instanceof EngineError ? (err.hint ?? "") : ""}` : "";
+      if (ctx.signal?.aborted || !/out of memory/i.test(said)) throw err;
+      ctx.progress(0.05, "Making room on the GPU");
+      await withTarget(place.target, () => import("../train/comfy").then((m) => m.postJson("/free", { unload_models: true, free_memory: true }, 10_000))).catch(() => null);
+      return run();
+    });
     const sound = files.find((f) => /\.(flac|wav|mp3|ogg|opus)$/i.test(f.filename));
     if (!sound) throw new EngineError("ComfyUI made no sound.", "Try again.");
     const [audio, words, heard] = await withTarget(place.target, () =>
@@ -177,9 +187,9 @@ export async function runVoice(gen: Generation, ctx: EngineContext): Promise<{ o
   const raw = await tmpFile(result.ext || ".flac");
   const wav = await tmpFile(".wav");
   try {
-    await fs.writeFile(raw, result.audio.data);
+    await fs.writeFile(/*turbopackIgnore: true*/ raw, result.audio.data);
     await toWav(raw, wav, { rate: 44100, signal: ctx.signal });
-    const [data, peaks] = await Promise.all([fs.readFile(wav), peaksOf(wav)]);
+    const [data, peaks] = await Promise.all([fs.readFile(/*turbopackIgnore: true*/ wav), peaksOf(wav)]);
     return {
       outputs: [{ data, mime: "audio/wav" }],
       heard: { words: result.words, peaks, heard: result.heard || undefined, missed: result.missed, ...(redone ? { redone } : {}) },
@@ -188,6 +198,6 @@ export async function runVoice(gen: Generation, ctx: EngineContext): Promise<{ o
       modelName: `${model.name}${place.machine.gpu ? ` · ${place.machine.gpu}` : ""}`,
     };
   } finally {
-    await Promise.all([fs.rm(raw, { force: true }), fs.rm(wav, { force: true })]);
+    await Promise.all([fs.rm(/*turbopackIgnore: true*/ raw, { force: true }), fs.rm(/*turbopackIgnore: true*/ wav, { force: true })]);
   }
 }

@@ -9,17 +9,25 @@ import { cn } from "@/lib/cn";
 const prices = new Map<string, Promise<Pricing>>();
 const refining = (p: Pricing) => "refining" in p && Boolean(p.refining);
 
+const NONE: Promise<Pricing> = Promise.resolve({ kind: "none" });
+
 function pricingOf(id: string, fresh = false): Promise<Pricing> {
+  // Open models on your own GPUs cost nothing: no need to ask the server about them.
+  if (id.startsWith("local:")) return NONE;
   let p = fresh ? undefined : prices.get(id);
   if (!p) {
+    let failed = false;
     p = fetch(`/api/models/price?id=${encodeURIComponent(id)}`, { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ pricing?: Pricing }>)
+      .then((r) => (r.ok ? (r.json() as Promise<{ pricing?: Pricing }>) : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => d.pricing ?? { kind: "none" as const })
-      .catch(() => ({ kind: "none" as const }));
+      .catch(() => {
+        failed = true;
+        return { kind: "none" as const };
+      });
     const mine = p;
     prices.set(id, mine);
-    // Prices change rarely; ask again after a while, or soon when none (or only a base rate) came back.
-    void mine.then((v) => setTimeout(() => prices.get(id) === mine && prices.delete(id), v.kind === "none" || refining(v) ? 30_000 : 10 * 60_000));
+    // Prices change rarely: asked again after a while, or soon when none, no answer or only a base rate came back.
+    void mine.then((v) => setTimeout(() => prices.get(id) === mine && prices.delete(id), failed || v.kind === "none" || refining(v) ? 30_000 : 10 * 60_000));
   }
   return p;
 }
@@ -102,6 +110,8 @@ export function CostLine({
     };
   }, [quoteKey]);
 
+  // While the next quote is out, the last one stays (dimmed), so the line above Generate doesn't vanish and come back.
+  const fresh = current?.kind === "quote" && quoted?.key === quoteKey;
   if (!modelId || !current || current.kind === "none") return null;
   if (current.kind === "plan") {
     return (
@@ -110,10 +120,16 @@ export function CostLine({
       </p>
     );
   }
-  const cost = current.kind === "quote" ? (quoted?.key === quoteKey ? quoted.cost : null) : estimateCost(current, input);
+  const lastQuote = quoted && quoted.key.startsWith(`{"id":${JSON.stringify(modelId)},`) ? quoted.cost : null;
+  const cost = current.kind === "quote" ? (fresh ? quoted!.cost : lastQuote) : estimateCost(current, input);
   if (!cost) return null;
+  const stale = current.kind === "quote" && !fresh;
   return (
-    <p className={cn("flex min-w-0 items-center justify-between gap-3 px-1 text-[12px] text-haze", className)} aria-live="polite">
+    <p
+      className={cn("flex min-w-0 items-center justify-between gap-3 px-1 text-[12px] text-haze transition-opacity duration-200", stale && "opacity-60", className)}
+      aria-live="polite"
+      aria-busy={stale || undefined}
+    >
       <span className="inline-flex shrink-0 items-center gap-1.5">
         <CircleDollarSign size={13} className="shrink-0" />
         <span>

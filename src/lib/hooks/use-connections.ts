@@ -13,24 +13,33 @@ type ConnectionsState = {
   refresh: () => Promise<void>;
 };
 
-const useConnectionsStore = create<ConnectionsState>((set) => ({
+/** One look at a time: a second ask while one is out gets the same answer. */
+let out: Promise<void> | null = null;
+
+const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   loaded: false,
   error: null,
   providers: [],
-  refresh: async () => {
-    try {
-      const res = await fetch("/api/connections", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
-      if (!res.ok) throw new Error(`The server answered ${res.status}.`);
-      const data = (await res.json()) as { providers: ConnectionStatus[] };
-      set({ providers: data.providers, loaded: true, error: null });
-    } catch (err) {
-      const e = err as Error;
-      set({ loaded: true, error: e.name === "TimeoutError" ? "The server took too long to answer." : e.message });
-    }
-  },
+  refresh: () =>
+    (out ??= (async () => {
+      try {
+        const res = await fetch("/api/connections", { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+        if (!res.ok) throw new Error(`The server answered ${res.status}.`);
+        const data = (await res.json()) as { providers: ConnectionStatus[] };
+        // The same answer keeps its objects, so nothing that shows it draws again.
+        if (get().loaded && !get().error && JSON.stringify(data.providers) === JSON.stringify(get().providers)) return;
+        set({ providers: data.providers, loaded: true, error: null });
+      } catch (err) {
+        const e = err as Error;
+        set({ loaded: true, error: e.name === "TimeoutError" ? "The server took too long to answer." : e.message });
+      } finally {
+        out = null;
+      }
+    })()),
 }));
 
-export const refreshConnections = () => useConnectionsStore.getState().refresh();
+/** Looks again, when anything on this page has shown the connections (otherwise the next one to show them asks). */
+export const refreshConnections = () => (started ? useConnectionsStore.getState().refresh() : Promise.resolve());
 
 let started = false;
 

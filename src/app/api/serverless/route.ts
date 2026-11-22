@@ -42,7 +42,9 @@ export async function POST(request: Request) {
   const own = demoFull() ? (await request.clone().json().catch(() => ({}))) as { endpointId?: string } : null;
   const visitorsOwn = own?.endpointId ? !(await serverlessEndpoints()).find((e) => e.endpointId === own.endpointId)?.fromEnv : false;
   if (!fromHere(request) && !visitorsOwn) return Response.json({ error: "Only from this computer." }, { status: 403 });
-  const body = Body.parse(await request.json());
+  const parsed = Body.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return Response.json({ error: "Invalid request" }, { status: 400 });
+  const body = parsed.data;
   const ep = (await serverlessEndpoints()).find((e) => e.endpointId === body.endpointId);
   if (!ep) return Response.json({ error: "No such endpoint." }, { status: 404 });
   if (body.action === "list") return Response.json(await serverlessInfo(ep, true));

@@ -20,26 +20,26 @@ import { graphSettings, leak, mainStep, scrub, type JobRecipe, type RecipeStep }
  * Recipes are shown and shared, so nothing private goes in: machines by a key, not their id (which carries their address),
  * and every string is scrubbed of links, addresses, keys, logins and paths before it's kept (`scrub`, then `leak` as a check).
  */
-export const RECIPES_DIR = path.join(DATA_DIR, "recipes");
+export const RECIPES_DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "recipes");
 
 // On globalThis: a job that started before a code reload records into the same store the new code reads.
 const g = globalThis as unknown as { __crackioRecipeStore?: AsyncLocalStorage<RecipeStep[]>; __crackioMachineSalt?: Buffer };
 const store = (g.__crackioRecipeStore ??= new AsyncLocalStorage<RecipeStep[]>());
 
-const fileFor = (id: string) => (/^[\w-]{1,80}$/.test(id) ? path.join(RECIPES_DIR, `${id}.json`) : null);
+const fileFor = (id: string) => (/^[\w-]{1,80}$/.test(id) ? path.join(/*turbopackIgnore: true*/ RECIPES_DIR, `${id}.json`) : null);
 
 /** This install's secret for machine keys, made once (data/recipes/.machine-salt). */
 function salt() {
   if (g.__crackioMachineSalt) return g.__crackioMachineSalt;
-  const file = path.join(RECIPES_DIR, ".machine-salt");
+  const file = path.join(/*turbopackIgnore: true*/ RECIPES_DIR, ".machine-salt");
   let value: Buffer;
   try {
-    value = fsSync.readFileSync(file);
+    value = fsSync.readFileSync(/*turbopackIgnore: true*/ file);
     if (value.length < 16) throw new Error("short");
   } catch {
     value = randomBytes(32);
-    fsSync.mkdirSync(RECIPES_DIR, { recursive: true });
-    fsSync.writeFileSync(file, value);
+    fsSync.mkdirSync(/*turbopackIgnore: true*/ RECIPES_DIR, { recursive: true });
+    fsSync.writeFileSync(/*turbopackIgnore: true*/ file, value);
   }
   return (g.__crackioMachineSalt = value);
 }
@@ -139,7 +139,7 @@ export async function readRecipe(id: string): Promise<JobRecipe | null> {
   if (!file) return null;
   let raw: JobRecipe;
   try {
-    raw = JSON.parse(await fs.readFile(file, "utf8")) as JobRecipe;
+    raw = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ file, "utf8")) as JobRecipe;
   } catch {
     return null;
   }
@@ -164,5 +164,5 @@ export async function withMachineIds(recipe: JobRecipe): Promise<JobRecipe> {
 /** Forget a deleted item's recipe. */
 export async function dropRecipe(id: string) {
   const file = fileFor(id);
-  if (file) await fs.rm(file, { force: true }).catch(() => undefined);
+  if (file) await fs.rm(/*turbopackIgnore: true*/ file, { force: true }).catch(() => undefined);
 }

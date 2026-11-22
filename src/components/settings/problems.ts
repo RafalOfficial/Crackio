@@ -1,6 +1,7 @@
 import type { SetupMachine, SetupSnapshot } from "@/lib/setup/types";
 import { KITS } from "@/lib/setup/kits";
 import { gbText } from "./words";
+import { COMFY_FLOOR, comfyOlder } from "@/lib/local/comfy-floor";
 
 /**
  * What needs the user, worked out once from Settings' snapshot: Overview's "Needs you", the Doctor and the rail's count
@@ -10,7 +11,9 @@ export type Fix =
   | { kind: "link"; href: string; label: string }
   | { kind: "run-on-auto"; label: string }
   | { kind: "setup"; machine: string; kits: string[]; label: string }
-  | { kind: "start-comfy"; label: string };
+  | { kind: "start-comfy"; label: string }
+  /** Connect a rented box again (its ComfyUI or bridge is brought up to date on the way). */
+  | { kind: "reconnect"; provider: "vast" | "runpod"; instance: string; label: string };
 
 export type Problem = {
   id: string;
@@ -56,7 +59,38 @@ export function findProblems(snap: SetupSnapshot): Problem[] {
       tone: c.hoursLeft < 0.5 ? "problem" : "needs",
       title: `Your ${name} credit runs out around ${new Date(c.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
       why: `$${c.balance.toFixed(2)} left, and your running ${c.running === 1 ? "box costs" : "boxes cost"} $${c.perHour.toFixed(2)} an hour. When it runs out ${name} stops ${c.running === 1 ? "it" : "them"}, mid-job or not. Top up, or stop what you don't need (Machines → Cost).`,
-      fix: { kind: "link", href: c.provider === "vast" ? "https://cloud.vast.ai/billing/" : "https://www.runpod.io/console/user/billing", label: "Top up" },
+      fix: { kind: "link", href: c.provider === "vast" ? "https://cloud.vast.ai/billing/" : "https://console.runpod.io/user/billing", label: "Top up" },
+    });
+  }
+
+  // A rented box that's off because its account ran dry: the cause, where it would otherwise only read "not answering".
+  for (const m of snap.machines) {
+    const provider = m.cloud?.provider;
+    if (m.online || m.kind !== "rented" || (provider !== "vast" && provider !== "runpod")) continue;
+    const c = (snap.credit ?? []).find((x) => x.provider === provider);
+    if (!c || c.balance >= 0.1) continue;
+    const name = provider === "vast" ? "vast.ai" : "RunPod";
+    out.push({
+      id: `credit-out-${m.id}`,
+      machine: m.id,
+      tone: "problem",
+      title: `${m.label} is stopped: your ${name} credit is $${Math.max(0, c.balance).toFixed(2)}`,
+      why: `${name} stops rented boxes when the credit runs out, and keeps their disks. Top up, then start it again on ${name} or in Machines.`,
+      fix: { kind: "link", href: provider === "vast" ? "https://cloud.vast.ai/billing/" : "https://console.runpod.io/user/billing", label: "Top up" },
+    });
+  }
+
+  // A rented box whose template ships an older ComfyUI than Crackio's models need: connecting it again updates it.
+  for (const m of own) {
+    const c = m.cloud;
+    if (!m.online || m.kind !== "rented" || !comfyOlder(m.comfy.version) || !c?.instance || (c.provider !== "vast" && c.provider !== "runpod")) continue;
+    out.push({
+      id: `comfy-old-${m.id}`,
+      machine: m.id,
+      tone: "needs",
+      title: `${m.label}'s ComfyUI ${m.comfy.version} is too old for FLUX 3 Klein and MOSS-Image`,
+      why: `Crackio's models need ComfyUI ${COMFY_FLOOR} or newer. Connecting it again updates ComfyUI to its latest release and restarts it, in a few minutes.`,
+      fix: { kind: "reconnect", provider: c.provider, instance: c.instance, label: "Update ComfyUI" },
     });
   }
 

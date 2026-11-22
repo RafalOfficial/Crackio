@@ -71,7 +71,7 @@ export function WordsStep({
               mode === m.id ? "text-[#16131b]" : "bg-white/[0.04] text-fog hover:bg-white/[0.08] hover:text-paper",
             )}
           >
-            {mode === m.id ? <motion.span layoutId="words-pill" className="absolute inset-0 rounded-[12px] bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
+            {mode === m.id ? <motion.span layoutId="words-pill" layoutDependency={mode} className="absolute inset-0 rounded-[12px] bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
             <span className="relative">{m.label}</span>
           </button>
         ))}

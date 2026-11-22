@@ -109,7 +109,7 @@ for (const id of ids) {
   await fs.writeFile(raw, Buffer.from(await (await view(sound)).arrayBuffer()));
   // Trimmed of silence at both ends, small enough to load on a click.
   const trim = "silenceremove=start_periods=1:start_threshold=-48dB:start_silence=0.05";
-  execFileSync(ffmpeg, ["-v", "error", "-y", "-i", raw, "-af", `${trim},areverse,${trim},areverse`, "-ac", "1", "-ar", "44100", "-b:a", "80k", path.join(out, `${id}.mp3`)]);
+  execFileSync(ffmpeg, ["-v", "error", "-y", "-i", raw, "-af", `${trim},areverse,${trim},areverse`, "-ac", "1", "-ar", "44100", "-b:a", "80k", "-map_metadata", "-1", path.join(out, `${id}.mp3`)]);
   const text = heard ? (await (await view(heard)).text()).trim() : "";
   const { size } = await fs.stat(path.join(out, `${id}.mp3`));
   console.log(`${id}  ${(size / 1024).toFixed(0)} KB  heard: ${text}`);

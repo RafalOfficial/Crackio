@@ -63,7 +63,7 @@ async function routeFor(model: VoiceModelId, name: string): Promise<Route> {
 /** Words that make a voice's name a description ("Deep narrator", "My voice"), not someone to be. */
 const DESCRIBES = /\b(narrator|voice|announcer|speaker|presenter|host|robot|clone|sample|recording|take|test|deep|soft|warm|old|young|man|woman|girl|boy|guy|lady|kid|my|the)\b/i;
 
-/** A voice's name when it's a person's ("Mara", "Rafał", "Mary Jane"): LFM3 answers as them (lfm3Chat's `name`). */
+/** A voice's name when it's a person's ("Mara", "Lena", "Mary Jane"): LFM3 answers as them (lfm3Chat's `name`). */
 function personaOf(name?: string) {
   const n = (name ?? "").trim();
   if (n.length < 2 || n.length > 24 || DESCRIBES.test(n)) return undefined;
@@ -99,7 +99,7 @@ async function referenceOf(target: ComfyTarget, voiceId: string, signal: AbortSi
   if (!v) throw new TalkError("That voice is gone: pick another one.");
   const sample = urlToPath(v.sample);
   if (!sample) throw new TalkError(`${v.name}'s sample is missing.`);
-  const wav = path.join(os.tmpdir(), `crackio-talk-${nanoid(8)}.wav`);
+  const wav = path.join(/*turbopackIgnore: true*/ os.tmpdir(), `crackio-talk-${nanoid(8)}.wav`);
   try {
     await toWav(sample, wav, { rate: 24000, signal });
     const up = await withTarget(target, () => uploadFile(wav, signal, "voice"));
@@ -107,7 +107,7 @@ async function referenceOf(target: ComfyTarget, voiceId: string, signal: AbortSi
     refs.set(key, ref);
     return ref;
   } finally {
-    await fs.rm(wav, { force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ wav, { force: true }).catch(() => {});
   }
 }
 

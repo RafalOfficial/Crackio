@@ -65,10 +65,10 @@ export async function burnCaptions(video: Buffer, said: Transcript | null, { off
   if (!font || !said?.words.length) return video;
   const lines = captionLines(said);
   if (!lines.length) return video;
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-captions-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-captions-"));
   try {
-    const src = path.join(dir, "in.mp4");
-    await fs.writeFile(src, video);
+    const src = path.join(/*turbopackIgnore: true*/ dir, "in.mp4");
+    await fs.writeFile(/*turbopackIgnore: true*/ src, video);
     const info = await probe(src);
     const W = info.width ?? 1080;
     const H = info.height ?? 1920;
@@ -77,22 +77,22 @@ export async function burnCaptions(video: Buffer, said: Transcript | null, { off
     const y = tall ? 0.64 : 0.76;
     const filters: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const file = path.join(dir, `c${i}.txt`);
-      await fs.writeFile(file, lines[i].text);
+      const file = path.join(/*turbopackIgnore: true*/ dir, `c${i}.txt`);
+      await fs.writeFile(/*turbopackIgnore: true*/ file, lines[i].text);
       const a = Math.max(0, lines[i].start + offset).toFixed(3);
       const b = Math.max(0, lines[i].end + offset).toFixed(3);
       filters.push(
         `drawtext=fontfile='${filterPath(font)}':textfile='${filterPath(file)}':fontsize=${size}:fontcolor=white:borderw=${Math.max(2, Math.round(size * 0.11))}:bordercolor=black@0.9:shadowcolor=black@0.35:shadowx=0:shadowy=${Math.round(size * 0.06)}:x=(w-text_w)/2:y=h*${y}-text_h/2:enable='between(t,${a},${b})'`,
       );
     }
-    const out = path.join(dir, "out.mp4");
+    const out = path.join(/*turbopackIgnore: true*/ dir, "out.mp4");
     const run = await runFfmpeg(["-y", "-i", src, "-vf", filters.join(","), "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", out]);
     if (run.code !== 0) {
       console.warn(`[film] captions failed: ${run.stderr.split("\n").filter(Boolean).slice(-2).join(" ")}`);
       return video;
     }
-    return fs.readFile(out);
+    return fs.readFile(/*turbopackIgnore: true*/ out);
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
   }
 }

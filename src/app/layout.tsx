@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Funnel_Display, Funnel_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { MOTION_SCRIPT } from "@/lib/motion-script";
 
 const display = Funnel_Display({ variable: "--font-funnel-display", subsets: ["latin"], display: "swap" });
 const sans = Funnel_Sans({ variable: "--font-funnel-sans", subsets: ["latin"], display: "swap" });
@@ -33,6 +34,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable} h-full`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: SIZE_HINT_SCRIPT }} />
+        {/* How much Crackio moves (Settings → Preferences), on <html> before the first paint: lib/motion-pref. */}
+        <script dangerouslySetInnerHTML={{ __html: MOTION_SCRIPT }} />
       </head>
       <body className="min-h-full">{children}</body>
     </html>

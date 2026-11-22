@@ -22,7 +22,7 @@ export async function DELETE(req: Request, ctx: RouteContext<"/api/generations/[
   await Promise.all(
     item.outputs.map(async (o) => {
       const p = urlToPath(o.url);
-      if (p) await Promise.all([fs.rm(p, { force: true }), forgetPreviews(p)]);
+      if (p) await Promise.all([fs.rm(/*turbopackIgnore: true*/ p, { force: true }), forgetPreviews(p)]);
     }),
   );
   deleteGeneration(id);

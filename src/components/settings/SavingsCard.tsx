@@ -24,7 +24,9 @@ export function SavingsCard({ days }: { days: number | null }) {
       live = false;
     };
   }, [days]);
-  if (!data || !data.takes) return null;
+  // Its place is held while the numbers come, so the page under it doesn't jump when they land.
+  if (!data) return <div className="skeleton h-[280px] rounded-[22px]" aria-hidden="true" />;
+  if (!data.takes) return null;
   const saved = data.api - data.here;
   const rows = data.byTool.filter((r) => r.api >= 0.01 || r.here >= 0.01).slice(0, 8);
   const max = Math.max(...rows.map((r) => Math.max(r.api, r.here)), 0.01);

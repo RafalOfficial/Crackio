@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, CloudLightning, ExternalLink, LoaderCircle } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/cn";
+import { ConfirmButton, Heading, Lamp } from "./parts";
 
 type Endpoint = { endpointId: string; label: string; removable: boolean; ok: boolean; jobs: number; gpu: string | null; comfyui: string | null; files: { folder: string; name: string; bytes: number }[] };
 
@@ -12,17 +14,16 @@ const DOCS = "https://github.com/RafalOfficial/Crackio/blob/main/docs/SERVERLESS
 const LINK = "inline-flex items-center gap-0.5 font-semibold text-fog underline decoration-white/20 underline-offset-2 hover:text-paper";
 
 /**
- * Connections → ComfyUI: Comfy Cloud, right under the Comfy key it runs on. Crackio's own ComfyUI graphs on Comfy's GPUs, for
- * your Comfy credits. A different service from RunPod Serverless (below), which runs them on your RunPod account.
+ * Accounts → Make things in the cloud: Comfy Cloud, right under the Comfy key it runs on, laid out like the key rows above
+ * it. Crackio's own ComfyUI graphs on Comfy's GPUs, for your Comfy credits. A different service from RunPod Serverless
+ * (below), which runs them on your RunPod account.
  */
 export function ComfyCloudRow({ hasKey }: { hasKey: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 p-4">
-      <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-white/[0.05] text-fog">
-        <CloudLightning size={18} />
-      </span>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+      <Lamp tone={hasKey ? "ready" : "off"} />
       <div className="min-w-0 flex-1">
-        <h3 className="text-[15px] font-semibold">Comfy Cloud</h3>
+        <h3 className="text-[14.5px] font-semibold text-paper">Comfy Cloud</h3>
         <p className="mt-0.5 max-w-[80ch] text-[13px] leading-relaxed text-haze">
           {hasKey ? (
             <>
@@ -39,13 +40,15 @@ export function ComfyCloudRow({ hasKey }: { hasKey: boolean }) {
 }
 
 /**
- * Connections → RunPod Serverless: your own endpoints running Crackio's ComfyUI worker, on your RunPod key (GPUs, above) or the
- * server's. Each joins your machines: pick it under Run on, install models on it from Local. Anyone on the network sees them;
- * adding and removing them happens on the computer Crackio runs on.
+ * Accounts → RunPod Serverless: your own endpoints running Crackio's ComfyUI worker, on your RunPod key (Rent GPUs, above)
+ * or the server's. Each joins your machines: pick it under Run on, set tools up on it in Settings → Tools. Anyone on the
+ * network sees them; adding and removing them happens on the computer Crackio runs on.
  */
 export function ServerlessConnections() {
   const [list, setList] = useState<Endpoint[] | null>(null);
-  const [hasKey, setHasKey] = useState(false);
+  // The same settings Accounts' key rows save: a RunPod key added above counts here at once.
+  const { settings } = useSettings();
+  const hasKey = Boolean(settings?.keys.runpod?.saved);
   const [serverKey, setServerKey] = useState(false);
   const [here, setHere] = useState(true);
   const [id, setId] = useState("");
@@ -55,14 +58,12 @@ export function ServerlessConnections() {
 
   const load = useCallback(async () => {
     const none: { endpoints: Endpoint[]; here?: boolean; serverKey?: boolean } = { endpoints: [] };
-    const [eps, settings] = await Promise.all([
-      fetch("/api/serverless", { cache: "no-store" }).then((r) => (r.ok ? (r.json() as Promise<typeof none>) : none)),
-      fetch("/api/settings", { cache: "no-store" }).then((r) => r.json() as Promise<{ keys: Record<string, { saved: boolean } | undefined> }>),
-    ]).catch(() => [none, { keys: {} as Record<string, { saved: boolean } | undefined> }] as const);
+    const eps = await fetch("/api/serverless", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<typeof none>) : none))
+      .catch(() => none);
     setList(eps.endpoints);
     setHere(eps.here ?? true);
     setServerKey(Boolean(eps.serverKey));
-    setHasKey(Boolean(settings.keys.runpod?.saved));
   }, []);
 
   useEffect(() => {
@@ -91,10 +92,9 @@ export function ServerlessConnections() {
   const keyed = hasKey || serverKey;
 
   return (
-    <section className="mt-10">
-      <h2 className="text-[16px] font-semibold">RunPod Serverless</h2>
-      <p className="mt-1 max-w-[80ch] text-[13.5px] text-haze">A GPU that runs only while your job runs, paid by the second. Good when you have no GPU of your own.</p>
-      <details className="group mt-2 max-w-[80ch]">
+    <div className="space-y-3">
+      <Heading title="RunPod Serverless" note="A GPU that runs only while your job runs, paid by the second. Good when you have no GPU of your own." />
+      <details className="group max-w-[80ch]">
         <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[13px] font-semibold text-fog hover:text-paper [&::-webkit-details-marker]:hidden">
           <ChevronRight size={14} className="transition-transform group-open:rotate-90" />
           How to set it up
@@ -112,7 +112,7 @@ export function ServerlessConnections() {
             <a href="https://console.runpod.io/user/settings" target="_blank" rel="noreferrer" className={LINK}>
               API key
             </a>{" "}
-            and paste it under GPUs, above.
+            and paste it under Rent GPUs, above.
           </li>
           <li>
             Deploy Crackio&rsquo;s worker as a Serverless endpoint (
@@ -127,7 +127,7 @@ export function ServerlessConnections() {
           Measured on an RTX 4090: about $0.02 a picture from a cold start, $0.001 once it&rsquo;s warm, $0.06 for a 2-second 720p clip.
         </p>
       </details>
-      <Panel className="mt-3 divide-y divide-line">
+      <Panel className="divide-y divide-line">
         {(list ?? []).map((ep) => (
           <div key={ep.endpointId} className="flex flex-wrap items-center gap-3 p-4">
             <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-white/[0.05] text-fog">
@@ -147,9 +147,9 @@ export function ServerlessConnections() {
             {!ep.removable ? (
               <span className="text-[12.5px] text-haze">Set by this server</span>
             ) : here ? (
-              <button onClick={() => void remove(ep.endpointId)} className="press text-[12.5px] font-semibold text-fog hover:text-tally">
+              <ConfirmButton look="text" confirm={`Remove ${ep.label}`} onConfirm={() => remove(ep.endpointId)} className="press text-[12.5px] font-semibold text-fog hover:text-tally">
                 Remove
-              </button>
+              </ConfirmButton>
             ) : null}
           </div>
         ))}
@@ -172,7 +172,7 @@ export function ServerlessConnections() {
             <button
               type="submit"
               disabled={!id.trim() || busy || !keyed}
-              title={keyed ? undefined : "Add your RunPod key under GPUs, above, first"}
+              title={keyed ? undefined : "Add your RunPod key under Rent GPUs, above, first"}
               className="press inline-flex h-10 items-center gap-1.5 rounded-btn bg-spike px-5 text-[13px] font-bold text-spike-ink hover:bg-spike-hi disabled:opacity-40"
             >
               {busy ? <LoaderCircle size={14} className="animate-spin" /> : null}
@@ -181,7 +181,7 @@ export function ServerlessConnections() {
             <a href="https://console.runpod.io/serverless" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-fog hover:text-paper">
               RunPod console <ExternalLink size={13} />
             </a>
-            {!keyed ? <p className="w-full text-[12.5px] text-haze">Add your RunPod key under GPUs, above, first.</p> : null}
+            {!keyed ? <p className="w-full text-[12.5px] text-haze">Add your RunPod key under Rent GPUs, above, first.</p> : null}
             {error ? <p className="w-full text-[12.5px] text-tally">{error}</p> : null}
           </form>
         ) : (
@@ -190,6 +190,6 @@ export function ServerlessConnections() {
           </p>
         )}
       </Panel>
-    </section>
+    </div>
   );
 }

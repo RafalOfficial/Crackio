@@ -68,8 +68,11 @@ export const MODELS: ModelDef[] = [
   local({ kind: "image", model: "z-image-turbo", name: "Z-Image Turbo (your GPU)", vendor: "Tongyi-MAI", maxRefs: 0, speed: "fast", bestFor: "Photoreal pictures from words, free on your own GPU." }),
   local({ kind: "image", model: "qwen-director", name: "Qwen Director (your GPU)", vendor: "Alibaba Qwen + Alibaba PAI", maxRefs: 4, speed: "medium", bestFor: "The Director’s shots that keep your cast’s faces and clothes from their pictures (a depth ControlNet)." }),
   local({ kind: "image", model: "qwen-angles", name: "Qwen Angles (your GPU)", vendor: "Alibaba Qwen + lilylilith + gribbliest", maxRefs: 2, speed: "fast", bestFor: "Angles’ re-shoots: your photo seen from the camera you picked in its 3D view (two camera LoRAs)." }),
+  local({ kind: "image", model: "director-world", name: "Director 3D World (your GPU)", vendor: "Alibaba Qwen + lilylilith + Microsoft + nomadoor", maxRefs: 2, speed: "medium", bestFor: "The Director’s shots from anywhere on your photo’s 3D set: MoGe-3 measures it, Panorama Studio renders your Camera’s view, Qwen re-shoots your photo from there." }),
   local({ kind: "image", model: "z-image-director", name: "Z-Image Director (your GPU)", vendor: "Tongyi-MAI + Alibaba PAI", maxRefs: 0, speed: "fast", bestFor: "The Director’s shots: your set drawn as a real, cinematic film still (a depth ControlNet)." }),
   local({ kind: "image", model: "flux2-klein-4b", name: "FLUX.2 klein 4B (your GPU)", vendor: "Black Forest Labs", maxRefs: 4, speed: "fast", bestFor: "Pictures and edits from up to 4 references, free on your own GPU; the lightest good one for small cards." }),
+  local({ kind: "image", model: "flux2-klein-base-4b-360", name: "FLUX.2 klein 360 (your GPU)", vendor: "Black Forest Labs + nomadoor", maxRefs: 4, speed: "medium", bestFor: "The Director's 360 places: the whole place drawn around your photo by a LoRA trained for exactly that, free on your own GPU." }),
+  local({ kind: "image", model: "qwen-image-2.1-360", name: "Qwen-Image 2.1 360 (your GPU)", vendor: "Alibaba Qwen + nomadoor", maxRefs: 4, speed: "slow", bestFor: "The Director's 360 places the challenge winner's way: Qwen-Image 2.1 with a LoRA that fills a whole panorama around your photo, in its own style (research and non-commercial use only)." }),
 
   // ---- Upscale -------------------------------------------------------------
   comfy({ kind: "upscale", model: "fal/crystal-upscaler", name: "Crystal Upscaler", vendor: "fal", maxRefs: 1, speed: "fast", family: "crystal", runnable: true, bestFor: "Faithful 2–4× upscales with an optional creativity dial." }),
@@ -102,6 +105,7 @@ export const MODELS: ModelDef[] = [
   // Open weights on your own ComfyUI. (MiniMax H3's licence excludes the EU, UK, US and Korea, so it stays on Router.)
   local({ kind: "video", model: "ltx-2.5", name: "LTX-2.5 (your GPU)", vendor: "Lightricks", maxRefs: 1, speed: "fast", bestFor: "Sharp clips with sound from words or a start frame, up to 1080p." }),
   local({ kind: "video", model: "scail-2", name: "SCAIL-2 Swap (your GPU)", vendor: "Zhipu AI", maxRefs: 1, speed: "slow", bestFor: "Puts your character into a clip: its background, camera, light and motion stay." }),
+  local({ kind: "video", model: "director-video", name: "Director Video Re-shoot (your GPU)", vendor: "Lightricks + Microsoft + nomadoor", maxRefs: 1, speed: "slow", bestFor: "The Director’s video mode: your video filmed again from the Camera path you set, every frame measured in 3D (MoGe-3) and finished by LTX-2.5 with Layout to Render." }),
   local({ kind: "video", model: "ltx-2.5-ripple", name: "LTX-2.5 Ripple Swap (your GPU)", vendor: "Lightricks", maxRefs: 3, speed: "medium", bestFor: "Swaps a person, pet, car or object in a clip: the first frame redrawn with your Cast, carried through every frame." }),
   local({ kind: "video", model: "wan2.2-5b", name: "Wan 2.2 5B (your GPU)", vendor: "Alibaba", maxRefs: 1, speed: "medium", bestFor: "The small open Wan: 720p clips from words or a start frame on an 8–12 GB card." }),
 
@@ -118,12 +122,16 @@ export const MODELS: ModelDef[] = [
   { id: "local:lfm3", kind: "text", providers: ["comfy-local"], model: "lfm3", name: "LFM3-VL 2B on your GPU", vendor: "Liquid AI", maxRefs: 6, speed: "fast", family: "comfy-local-text", runnable: true, bestFor: "Free and quick: Liquid AI's small vision model reads several pictures at their own size, on almost any GPU." },
   { id: "local:lfm3-judge", kind: "text", providers: ["comfy-local"], model: "lfm3-judge", name: "LFM3-VL 2B swap judge", vendor: "Liquid AI", maxRefs: 6, speed: "fast", family: "comfy-local-text", runnable: true, bestFor: "Crackio's own fine-tune of LFM3-VL that checks swap drawings: was the character fully swapped in, is the pose kept." },
   { id: "local:lfm3-retouch", kind: "text", providers: ["comfy-local"], model: "lfm3-retouch", name: "LFM3-VL 2B Retouch eyes", vendor: "Liquid AI", maxRefs: 1, speed: "fast", family: "comfy-local-text", runnable: true, bestFor: "Crackio's own fine-tune of LFM3-VL that finds the things in a picture and their parts, with boxes, for Retouch." },
+  { id: "local:lfm3-enhance", kind: "text", providers: ["comfy-local"], model: "lfm3-enhance", name: "Crackio's prompt enhancer", vendor: "Liquid AI", maxRefs: 6, speed: "fast", family: "comfy-local-text", runnable: true, bestFor: "Crackio's own fine-tune of LFM3-VL that writes your words out as a full prompt: it keeps every detail you gave and invents nothing." },
 ];
 
 export const modelById = (id: string | undefined | null) => (id ? MODELS.find((m) => m.id === id) : undefined);
 
+/** Crackio's prompt enhancer (engines/enhance): it writes your words out as a full prompt, and nothing else. */
+export const ENHANCER_TEXT = "local:lfm3-enhance";
+
 /** Text models made for one job (Swap's judge answers only its check): never in pickers, never a fallback for others. */
-export const INTERNAL_TEXT = new Set(["local:lfm3-judge", "local:lfm3-retouch"]);
+export const INTERNAL_TEXT = new Set(["local:lfm3-judge", "local:lfm3-retouch", ENHANCER_TEXT]);
 
 export const KIND_LABEL: Record<ModelKind, string> = {
   image: "Images",

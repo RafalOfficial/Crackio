@@ -54,6 +54,10 @@ const Body = z.object({
   checker: z.enum(["auto", "local", "cloud"]).optional(),
   /** How sure the judge must be before a drawing is kept (server/swap-checker); the Swap page's pick, else the setting. */
   strictness: z.enum(["strict", "normal", "lenient"]).optional(),
+  /** The machine to run on (a ComfyUI target id), when the caller picked one; else the user's Run on, then Auto. */
+  machine: z.string().max(80).optional(),
+  /** Started by an agent through Crackio's MCP (lib/agent): which one, kept on the take. */
+  agent: z.object({ client: z.string().max(40), free: z.boolean().optional() }).optional(),
   /**
    * Benchmarks: Ripple's strength and steps, EasyCache's threshold, a redrawn frame to reuse, the picture model that
    * redraws, and laying the swap onto a bigger clip at its own size (finish).
@@ -190,7 +194,9 @@ export async function POST(request: Request) {
       // The clip's own sound, laid back over the swap.
       keepSound: true,
       swap: { changes: body.changes, background, title: body.title },
+      ...(body.agent ? { agent: body.agent } : {}),
       options: {
+        ...(body.machine ? { machine: body.machine } : {}),
         resolution: body.resolution,
         duration: clip.length,
         extra: {

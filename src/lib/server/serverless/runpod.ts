@@ -42,9 +42,13 @@ async function call<T>(ep: ServerlessEndpoint, route: string, init: RequestInit 
   return JSON.parse(text) as T;
 }
 
-/** Queues a job; `executionMs` raises the endpoint's own limit for a long one (a clip, a fetch of models). */
-export const submit = (ep: ServerlessEndpoint, input: unknown, executionMs = 30 * 60_000) =>
-  call<{ id: string; status: string }>(ep, "/run", { method: "POST", body: JSON.stringify({ input, policy: { executionTimeout: executionMs, ttl: Math.max(executionMs * 2, 3_600_000) } }) });
+/**
+ * Queues a job; `executionMs` raises the endpoint's own limit for a long one (a clip, a fetch of models). `ttlMs`: how
+ * long it may wait in line for a GPU before RunPod drops it (an hour unless said; a keep-warm ping that can't start at
+ * once mustn't start a GPU minutes later, when nobody is there).
+ */
+export const submit = (ep: ServerlessEndpoint, input: unknown, executionMs = 30 * 60_000, ttlMs?: number) =>
+  call<{ id: string; status: string }>(ep, "/run", { method: "POST", body: JSON.stringify({ input, policy: { executionTimeout: executionMs, ttl: ttlMs ?? Math.max(executionMs * 2, 3_600_000) } }) });
 
 // A test server takes its status asks as POSTs.
 export const status = (ep: ServerlessEndpoint, id: string) => call<JobStatus>(ep, `/status/${encodeURIComponent(id)}`, process.env.RUNPOD_API_BASE ? { method: "POST" } : {});
@@ -55,9 +59,12 @@ export const cancel = (ep: ServerlessEndpoint, id: string) => call(ep, `/cancel/
 export const health = (ep: ServerlessEndpoint) =>
   process.env.RUNPOD_API_BASE ? Promise.resolve({}) : call<{ jobs?: Record<string, number>; workers?: Record<string, number> }>(ep, "/health", {}, 10_000);
 
-/** What RunPod charges a second for the GPU a job ran on (its serverless prices, Oct 2026), by the name the worker reports. */
+/**
+ * What RunPod charges a second for the GPU a job ran on (its serverless prices, Oct 2026), by the name the worker reports.
+ * The 4090's is what RunPod billed the endpoint's 4090 workers in November 2026 (each worker's `costPerHr`: $0.89).
+ */
 export function pricePerSecond(gpu: string | null | undefined) {
   const n = (gpu ?? "").toUpperCase();
-  const hourly = /H200/.test(n) ? 6.99 : /H100/.test(n) ? 5.39 : /B200/.test(n) ? 10.79 : /A100/.test(n) ? 2.72 : /6000 PRO|PRO 6000|BLACKWELL.*96/.test(n) ? 3.49 : /5090/.test(n) ? 1.79 : /L40|6000 ADA/.test(n) ? 1.75 : /4090/.test(n) ? 1.34 : /A6000|A40\b/.test(n) ? 1.22 : /PRO 4500/.test(n) ? 1.15 : /L4\b|A5000|3090/.test(n) ? 0.75 : /A4000|A4500|4000|2000/.test(n) ? 0.58 : 1.79;
+  const hourly = /H200/.test(n) ? 6.99 : /H100/.test(n) ? 5.39 : /B200/.test(n) ? 10.79 : /A100/.test(n) ? 2.72 : /6000 PRO|PRO 6000|BLACKWELL.*96/.test(n) ? 3.49 : /5090/.test(n) ? 1.79 : /L40|6000 ADA/.test(n) ? 1.75 : /4090/.test(n) ? 0.89 : /A6000|A40\b/.test(n) ? 1.22 : /PRO 4500/.test(n) ? 1.15 : /L4\b|A5000|3090/.test(n) ? 0.75 : /A4000|A4500|4000|2000/.test(n) ? 0.58 : 1.79;
   return hourly / 3600;
 }

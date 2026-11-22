@@ -5,8 +5,9 @@ import { nanoid } from "nanoid";
 import type { CloudGpu } from "@/lib/local/types";
 import { addedId, forgetTargets, samePlace } from "./comfy-targets";
 import { updateSettings } from "./settings";
-import { markedJson, safeLogin, SshError, sshAnswers, sshRun, sshTunnel, type SshLogin } from "./ssh";
+import { markedJson, safeLogin, SshError, sshAnswers, sshRun, sshTunnel, viaJupyter, type SshLogin } from "./ssh";
 import { boxFacts, ensurePython, installComfyOnBox, startComfyOnBox } from "./cloud-bootstrap";
+import { COMFY_FLOOR, comfyOlder } from "@/lib/local/comfy-floor";
 
 /**
  * Connecting a rented GPU (vast.ai, RunPod or any box with ComfyUI and SSH) in one step. From a pasted link or SSH
@@ -89,6 +90,8 @@ type Probe = {
   bridge: string | null;
   gpus: string[];
   python: string;
+  /** The CUDA driver's answer to cuInit: 0 when CUDA starts on the card, null without an NVIDIA driver to ask. */
+  cuda?: number | null;
 };
 
 /** Reads the box: its cloud's variables, its ComfyUI (where it lives, its port), how ComfyUI is kept running, its GPUs. */
@@ -176,9 +179,35 @@ if comfy:
         bridge = None
 
 gpus = [l.strip() for l in run("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader").splitlines() if l.strip()]
+# Whether CUDA works on the card at all: a broken host shows the card, then answers 999 (unknown error) to cuInit, or
+# fails to open a context on it (719, the card stuck in an error state; 46, busy or unavailable). With no ComfyUI
+# running, a context and 1 MB on the card too (one running has its own, which a busy-only card might refuse a second).
+cuda = None
+if gpus:
+    try:
+        import ctypes
+        lib = ctypes.CDLL("libcuda.so.1")
+        cuda = int(lib.cuInit(0))
+        if cuda == 0 and not comfy:
+            dev, ctx, ptr = ctypes.c_int(), ctypes.c_void_p(), ctypes.c_uint64()
+            cuda = int(lib.cuDeviceGet(ctypes.byref(dev), 0))
+            if cuda == 0:
+                cuda = int(lib.cuDevicePrimaryCtxRetain(ctypes.byref(ctx), dev))
+                if cuda == 0:
+                    cuda = int(lib.cuCtxSetCurrent(ctx))
+                    if cuda == 0:
+                        cuda = int(lib.cuMemAlloc_v2(ctypes.byref(ptr), ctypes.c_size_t(1 << 20)))
+                        if cuda == 0:
+                            lib.cuMemFree_v2(ptr)
+                    try:
+                        lib.cuDevicePrimaryCtxRelease_v2(dev)
+                    except Exception:
+                        pass
+    except Exception:
+        cuda = None
 pid1 = " ".join(a.decode("utf8", "replace") for a in open("/proc/1/cmdline", "rb").read().split(b"\0") if a)[:200]
 python = comfy[0]["args"][0] if comfy else ""
-print("CRACKIO_JSON " + json.dumps({"env": env, "comfy": comfy, "pid1": pid1, "supervisor": supervisor, "systemd": systemd, "manager": manager, "bridge": bridge, "gpus": gpus, "python": python}))
+print("CRACKIO_JSON " + json.dumps({"env": env, "comfy": comfy, "pid1": pid1, "supervisor": supervisor, "systemd": systemd, "manager": manager, "bridge": bridge, "gpus": gpus, "python": python, "cuda": cuda}))
 PYEOF
 `;
 
@@ -302,11 +331,11 @@ async function comfyBehindPortal(url: string, token: string): Promise<string | n
 const BRIDGE_DIR = path.join(/*turbopackIgnore: true*/ process.cwd(), "comfyui", "crackio_bridge");
 
 async function bridgeFiles() {
-  const names = (await fs.readdir(BRIDGE_DIR)).filter((f) => /\.(py|md)$/.test(f));
+  const names = (await fs.readdir(/*turbopackIgnore: true*/ BRIDGE_DIR)).filter((f) => /\.(py|md)$/.test(f));
   // LFM3-VL's config, processor settings, chat template and model code, which lfm3.py loads from its own folder.
-  names.push(...(await fs.readdir(path.join(BRIDGE_DIR, "lfm3_vl")).catch(() => [] as string[])).map((f) => `lfm3_vl/${f}`));
+  names.push(...(await fs.readdir(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ BRIDGE_DIR, "lfm3_vl")).catch(() => [] as string[])).map((f) => `lfm3_vl/${f}`));
   const files: Record<string, string> = {};
-  for (const n of names) files[n] = (await fs.readFile(path.join(BRIDGE_DIR, n))).toString("base64");
+  for (const n of names) files[n] = (await fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ BRIDGE_DIR, n))).toString("base64");
   const version = /^VERSION = "([^"]+)"/m.exec(Buffer.from(files["__init__.py"] ?? "", "base64").toString("utf8"))?.[1] ?? "0";
   return { files, version };
 }
@@ -383,6 +412,11 @@ export type ConnectRequest = Pasted & {
    * the way in that does (cloud-accounts). `say` shows what it's doing meanwhile, in the cloud's words.
    */
   untilUp?: (say: (detail: string) => void) => Promise<ConnectRequest>;
+  /**
+   * Why the box's ComfyUI isn't up, when its cloud can say (RunPod: the pod's log shows ComfyUI stopped at start, a GPU
+   * that CUDA can't start on, say): asked while Crackio waits for it, so a box that will never answer says so at once.
+   */
+  whyDown?: () => Promise<string | null>;
 };
 
 /** Starts connecting a box; the Local page follows the job's steps. */
@@ -408,6 +442,17 @@ function step(job: ConnectJob, label: string) {
 }
 
 const PROVIDER_NAME: Record<Provider, string> = { vast: "vast.ai", runpod: "RunPod", other: "Cloud GPU" };
+/** CUDA's driver errors a broken card answers with, in words. */
+const CUDA_WORDS: Record<number, string> = {
+  2: "out of memory",
+  3: "not initialized",
+  46: "busy or unavailable",
+  100: "no CUDA card",
+  101: "invalid device",
+  304: "the system call failed",
+  719: "the card is stuck in an error state",
+  999: "unknown error",
+};
 /** "cuda:0 NVIDIA GeForce RTX 5090 : cudaMallocAsync" (ComfyUI) or "NVIDIA GeForce RTX 5090, 32607 MiB" (nvidia-smi) → "RTX 5090". */
 const shortGpu = (name: string) =>
   name
@@ -450,7 +495,7 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
 
   let probe: Probe | null = null;
   if (login) {
-    const s = step(job, `Logging in to ${login.host}`);
+    const s = step(job, viaJupyter(login) ? "Logging in through its JupyterLab (the pod has no public IP, so no SSH straight in)" : `Logging in to ${login.host}`);
     // A box that just started can say "running" before its SSH answers: keep trying for two minutes (a vast.ai RTX 4090
     // timed out at first). So can a key just put on it.
     const retry = req.waitForKey ? /timed out|refused|closed by|reset by|didn't take Crackio's SSH key/i : /timed out|refused|closed by|reset by/i;
@@ -467,9 +512,16 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
       }
     }
     s.detail = probe.gpus.map(shortGpu).join(", ") || undefined;
+    // A card CUDA can't start on runs nothing (ComfyUI stops at start): no set-up fixes the cloud's machine.
+    if (typeof probe.cuda === "number" && probe.cuda !== 0) {
+      const what = CUDA_WORDS[probe.cuda];
+      throw new CloudError(
+        `This GPU doesn't work: CUDA can't start on it (error ${probe.cuda}${what ? `, ${what}` : ""}), though the card shows. That's the cloud's machine, not something Crackio can fix: delete it (it stops billing) and rent another.`,
+      );
+    }
     if (probe.env.VAST_CONTAINERLABEL || probe.env.PUBLIC_IPADDR) provider = "vast";
     else if (probe.env.RUNPOD_POD_ID) provider = "runpod";
-    // Its id at the cloud, from its own variables (vast.ai: VAST_CONTAINERLABEL "C.27395123"): a pasted box is then
+    // Its id at the cloud, from its own variables (vast.ai: VAST_CONTAINERLABEL "C.12345678"): a pasted box is then
     // known on your cloud account too, and not connected again from there.
     instance ??= /^C\.(\d+)$/.exec(probe.env.VAST_CONTAINERLABEL ?? "")?.[1] ?? (probe.env.RUNPOD_POD_ID || undefined);
     // No ComfyUI running, and no template about to start one (a CUDA, PyTorch or bare image): Crackio installs it, the
@@ -504,17 +556,25 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
       // A box just rented: its template downloads and starts ComfyUI on the first boot.
       const w = step(job, "Waiting for its ComfyUI to start");
       w.detail = "the cloud's template sets it up on the first boot";
-      const until = Date.now() + 20 * 60_000;
+      // RunPod's ComfyUI template copies ComfyUI into /workspace on the first boot, which RunPod says can take 30 minutes.
+      const until = Date.now() + 30 * 60_000;
       let skipped = false;
+      let asked = 0;
       while (!probe.comfy.length && Date.now() < until) {
         await new Promise((r) => setTimeout(r, 10_000));
+        // Stopped for good (it never comes back by itself): say why now, rather than after half an hour.
+        if (req.whyDown && Date.now() - asked > 30_000) {
+          asked = Date.now();
+          const why = await req.whyDown().catch(() => null);
+          if (why) throw new CloudError(why);
+        }
         if (!skipped && (await skipStarterDownloads(login))) {
           skipped = true;
           w.detail = "skipped the template's starter model download (Crackio installs its own)";
         }
         probe = await probeBox(login).catch(() => probe!);
       }
-      if (!probe.comfy.length) throw new CloudError("No ComfyUI started on that box in 20 minutes. Check its log on the cloud's page, or rent it with the ComfyUI template.");
+      if (!probe.comfy.length) throw new CloudError("No ComfyUI started on that box in 30 minutes. Check its log on the cloud's page, or rent it with the ComfyUI template.");
     }
   }
 
@@ -545,19 +605,31 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
     }
   };
   await look();
-  // Without SSH: a box whose template is still downloading and starting ComfyUI says so; wait for it.
-  if (!stats && !login && url && (await booting(url, token))) {
+  // Without SSH: a box whose template is still downloading and starting ComfyUI says so (a RunPod pod's says nothing,
+  // but its log says when ComfyUI stopped for good); wait for it.
+  if (!stats && !login && url && (req.whyDown || (await booting(url, token)))) {
     const w = step(job, "Waiting for its ComfyUI to start");
     w.detail = "the cloud's template sets it up on the first boot";
     const until = Date.now() + 20 * 60_000;
+    let asked = 0;
     while (!stats && Date.now() < until) {
       await new Promise((r) => setTimeout(r, 10_000));
       await look();
+      if (!stats && req.whyDown && Date.now() - asked > 30_000) {
+        asked = Date.now();
+        const why = await req.whyDown().catch(() => null);
+        if (why) throw new CloudError(why);
+      }
     }
     s = step(job, "Finding its ComfyUI");
   }
   // A ComfyUI that's still loading its nodes answers nobody yet, not even on the box: wait for it there, then look again.
   if (!stats && probe && login && (await waitInside(login, probe.comfy[0].port))) await look();
+  // RunPod's proxy takes a new pod into its routing 10–30 s after it starts, and its replicas can disagree for a while.
+  for (let i = 0; !stats && i < 8 && /\.proxy\.runpod\.net$/i.test(asked.url ? new URL(asked.url).hostname : ""); i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    await look();
+  }
   if (!stats && probe && login) {
     tunnel = probe.comfy[0].port;
     const port = await sshTunnel(login, tunnel);
@@ -567,6 +639,8 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
     s.detail = "through an SSH tunnel (the box shows no web address)";
   }
   if (!stats || !url) {
+    const why = req.whyDown ? await req.whyDown().catch(() => null) : null;
+    if (why) throw new CloudError(why);
     throw new CloudError(
       login
         ? "The box's ComfyUI didn't answer, even from inside the box."
@@ -578,6 +652,10 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
   const label = req.label || `${gpu} · ${PROVIDER_NAME[provider]}`;
   job.label = label;
 
+  // A template's ComfyUI older than Crackio's models need (RunPod's ComfyUI 0.35.0 template has no FLUX 3 text encoder):
+  // ComfyUI's latest release, which the restart below loads together with the bridge.
+  const updated = login && probe ? await updateComfy(job, login, probe, (stats as Stats | null)?.system?.comfyui_version) : false;
+
   // A PyTorch that can't run on this GPU gets one that can, before anything else runs there; a CUDA 13 build gets its
   // libraries found by cuDNN.
   const swapped = login && probe ? await fitTorch(job, login, probe) : false;
@@ -586,7 +664,7 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
   // The bridge: added, or brought up to Crackio's version.
   const mine = (await bridgeFiles()).version;
   const info = await comfyGet<{ version?: string }>(url, token, "/crackio/info");
-  if (!older(info?.version, mine) && !swapped && !linked) {
+  if (!older(info?.version, mine) && !swapped && !linked && !updated) {
     step(job, `Crackio bridge ${info?.version} is there`);
   } else if (!login || !probe) {
     const b = step(job, "Adding the Crackio bridge");
@@ -636,6 +714,81 @@ async function connect(job: ConnectJob, asked: ConnectRequest) {
 }
 
 /**
+ * Shell lines that set $PY to the Python running ComfyUI (that pid) as it was started: its venv's python, from the
+ * process's VIRTUAL_ENV or its argv[0] on its own PATH. Not /proc/<pid>/exe, which resolves a venv's python to the
+ * interpreter it points at: pip run that way installs outside the venv (RunPod's ComfyUI template runs
+ * .venv-cu128/bin/python, which is /usr/bin/python3.12).
+ */
+const pythonOf = (pid: number) => String.raw`PY=""
+VENV=$(tr '\0' '\n' < /proc/${pid}/environ 2>/dev/null | sed -n 's/^VIRTUAL_ENV=//p' | head -1)
+[ -n "$VENV" ] && [ -x "$VENV/bin/python" ] && PY="$VENV/bin/python"
+if [ -z "$PY" ]; then
+  A0=$(tr '\0' '\n' < /proc/${pid}/cmdline 2>/dev/null | head -1)
+  case "$A0" in
+    /*) [ -x "$A0" ] && PY="$A0" ;;
+    */*) [ -x "/proc/${pid}/cwd/$A0" ] && PY="$(readlink /proc/${pid}/cwd)/$A0" ;;
+    ?*) P=$(tr '\0' '\n' < /proc/${pid}/environ 2>/dev/null | sed -n 's/^PATH=//p' | head -1); PY=$(PATH="$P" command -v "$A0" 2>/dev/null) ;;
+  esac
+fi
+[ -n "$PY" ] || PY=$(readlink -f /proc/${pid}/exe)`;
+
+/**
+ * Brings a ComfyUI older than COMFY_FLOOR up to ComfyUI's latest release, in place: by git when its folder is a git
+ * checkout, else from the release's archive copied over it (models, custom nodes and your files stay). The release's
+ * packages go in first with ComfyUI's own Python, so when they can't, the ComfyUI there keeps running as it was. The
+ * restart that loads it is the bridge step's. True when it updated.
+ */
+async function updateComfy(job: ConnectJob, login: SshLogin, probe: Probe, version: string | undefined): Promise<boolean> {
+  const at = probe.comfy[0];
+  if (!at?.pid || !comfyOlder(version)) return false;
+  const s = step(job, `Updating ComfyUI ${version} to its latest release`);
+  s.detail = `Crackio's models need ${COMFY_FLOOR} or newer (FLUX 3 Klein and MOSS-Image)`;
+  const script = String.raw`
+set +e
+ROOT=${JSON.stringify(at.root)}
+${pythonOf(at.pid)}
+LOG=/tmp/crackio-comfy-update.log
+: > "$LOG"
+say() { printf 'CRACKIO_JSON {"error": "%s"}\n' "$1"; exit 0; }
+cd "$ROOT" || say "its ComfyUI folder is gone"
+command -v curl >/dev/null || say "the box has no curl"
+TAG=$(curl -fsSL https://api.github.com/repos/Comfy-Org/ComfyUI/releases/latest 2>>"$LOG" | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+[ -n "$TAG" ] || say "GitHub didn't say which ComfyUI release is the latest"
+REQ=$(mktemp)
+NEW=""
+if [ -d .git ] && command -v git >/dev/null; then
+  git fetch -q --depth 1 https://github.com/Comfy-Org/ComfyUI "refs/tags/$TAG:refs/tags/$TAG" >>"$LOG" 2>&1 || say "git couldn't fetch ComfyUI $TAG"
+  git show "$TAG:requirements.txt" > "$REQ" 2>>"$LOG" || say "git couldn't read the requirements of $TAG"
+else
+  NEW=$(mktemp -d)
+  curl -fsSL "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/$TAG.tar.gz" 2>>"$LOG" | tar -xz --strip-components=1 -C "$NEW" >>"$LOG" 2>&1 || say "couldn't download ComfyUI $TAG"
+  cp "$NEW/requirements.txt" "$REQ"
+fi
+# Its packages first: when they can't install, the ComfyUI there keeps running as it was.
+# A template's pin on its own PyTorch (RunPod's PIP_CONSTRAINT) would undo a torch Crackio put in: Crackio picks it.
+PIP_CONSTRAINT= PIP_BREAK_SYSTEM_PACKAGES=1 "$PY" -m pip install -q --disable-pip-version-check -r "$REQ" >>"$LOG" 2>&1 || say "pip couldn't install the packages of $TAG: $(tail -n 2 "$LOG" | tr -d '"\\' | tr '\n' ' ' | cut -c1-200)"
+if [ -n "$NEW" ]; then
+  cp -a "$NEW/." "$ROOT/" >>"$LOG" 2>&1 || say "couldn't copy ComfyUI $TAG in"
+  rm -rf "$NEW"
+else
+  git -c advice.detachedHead=false checkout -q "$TAG" >>"$LOG" 2>&1 || { git stash -q >>"$LOG" 2>&1; git -c advice.detachedHead=false checkout -q "$TAG" >>"$LOG" 2>&1; } || say "git couldn't switch to $TAG"
+fi
+rm -f "$REQ"
+printf 'CRACKIO_JSON {"tag": "%s"}\n' "$TAG"
+`;
+  const res = await sshRun(login, script, { timeoutMs: 20 * 60_000 }).catch((err: Error) => ({ code: -1, stdout: "", stderr: err.message }));
+  const out = markedJson<{ tag?: string; error?: string }>(res.stdout);
+  if (out?.tag) {
+    s.detail = `now ${out.tag}`;
+    return true;
+  }
+  // Not updated: the box goes on with the ComfyUI it has, and models that need a newer one say so when they run.
+  s.state = "skipped";
+  s.detail = `couldn't (${(out?.error ?? (res.stderr || res.stdout).trim().slice(-200)) || "no answer"}): FLUX 3 Klein and MOSS-Image won't run there until it's ${COMFY_FLOOR} or newer`;
+  return false;
+}
+
+/**
  * The PyTorch build this GPU needs, put in ComfyUI's own Python with its matching torchvision and torchaudio (ComfyUI
  * restarts in the bridge step that follows). True when it did.
  * - GTX 10 and older (compute 6.x and below): PyTorch's CUDA 12.8 and later builds, the ones cloud templates ship now,
@@ -649,7 +802,7 @@ async function fitTorch(job: ConnectJob, login: SshLogin, probe: Probe): Promise
   const pid = probe.comfy[0]?.pid;
   if (!pid) return false;
   const check = String.raw`
-PY=$(readlink -f /proc/${pid}/exe)
+${pythonOf(pid)}
 "$PY" - <<'PYEOF'
 import json, re, subprocess
 from importlib.metadata import version
@@ -701,7 +854,8 @@ PYEOF
     const v = name === "torch" ? t.version : t[name];
     return v ? [`"${name}==${v.split("+")[0]}+${build}"`] : [];
   });
-  const pip = `set -o pipefail; PY=$(readlink -f /proc/${pid}/exe); "$PY" -m pip install -q --index-url https://download.pytorch.org/whl/${build} ${pins.join(" ")} 2>&1 | tail -5`;
+  // Past a template's pin on its own PyTorch (RunPod's ComfyUI template: PIP_CONSTRAINT holds torch at its cu128 build).
+  const pip = `set -o pipefail\n${pythonOf(pid)}\nPIP_CONSTRAINT= PIP_BREAK_SYSTEM_PACKAGES=1 "$PY" -m pip install -q --index-url https://download.pytorch.org/whl/${build} ${pins.join(" ")} 2>&1 | tail -5`;
   const r = await sshRun(login, pip, { timeoutMs: 25 * 60_000 });
   if (r.code === 0) return true;
   if (old) throw new CloudError(`Couldn't put in a PyTorch build for this GPU: ${r.stdout.slice(-300)}`);
@@ -720,14 +874,16 @@ async function linkCudaLibs(job: ConnectJob, login: SshLogin, probe: Probe): Pro
   const pid = probe.comfy[0]?.pid;
   if (!pid) return false;
   const script = String.raw`
-PY=$(readlink -f /proc/${pid}/exe)
+${pythonOf(pid)}
 LIB=$("$PY" - <<'PYEOF'
 import glob, os
 try:
     import torch
     if (torch.version.cuda or "").split(".")[0] == "13":
-        import nvidia
-        hits = [p for root in nvidia.__path__ for p in glob.glob(os.path.join(root, "*", "lib", "libnvrtc.so.13*"))]
+        # Every nvidia folder on its path: a venv over a template's Python can't see its own through nvidia.__path__ when
+        # the template's nvidia is a regular package (RunPod's ComfyUI template).
+        import sys
+        hits = [p for d in sys.path if d and os.path.isdir(os.path.join(d, "nvidia")) for p in glob.glob(os.path.join(d, "nvidia", "*", "lib", "libnvrtc.so.13*"))]
         print(os.path.dirname(hits[0]) if hits else "")
 except Exception:
     pass

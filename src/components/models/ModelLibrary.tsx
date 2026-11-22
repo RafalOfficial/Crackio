@@ -28,6 +28,7 @@ import type { CustomRow } from "@/lib/models/custom-types";
 import type { LocalModel, LocalStatus, LocalTask, Machine, TargetStatus } from "@/lib/local/types";
 import type { ClipFit } from "./ModelPicker";
 import { cn } from "@/lib/cn";
+import { radioArrows, radioTab } from "@/lib/roving";
 
 /**
  * The model library: a sheet from the right with a card per model, its official ComfyUI preview behind its name (clips
@@ -243,8 +244,9 @@ function rowCard(r: Row, g: Gpu, ready: ModelAvailability | undefined, hfToken: 
     says: note?.says,
     released: note?.released ?? model.released,
     facts: [v ? `${v.label} · ${gb(downloadGb(v))}` : "", LICENCE[model.licence.commercial], model.audio ? "With sound" : ""].filter(Boolean),
-    // Installed here: ready, even before the tools' list hears of a model installed a moment ago.
-    ready: installed && (ready?.available ?? true),
+    // Installed here: ready, even before the tools' list hears of a model installed a moment ago. On a billed machine
+    // (RunPod Serverless) that isn't Run on's pick yet, the list calls it unavailable; picking it here makes it the pick.
+    ready: installed && (!ready || ready.available || (ready.runnable && Boolean(g.target.metered))),
     reason: installed ? undefined : fit.why,
     useOn: installed ? g : undefined,
     install: installed ? undefined : { row: r, gpu: g.online ? g : null, hfToken },
@@ -406,20 +408,24 @@ export function LibraryDrawer({
     // first where it ends up, all but invisible, and slides in from the edge once that drawing is on screen: a still
     // animation of it is "ready" only when the compositor runs it, which waits for the drawing.
     p.style.opacity = "0.002";
+    // While it moves the root carries data-sliding (CSS can keep costly effects, a glass blur, off until it's still).
+    r.setAttribute("data-sliding", "");
     const probe = p.animate([{ transform: "translateX(0)" }, { transform: "translateX(0)" }], { duration: 1000, fill: "forwards" });
     let live = true;
     void probe.ready
       .then(() => new Promise((next) => requestAnimationFrame(next)))
       .then(() => {
         if (!live) return;
-        p.animate([{ transform: "translateX(100%)" }, { transform: "translateX(0)" }], SLIDE_IN);
+        const slide = p.animate([{ transform: "translateX(100%)" }, { transform: "translateX(0)" }], SLIDE_IN);
         p.style.opacity = "";
         probe.cancel();
+        void slide.finished.catch(() => undefined).then(() => live && !closing.current && r.removeAttribute("data-sliding"));
       });
     return () => {
       live = false;
       probe.cancel();
       p.style.opacity = "";
+      if (!closing.current) r.removeAttribute("data-sliding");
     };
   }, [open, host]);
 
@@ -430,12 +436,14 @@ export function LibraryDrawer({
     const sh = shade.current;
     if (!r || !p || !sh || closing.current || !shown.current) return;
     closing.current = true;
+    r.setAttribute("data-sliding", "");
     sh.animate([{ opacity: 1 }, { opacity: 0 }], SHADE_OUT);
     const out = p.animate([{ transform: "translateX(0)" }, { transform: "translateX(100%)" }], SLIDE_OUT);
     void out.finished
       .catch(() => undefined)
       .then(() => {
         r.hidden = true;
+        r.removeAttribute("data-sliding");
         for (const a of [...p.getAnimations(), ...sh.getAnimations()]) a.cancel();
         closing.current = false;
         shown.current = false;
@@ -454,6 +462,8 @@ export function LibraryDrawer({
       const p = panel.current;
       if (!p) return;
       if (e.key === "Escape") {
+        // A menu inside the sheet that's open (a LoRA's delete menu) takes its own Escape.
+        if (e.target instanceof Element && e.target.closest("[data-own-escape]")) return;
         e.preventDefault();
         e.stopPropagation();
         close();
@@ -499,7 +509,12 @@ function LibraryContent(props: Omit<ContentProps, "onClose">) {
 
 /** What's in the sheet. Memoized: opening and closing it doesn't render a single card again. */
 const Library = memo(function Library({ kind, task, tool, value, onChange, onClose, list, picks, tags, fit, loraOf, onLoraOf: setLoraOf }: ContentProps) {
-  const { status, catalog, error: localError } = useLocalStore();
+  // Each piece on its own: the store's other fields changing don't redraw the cards.
+  const status = useLocalStore((s) => s.status);
+  const catalog = useLocalStore((s) => s.catalog);
+  const localError = useLocalStore((s) => s.error);
+  // The tool's models haven't arrived yet (a first visit, a slow server): cards to come, not "nothing is ready".
+  const modelsLoaded = useModelsStore((s) => s.loaded);
   // The first frames carry only the header and placeholders, so the slide starts at once; the cards follow.
   const [settled, setSettled] = useState(false);
   useEffect(() => {
@@ -578,9 +593,10 @@ const Library = memo(function Library({ kind, task, tool, value, onChange, onClo
     return { here: here.sort(byQuality), toGet };
   };
 
+  // Only the Get models tab shows these: no other tab works them out.
   const getCards = (() => {
     const machine = getGpu?.machine ?? thisComputer;
-    if (!machine || !catalog) return [];
+    if (tab !== "get" || !machine || !catalog) return [];
     const g: Gpu = getGpu ?? { id: "this-computer", gpu: mainGpu(machine) ? shortGpuName(mainGpu(machine)!.name) : "This computer", where: "This computer", online: false, vram: null, machine, target: { id: "this-computer", label: "This computer", url: "", source: "main", connected: false, onThisComputer: true, bridge: null, installed: [], downloads: [], measured: {} } };
     const rows = (getGpu ? (rowsByGpu.get(getGpu.id) ?? []) : fitRows({ machine, catalog, target: null, status }))
       .filter((r) => fitsTool(r.model) && !r.blocked && !installedVariant(r.model, g.target))
@@ -596,16 +612,21 @@ const Library = memo(function Library({ kind, task, tool, value, onChange, onClo
     return search.split(/\s+/).every((w) => hay.includes(w));
   };
 
-  // Picked on one GPU's tab (with more than one online): its jobs go to that GPU.
+  // Picked on one GPU's tab: its jobs go to that GPU. A billed one (RunPod Serverless) even when it's the only one
+  // online: Auto never sends a job there. Says whether Run on changed.
   const sendTo = async (g: Gpu | null | undefined) => {
-    if (g && online.length > 1 && g.id !== status?.runOn) await setRunOn(g.id).catch(() => undefined);
+    if (!g || g.id === status?.runOn || (online.length < 2 && !g.target.metered)) return false;
+    return setRunOn(g.id).then(
+      () => true,
+      () => false,
+    );
   };
 
   const pick = async (c: Card) => {
     if (!c.id || !c.ready) return;
-    await sendTo(c.useOn);
-    // Installed a moment ago: the tools' model list hears of it first.
-    if (!listed.has(c.id) && c.home === "local") await refreshModels();
+    const moved = await sendTo(c.useOn);
+    // Installed a moment ago, or now on another machine: the tools' model list hears of it first.
+    if (moved || (!listed.has(c.id) && c.home === "local")) await refreshModels();
     onChange(c.id);
     onClose();
   };
@@ -613,8 +634,8 @@ const Library = memo(function Library({ kind, task, tool, value, onChange, onClo
   // A model that just finished installing joins the tool's list, then gets picked.
   const pickInstalled = async (c: Card) => {
     if (!c.id) return;
-    await refreshModels();
     await sendTo(c.install?.gpu);
+    await refreshModels();
     onChange(c.id);
     onClose();
   };
@@ -740,8 +761,8 @@ const Library = memo(function Library({ kind, task, tool, value, onChange, onClo
           <div className="flex items-center gap-2">
             <span className="text-[12.5px] text-haze">Install on</span>
             {online.length ? (
-              <div role="radiogroup" aria-label="Install on" className="flex rounded-[12px] bg-white/[0.05] p-[3px]">
-                {online.map((g) => {
+              <div role="radiogroup" aria-label="Install on" onKeyDown={radioArrows} className="flex rounded-[12px] bg-white/[0.05] p-[3px]">
+                {online.map((g, i) => {
                   const on = g.id === getGpu?.id;
                   return (
                     <button
@@ -749,6 +770,7 @@ const Library = memo(function Library({ kind, task, tool, value, onChange, onClo
                       type="button"
                       role="radio"
                       aria-checked={on}
+                      tabIndex={radioTab(on, i, Boolean(getGpu))}
                       onClick={() => setGetOn(g.id)}
                       className={cn(
                         "press squircle h-8 rounded-[9px] px-3 text-[12.5px] font-semibold",
@@ -856,7 +878,7 @@ const Library = memo(function Library({ kind, task, tool, value, onChange, onClo
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:px-6">
           <ModelLoras model={loraModel} compact />
           <footer className="mt-8 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3 text-[12.5px]">
-            <Link href="/settings/models#loras" onClick={onClose} className="inline-flex items-center gap-1 font-semibold text-haze hover:text-paper">
+            <Link href="/settings/loras" onClick={onClose} className="inline-flex items-center gap-1 font-semibold text-haze hover:text-paper">
               Every model&rsquo;s LoRAs <ArrowUpRight size={13} />
             </Link>
           </footer>
@@ -932,7 +954,7 @@ const Library = memo(function Library({ kind, task, tool, value, onChange, onClo
       </header>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:px-6">
         <div className="space-y-5">
-          {settled ? (
+          {settled && (modelsLoaded || list.length || picks.length || tab !== "all") ? (
             body
           ) : (
             <CardGrid>
@@ -943,8 +965,8 @@ const Library = memo(function Library({ kind, task, tool, value, onChange, onClo
           )}
         </div>
         <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-[12.5px]">
-          <Link href="/settings/models" onClick={onClose} className="font-semibold text-haze hover:text-paper">
-            Default models
+          <Link href="/settings/models" onClick={onClose} className="inline-flex items-center gap-1 font-semibold text-haze hover:text-paper">
+            Set default models <ArrowUpRight size={13} />
           </Link>
           <Link href="/settings/tools" onClick={onClose} className="inline-flex items-center gap-1 font-semibold text-haze hover:text-paper">
             Machines and set-ups <ArrowUpRight size={13} />

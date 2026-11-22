@@ -1,10 +1,12 @@
 import { getGeneration } from "@/lib/server/db";
 import { deleteProject, getProject } from "@/lib/motion/store";
+import { validProjectId } from "@/lib/motion/workspace";
 import { runner } from "@/lib/server/runner";
 
 /** A project with the live state of every agent turn (status, progress, the rendered video). */
 export async function GET(_req: Request, ctx: RouteContext<"/api/motion/projects/[id]">) {
   const { id } = await ctx.params;
+  if (!validProjectId(id)) return Response.json({ error: "Not found" }, { status: 404 });
   const project = await getProject(id);
   if (!project) return Response.json({ error: "Not found" }, { status: 404 });
   const jobs = Object.fromEntries(
@@ -18,6 +20,8 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/motion/projects
 
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/motion/projects/[id]">) {
   const { id } = await ctx.params;
+  // Only a real project id: anything else could name the folder that holds every project.
+  if (!validProjectId(id)) return Response.json({ error: "Not found" }, { status: 404 });
   const project = await getProject(id);
   for (const m of project?.messages ?? []) if (m.generationId) runner().cancel(m.generationId);
   await deleteProject(id);

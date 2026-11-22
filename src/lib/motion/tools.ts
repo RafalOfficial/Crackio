@@ -18,7 +18,7 @@ import { contactSheet, ffmpegPath, frameTimes, kindOf, probe, runFfmpeg, toDataU
 import { drawIdeas, formatIdea, IDEA_KINDS, lintPlan, type IdeaKind, type MotionPlan, type PlanShot } from "./playbook";
 import type { MotionMedia } from "./media";
 import { describeRecent, type RecentPiece } from "./recent";
-import { renderComposition } from "./render";
+import { framePipe, renderComposition, within } from "./render";
 import { renderSound } from "./sound";
 import type { MotionComposition, MotionFile } from "./store";
 import { cleanName, fileLine, folderUrl, resolveFile, snapshot, ToolError, uniqueName } from "./workspace";
@@ -360,7 +360,7 @@ function extFor(mime: string) {
 
 async function save(env: ToolEnv, data: Buffer, wanted: unknown, fallback: string, ext: string) {
   const name = await uniqueName(env.dir, cleanName(typeof wanted === "string" && wanted.trim() ? wanted : fallback, ext));
-  await fs.writeFile(path.join(env.dir, name), data);
+  await fs.writeFile(/*turbopackIgnore: true*/ path.join(env.dir, name), data);
   return name;
 }
 
@@ -446,7 +446,7 @@ async function generateImage(a: Record<string, unknown>, env: ToolEnv): Promise<
   let note = "";
   if (yellowCast(stats) && a.keep_color !== true) {
     const before = stats.castB;
-    await fs.writeFile(file, await neutralize(file, stats));
+    await fs.writeFile(/*turbopackIgnore: true*/ file, await neutralize(file, stats));
     stats = await colorStats(file);
     note = ` A yellow cast was taken out (neutral b* ${before.toFixed(1)} → ${stats.castB.toFixed(1)}).`;
   }
@@ -651,20 +651,21 @@ async function captureWeb(a: Record<string, unknown>, env: ToolEnv): Promise<Too
       ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-movflags", "+faststart", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", name],
       { cwd: env.dir, windowsHide: true },
     );
-    const done = new Promise<number>((resolve) => proc.on("close", (code) => resolve(code ?? 1)));
+    const pipe = framePipe(proc);
     for (let i = 0; i < total; i++) {
       if (env.signal.aborted) throw new EngineError("Cancelled.");
       const t = i / (total - 1);
       // Ease in and out, with a short hold at both ends.
       const p = t < 0.08 ? 0 : t > 0.92 ? 1 : 0.5 - Math.cos(((t - 0.08) / 0.84) * Math.PI) / 2;
-      await page.evaluate((y) => window.scrollTo(0, y), Math.round(p * travel));
+      await within(page.evaluate((y) => window.scrollTo(0, y), Math.round(p * travel)), 20_000, "The page stopped answering while it scrolled.");
       await page.waitForTimeout(16);
-      const frame = await page.screenshot({ type: "jpeg", quality: 90 });
-      if (!proc.stdin.write(frame)) await new Promise((r) => proc.stdin.once("drain", r));
+      const frame = await page.screenshot({ type: "jpeg", quality: 90, timeout: 20_000 });
+      if (!(await pipe.write(frame))) break;
       if (i % 15 === 0) env.detail(`Frame ${i + 1} of ${total}`);
     }
-    proc.stdin.end();
-    if ((await done) !== 0) throw new ToolError("Couldn't encode the scroll recording.");
+    pipe.end();
+    if (env.signal.aborted) throw new EngineError("Cancelled.");
+    if ((await pipe.finished) !== 0) throw new ToolError("Couldn't encode the scroll recording.");
     const f = await env.addFile(name, "video");
     const sheet = await sheetOf(path.join(env.dir, name));
     return { ok: true, output: `Recorded ${fileLine(f)} scrolling ${url.toString()}. Attached: frames at ${fmtTimes(sheet.at)} s.`, files: [name], images: [sheet.image] };
@@ -707,7 +708,7 @@ async function keepTranscript(info: SourceInfo, stem: string, env: ToolEnv): Pro
   });
   if (!t) return `No transcript: ${why}.`;
   const name = await uniqueName(env.dir, `${stem}.transcript.json`);
-  await fs.writeFile(path.join(env.dir, name), JSON.stringify(t));
+  await fs.writeFile(/*turbopackIgnore: true*/ path.join(env.dir, name), JSON.stringify(t));
   await env.addFile(name, "download", { origin: { url: info.url, title: info.title } });
   const timed = t.words ? `${t.words.length.toLocaleString("en-US")} words, each timed` : `${t.lines.length.toLocaleString("en-US")} lines, timed by line`;
   return `Transcript: saved ${name} (${t.captions === "auto" ? "machine captions" : "the creator's captions"}, ${timed}). Read it with transcript: find words and phrases, or read a span of time.`;
@@ -761,7 +762,7 @@ async function download(a: Record<string, unknown>, env: ToolEnv): Promise<ToolO
     onProgress: env.detail,
   });
   const file = path.join(env.dir, name);
-  await fs.chmod(file, 0o444).catch(() => {});
+  await fs.chmod(/*turbopackIgnore: true*/ file, 0o444).catch(() => {});
   const f = await env.addFile(name, "download", { origin: { url: info.url, title: info.title, ...section } });
   const clockNote = section ? "" : " It keeps the source's clock: transcript times are times in this file.";
   if (f.kind === "video") {
@@ -792,7 +793,7 @@ async function writeFile(a: Record<string, unknown>, env: ToolEnv): Promise<Tool
   const target = path.join(env.dir, name);
   const existing = (await env.files()).find((f) => f.name === name);
   if (existing?.source === "upload" || existing?.source === "download") throw new ToolError(`${name} is ${existing.source === "upload" ? "the user's file" : "a download"} and stays as it is. Pick another name.`);
-  await fs.writeFile(target, content, "utf8");
+  await fs.writeFile(/*turbopackIgnore: true*/ target, content, "utf8");
   await env.addFile(name, "write");
   return { ok: true, output: `Wrote ${name} (${content.length} characters).`, files: [name] };
 }
@@ -818,7 +819,7 @@ async function look(a: Record<string, unknown>, env: ToolEnv): Promise<ToolOutco
     return { ok: true, output: `${meta}. Loudness: ${sound ? describeLoudness(sound) : "unknown"}. Attached: its waveform, start to end.`, images: [toDataUrl(await waveform(file))] };
   }
   if (info.kind === "text") {
-    const text = await fs.readFile(file, "utf8");
+    const text = await fs.readFile(/*turbopackIgnore: true*/ file, "utf8");
     return { ok: true, output: `${meta}:\n${text.slice(0, 8000)}${text.length > 8000 ? "\n…(truncated)" : ""}` };
   }
   return { ok: true, output: `${meta}. There's nothing to show for this kind of file.` };

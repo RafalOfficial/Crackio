@@ -4,16 +4,22 @@ import { updateSettings } from "@/lib/server/settings";
 import { watchRentedBoxes } from "@/lib/server/cloud-accounts";
 import { demoOn } from "@/lib/demo/config";
 import { scrubForDemo } from "@/lib/demo/scrub";
+import type { LocalStatus } from "@/lib/local/types";
 
 /**
  * The Local page: every ComfyUI Crackio runs models on, the catalog files each has, and installs in progress. GPUs rented
  * on your cloud accounts join (or leave) in the background meanwhile.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // `?lite=1`: the machines without their file lists, measured speeds and estimates (what the ComfyUI page and the
+  // status pills read; the full look is ~100 KB).
+  const lite = new URL(request.url).searchParams.get("lite") === "1";
+  const shape = (s: LocalStatus): LocalStatus =>
+    lite ? { ...s, installed: [], measured: {}, targets: s.targets.map((t) => ({ ...t, installed: [], measured: {}, estimates: undefined, live: undefined })) } : s;
   // The live demo neither looks for rented boxes nor says where its machines answer (lib/demo).
-  if (demoOn()) return Response.json(scrubForDemo(await localStatus()), { headers: { "Cache-Control": "no-store" } });
+  if (demoOn()) return Response.json(scrubForDemo(shape(await localStatus())), { headers: { "Cache-Control": "no-store" } });
   watchRentedBoxes();
-  return Response.json(await localStatus(), { headers: { "Cache-Control": "no-store" } });
+  return Response.json(shape(await localStatus()), { headers: { "Cache-Control": "no-store" } });
 }
 
 const target = z.string().max(80).optional();

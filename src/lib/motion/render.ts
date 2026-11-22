@@ -1,5 +1,6 @@
 import "server-only";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -32,6 +33,46 @@ export async function launch() {
       }
     }
   }
+}
+
+/** A step inside the page that never finishes (an endless loop in the piece's code) fails instead of hanging the turn. */
+export async function within<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([work, new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new EngineError(message)), ms)))]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * ffmpeg's input, written frame by frame. When ffmpeg stops early (an encoder error, a full disk, Cancel killing it), a
+ * write says so instead of waiting forever for a pipe that will never drain.
+ */
+export function framePipe(proc: ChildProcess) {
+  let exit: number | null = null;
+  const finished = new Promise<number>((resolve) => {
+    proc.once("error", () => resolve(-1));
+    proc.once("close", (code) => resolve(code ?? 1));
+  });
+  void finished.then((code) => (exit = code));
+  // EPIPE/EOF once ffmpeg is gone: its exit code says why.
+  proc.stdin!.on("error", () => {});
+  return {
+    finished,
+    get exit() {
+      return exit;
+    },
+    /** False once ffmpeg has stopped taking frames. */
+    async write(frame: Buffer) {
+      if (exit !== null) return false;
+      if (!proc.stdin!.write(frame)) await Promise.race([once(proc.stdin!, "drain").catch(() => {}), finished]);
+      return exit === null;
+    },
+    end() {
+      if (exit === null) proc.stdin!.end();
+    },
+  };
 }
 
 export async function renderComposition({
@@ -84,7 +125,11 @@ export async function renderComposition({
     await page.setContent(withRuntime(html, stage, base ?? `${origin}/`), { waitUntil: "load", timeout: 60_000 });
     const runtime = await page.evaluate(() => typeof (window as unknown as { __crackio?: { ready?: unknown } }).__crackio?.ready === "function");
     if (!runtime) throw new EngineError(withErrors("The page lost Crackio's timing runtime (window.__crackio is Crackio's; read window.__crackio.duration, never assign to it)."));
-    await page.evaluate(() => (window as unknown as { __crackio: { ready: () => Promise<void> } }).__crackio.ready());
+    await within(
+      page.evaluate(() => (window as unknown as { __crackio: { ready: () => Promise<void> } }).__crackio.ready()),
+      5 * 60_000,
+      withErrors("The page took over 5 minutes to get ready: a font, picture or clip that never loads, or a promise that never settles?"),
+    );
 
     const total = Math.max(1, Math.round(stage.duration * stage.fps));
     const encode = transparent
@@ -98,8 +143,10 @@ export async function renderComposition({
     );
     ffmpeg = proc;
     let stderr = "";
-    proc.stderr?.on("data", (c: Buffer) => (stderr += c.toString()));
-    const finished = new Promise<number>((resolve) => proc.on("close", (code) => resolve(code ?? 1)));
+    proc.stderr?.on("data", (c: Buffer) => {
+      if (stderr.length < 8000) stderr += c.toString();
+    });
+    const pipe = framePipe(proc);
 
     // Chrome's fast capture path: PNG encoded for speed is about 3× quicker than a regular screenshot
     // (and keeps alpha when the default background is see-through).
@@ -107,23 +154,28 @@ export async function renderComposition({
     if (transparent) await cdp.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } });
     for (let i = 0; i < total; i++) {
       if (signal.aborted) throw new EngineError("Cancelled.");
-      await page.evaluate((t) => (window as unknown as { __crackio: { seek: (t: number) => Promise<void> } }).__crackio.seek(t), i / stage.fps);
+      await within(
+        page.evaluate((t) => (window as unknown as { __crackio: { seek: (t: number) => Promise<void> } }).__crackio.seek(t), i / stage.fps),
+        2 * 60_000,
+        withErrors(`Frame ${i + 1} took over 2 minutes to draw: an endless loop in window.onFrame, or a seek that never settles?`),
+      );
       const shot = await cdp.send("Page.captureScreenshot", { format: "png", optimizeForSpeed: true });
-      const frame = Buffer.from(shot.data, "base64");
-      if (!proc.stdin!.write(frame)) await new Promise((r) => proc.stdin!.once("drain", r));
+      if (!(await pipe.write(Buffer.from(shot.data, "base64")))) break;
       if (i % 3 === 0 || i === total - 1) onProgress(i + 1, total);
     }
-    proc.stdin!.end();
-    const code = await finished;
+    pipe.end();
+    const code = await pipe.finished;
     if (signal.aborted) throw new EngineError("Cancelled.");
     if (code !== 0) throw new EngineError(withErrors(`The video encoder failed: ${stderr.trim().slice(0, 300) || `exit ${code}`}`));
-    return { data: await fs.readFile(out), errors };
+    return { data: await fs.readFile(/*turbopackIgnore: true*/ out), errors };
   } catch (err) {
-    if (err instanceof EngineError || signal.aborted) throw err;
+    // Cancel closes the browser under the loop: say so, not "Target page closed".
+    if (signal.aborted) throw new EngineError("Cancelled.");
+    if (err instanceof EngineError) throw err;
     throw new EngineError(withErrors(err instanceof Error ? err.message : String(err)));
   } finally {
     signal.removeEventListener("abort", stop);
     await browser.close().catch(() => {});
-    await fs.rm(out, { force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ out, { force: true }).catch(() => {});
   }
 }

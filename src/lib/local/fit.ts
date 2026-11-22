@@ -126,9 +126,20 @@ const APPLE: [RegExp, number, number][] = [
   [/apple m1/i, 0.012, 8],
 ];
 
+/**
+ * Answers per machine object: the estimator and the fit checks ask about the same machine thousands of times per look.
+ * A machine's GPUs and accelerator never change once it's built (a changed machine is a new object), so these can't go
+ * stale, and machines no one holds any more drop out by themselves.
+ */
+const MAIN = new WeakMap<Machine, Gpu | undefined>();
+const SPEEDS = new WeakMap<Machine, number | null>();
+
 /** The GPU a machine runs models on: the one with the most memory. */
 export function mainGpu(m: Machine): Gpu | undefined {
-  return [...m.gpus].sort((a, b) => (b.memoryGb ?? 0) - (a.memoryGb ?? 0))[0];
+  if (MAIN.has(m)) return MAIN.get(m);
+  const gpu = [...m.gpus].sort((a, b) => (b.memoryGb ?? 0) - (a.memoryGb ?? 0))[0];
+  MAIN.set(m, gpu);
+  return gpu;
 }
 
 /** A laptop's GPU: the same chip as the desktop card, held to a fraction of its power ("RTX 4070 Laptop GPU", "RX 7600M XT"). */
@@ -136,6 +147,13 @@ const LAPTOP = /laptop|mobile|max-q|\brx \d{4}m\b|\brx \d{4}m xt\b/i;
 
 /** How fast this GPU runs diffusion next to an RTX 5090; null when it isn't known. */
 export function speedOf(m: Machine): number | null {
+  if (SPEEDS.has(m)) return SPEEDS.get(m)!;
+  const speed = speedOfGpu(m);
+  SPEEDS.set(m, speed);
+  return speed;
+}
+
+function speedOfGpu(m: Machine): number | null {
   const gpu = mainGpu(m);
   if (!gpu || m.accel === "cpu") return null;
   let speed = SPEED.find(([re]) => re.test(gpu.name))?.[1] ?? null;

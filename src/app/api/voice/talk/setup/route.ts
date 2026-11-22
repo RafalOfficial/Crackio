@@ -8,7 +8,7 @@ const Body = z.object({
   /** Talk's voice model: LFM3-VL goes beside it unless a machine is named. */
   model: z.enum(["local:voice:drama3", "local:voice:voxcpm2", "local:voice:supertonic"]).optional(),
   /** Crackio's fine-tunes to get with it (published ones only). */
-  loras: z.array(z.enum(["judge", "retouch", "chat"])).max(3).optional(),
+  loras: z.array(z.enum(["judge", "retouch", "chat", "enhance"])).max(4).optional(),
 });
 
 /**

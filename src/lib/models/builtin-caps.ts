@@ -87,6 +87,8 @@ const LOCAL_IMAGE_TUNING: Record<string, Tuning> = {
   "local:z-image-turbo": tuningFor(8, 1),
   "local:z-image-director": tuningFor(8, 1),
   "local:flux2-klein-4b": tuningFor(4, 1),
+  "local:flux2-klein-base-4b-360": tuningFor(20, 5),
+  "local:qwen-image-2.1-360": tuningFor(25, 1),
   "local:flux3-klein": tuningFor(15, 1),
 };
 

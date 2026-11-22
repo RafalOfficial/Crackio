@@ -78,8 +78,8 @@ function part(ctx: EngineContext, lo: number, hi: number, label: string): Engine
 }
 
 async function workDir() {
-  const dir = path.join(CACHE, `run-${nanoid(10)}`);
-  await fs.mkdir(dir, { recursive: true });
+  const dir = path.join(/*turbopackIgnore: true*/ CACHE, `run-${nanoid(10)}`);
+  await fs.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
   return dir;
 }
 
@@ -107,7 +107,7 @@ async function writeWav(file: string, samples: Float32Array, channels: number, r
   buf.write("data", 36);
   buf.writeUInt32LE(n * 2, 40);
   for (let i = 0; i < n; i++) buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767))), 44 + i * 2);
-  await fs.writeFile(file, buf);
+  await fs.writeFile(/*turbopackIgnore: true*/ file, buf);
 }
 
 /**
@@ -193,8 +193,8 @@ async function cloneReference(src: string, a: LipAnalysis, near: number, dir: st
     to = Math.min(words[words.length - 1].end, from + 20);
   }
   const used = words.filter((w) => w.start >= from - 0.01 && w.end <= to + 0.01);
-  const file = path.join(dir, "voice.wav");
-  const cut = path.join(dir, "voice-src.wav");
+  const file = path.join(/*turbopackIgnore: true*/ dir, "voice.wav");
+  const cut = path.join(/*turbopackIgnore: true*/ dir, "voice-src.wav");
   const res = await runFfmpeg(["-hide_banner", "-y", "-ss", from.toFixed(3), "-to", (to + 0.15).toFixed(3), "-i", src, "-vn", "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", cut], { signal, timeoutMs: 60_000 });
   if (res.code !== 0) throw new EngineError("Couldn't take the voice from the clip.", "Try again.");
   await toWav(cut, file, { rate: 24000, signal });
@@ -207,7 +207,7 @@ export async function runLipsync(gen: Generation, ctx: EngineContext): Promise<{
   const model = voiceModel(ask?.model);
   if (!ask || !model) throw new EngineError("This take doesn't say what to change.", "Open the clip in Lip Sync again.");
   const src = urlToPath(ask.url);
-  if (!src || !(await fs.stat(src).catch(() => null))) throw new EngineError("Crackio can't find the clip.", "Pick it again.");
+  if (!src || !(await fs.stat(/*turbopackIgnore: true*/ src).catch(() => null))) throw new EngineError("Crackio can't find the clip.", "Pick it again.");
   const analysis = (await analysisByKey(ask.analysis)) ?? (await analyzeClip(ask.url, ctx.signal));
   const regions = [...ask.regions].filter((r) => r.text.trim() !== r.was.trim()).sort((a, b) => a.start - b.start);
   // Every line in another voice (the clone would only say them again as they were).
@@ -245,7 +245,7 @@ export async function runLipsync(gen: Generation, ctx: EngineContext): Promise<{
       voiceName = v.name;
       const sample = urlToPath(v.sample);
       if (!sample) throw new EngineError(`${v.name}'s sample is missing.`, "Pick another voice.");
-      const wav = path.join(dir, "voice.wav");
+      const wav = path.join(/*turbopackIgnore: true*/ dir, "voice.wav");
       await toWav(sample, wav, { rate: 24000, signal: ctx.signal });
       const up = await withTarget(speech.target, () => uploadFile(wav, ctx.signal, "voice"));
       voiceRef = { name: up.name, text: v.text };
@@ -279,8 +279,8 @@ export async function runLipsync(gen: Generation, ctx: EngineContext): Promise<{
             "Say it in fewer words.",
           );
         }
-        const raw = path.join(dir, `take-${r}.wav`);
-        const fast = path.join(dir, `take-${r}-fast.wav`);
+        const raw = path.join(/*turbopackIgnore: true*/ dir, `take-${r}.wav`);
+        const fast = path.join(/*turbopackIgnore: true*/ dir, `take-${r}-fast.wav`);
         await writeWav(raw, samples, 2, RATE);
         const res = await runFfmpeg(["-hide_banner", "-y", "-i", raw, "-af", `atempo=${stretch.toFixed(4)}`, "-ac", "2", "-ar", String(RATE), fast], { signal: ctx.signal, timeoutMs: 60_000 });
         if (res.code !== 0) throw new EngineError("Couldn't fit the new words in.", "Try shorter words.");
@@ -308,9 +308,9 @@ export async function runLipsync(gen: Generation, ctx: EngineContext): Promise<{
       }
     }
     const soundtrack = mixed(base, cuts);
-    const soundFile = path.join(dir, "soundtrack.wav");
+    const soundFile = path.join(/*turbopackIgnore: true*/ dir, "soundtrack.wav");
     await writeWav(soundFile, soundtrack, 2, RATE);
-    const originalFile = path.join(dir, "original.wav");
+    const originalFile = path.join(/*turbopackIgnore: true*/ dir, "original.wav");
     await writeWav(originalFile, base, 2, RATE);
 
     // ------------------------------------------------------------ 2. the mouths
@@ -351,11 +351,11 @@ export async function runLipsync(gen: Generation, ctx: EngineContext): Promise<{
 
     // ------------------------------------------------------------ 3. the video
     ctx.progress(0.9, "Putting the video together");
-    const out = path.join(dir, "lipsync.mp4");
+    const out = path.join(/*turbopackIgnore: true*/ dir, "lipsync.mp4");
     if (patches.size) await compose(src, soundFile, out, analysis, patches, ctx.signal);
     else await remux(src, soundFile, out, ctx.signal);
     report.seconds = Math.round((Date.now() - t0) / 1000);
-    const data = await fs.readFile(out);
+    const data = await fs.readFile(/*turbopackIgnore: true*/ out);
     return {
       outputs: [{ data, mime: "video/mp4", width: analysis.width, height: analysis.height }],
       report,
@@ -363,7 +363,7 @@ export async function runLipsync(gen: Generation, ctx: EngineContext): Promise<{
       modelName: `Lip Sync · ${model.name}${lips ? (ask.tuning?.refine ? " · LatentSync + HuMo 17B" : " · LatentSync") : ""}${where ? ` · ${where}` : ""}`,
     };
   } finally {
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => {});
     if (lips && (left.inputs.length || left.outputs.length)) {
       await askBridge(lips.target, "/crackio/lipsync/forget", { method: "POST", body: JSON.stringify({ inputs: left.inputs, outputs: left.outputs }), timeoutMs: 8000 });
     }
@@ -457,8 +457,8 @@ async function revoiceLines(
         const sound = files.find((f) => new RegExp(`revoice-${tag}-say${k}_`).test(f.filename));
         if (!sound) throw new EngineError("The voice model made no sound for a line.", "Try again.");
         const got = await withTarget(target, () => downloadOutput(sound, ctx.signal));
-        const file = path.join(dir, `line-${tag}-${k}${path.extname(sound.filename) || ".flac"}`);
-        await fs.writeFile(file, got.data);
+        const file = path.join(/*turbopackIgnore: true*/ dir, `line-${tag}-${k}${path.extname(sound.filename) || ".flac"}`);
+        await fs.writeFile(/*turbopackIgnore: true*/ file, got.data);
         const [timed, heard] = await Promise.all([text(new RegExp(`revoice-${tag}-words${k}_`)), text(new RegExp(`revoice-${tag}-heard${k}_`))]);
         let words: LipWord[] = [];
         try {
@@ -546,8 +546,8 @@ async function timeLine(file: string, said: LipWord[], own: LipWord[], s: LipSen
   }
   const n = names.length;
   const graph = `[0:a]aresample=${RATE},aformat=sample_fmts=flt:channel_layouts=mono,asplit=${n}${names.map((_, i) => `[s${i}]`).join("")};${pieces.join(";")};${names.join("")}concat=n=${n}:v=0:a=1[out]`;
-  const script = path.join(dir, `line-${tag}.filter`);
-  await fs.writeFile(script, graph);
+  const script = path.join(/*turbopackIgnore: true*/ dir, `line-${tag}.filter`);
+  await fs.writeFile(/*turbopackIgnore: true*/ script, graph);
   const res = await runFfmpeg(["-hide_banner", "-y", "-i", file, "-filter_complex_script", script, "-map", "[out]", "-f", "f32le", "-ac", "1", "-ar", String(RATE), "-"], { signal, timeoutMs: 120_000 });
   if (res.code !== 0) throw new EngineError("Couldn't time the new voice to the lips.", res.stderr.trim().split("\n").slice(-1)[0] ?? "");
   const b = res.stdout;
@@ -598,8 +598,8 @@ async function bestTake(
     const sound = files.find((f) => new RegExp(`lipsync-take${k}_`).test(f.filename));
     if (!sound) continue;
     const got = await withTarget(target, () => downloadOutput(sound, ctx.signal));
-    const file = path.join(dir, `raw-${k}${path.extname(sound.filename) || ".flac"}`);
-    await fs.writeFile(file, got.data);
+    const file = path.join(/*turbopackIgnore: true*/ dir, `raw-${k}${path.extname(sound.filename) || ".flac"}`);
+    await fs.writeFile(/*turbopackIgnore: true*/ file, got.data);
     const samples = trimmed(await decodeAudio(file, ctx.signal));
     const hf = files.find((f) => new RegExp(`lipsync-heard${k}_`).test(f.filename));
     const heard = hf ? (await withTarget(target, () => downloadOutput(hf, ctx.signal))).data.toString("utf8").trim() : undefined;
@@ -728,8 +728,9 @@ export const HUMO_FILES = {
 
 /**
  * Crackio's MXFP8 build of HuMo 17B, made from Comfy-Org's fp16 one (Apache-2.0): every Linear weight of its blocks in
- * MXFP8 (e4m3 with a scale per 32 weights), everything else kept fp16 (C:/CrackioTemp/humo/to_mxfp8_stream.py). Used
- * where a machine has it: the same pictures as Comfy-Org's fp8 file (2026-11-03, two faces, fixed inputs: detail 0.87
+ * MXFP8 (e4m3 with a scale per 32 weights), everything else kept fp16 (published as TR4F/crackio-humo-17b-mxfp8 with
+ * its conversion script; Settings offers it on RTX 50s, catalog "humo-lipsync" mxfp8). Used where a machine has it:
+ * the same pictures as Comfy-Org's fp8 file (2026-11-03, two faces, fixed inputs: detail 0.87
  * and 0.87, the same skin and teeth) in 155 s of drawing instead of 260 on an RTX 5090, whose tensor cores do MXFP8
  * themselves (other cards unpack it, as they do the fp8 one). Comfy-Org's fp8 file is a plain cast of every tensor with
  * no scales, biases and norms too (its text embedding's bias 99% off, the audio cross-attention's 50-60%).
@@ -859,7 +860,7 @@ function refineNodes(r: LipsyncRefine, fps: number, spanStart: number, spanEnd: 
 async function sendWindow(target: ComfyTarget, src: string, sound: string, original: string, ws: number, we: number, fps: number, dir: string, tag: string, nonce: string, signal: AbortSignal): Promise<Sent> {
   // Tagged with the take, so no other take's upload is the same file (uploads are shared by content, and these go when the take ends).
   const mark = ["-metadata", `comment=crackio-lipsync-${nonce}`];
-  const clip = path.join(dir, `window-${tag}.mp4`);
+  const clip = path.join(/*turbopackIgnore: true*/ dir, `window-${tag}.mp4`);
   // The first video stream only (a clip may carry a cover picture as a second one), its frames ws..we-1 exactly.
   const res = await runFfmpeg(
     ["-hide_banner", "-y", "-i", src, "-map", "0:v:0", "-vf", `select='between(n\\,${ws}\\,${we - 1})',setpts=N/(${fps}*TB)`, "-fps_mode", "passthrough", "-an", "-c:v", "libx264", "-crf", "10", "-preset", "medium", "-pix_fmt", "yuv420p", ...mark, clip],
@@ -867,7 +868,7 @@ async function sendWindow(target: ComfyTarget, src: string, sound: string, origi
   );
   if (res.code !== 0) throw new EngineError("Couldn't cut the stretch out of the clip.", res.stderr.trim().split("\n").slice(-1)[0] ?? "");
   const slice = async (from: string, name: string) => {
-    const file = path.join(dir, name);
+    const file = path.join(/*turbopackIgnore: true*/ dir, name);
     const r = await runFfmpeg(["-hide_banner", "-y", "-ss", (ws / fps).toFixed(4), "-t", ((we - ws) / fps).toFixed(4), "-i", from, "-c:a", "pcm_s16le", ...mark, file], { signal, timeoutMs: 60_000 });
     if (r.code !== 0) throw new EngineError("Couldn't cut the sound for the stretch.", "Try again.");
     return file;
@@ -977,37 +978,86 @@ async function compose(src: string, sound: string, out: string, a: LipAnalysis, 
     enc.kill("SIGKILL");
   };
   signal.addEventListener("abort", kill, { once: true });
+  // However long the clip, this step never hangs a take (and its job slot) for good.
+  const timer = setTimeout(kill, 10 * 60_000 + (a.duration || 0) * 4000);
+  const last = (s: string) => s.trim().split("\n").slice(-1)[0] ?? "";
   let encErr = "";
   enc.stderr.on("data", (c: Buffer) => (encErr = (encErr + c.toString()).slice(-4000)));
   let decErr = "";
   dec.stderr.on("data", (c: Buffer) => (decErr = (decErr + c.toString()).slice(-4000)));
+  let encGone = false;
   const done = new Promise<void>((resolve, reject) => {
-    enc.on("close", (code) => (code === 0 ? resolve() : reject(new EngineError("Couldn't put the video together.", encErr.trim().split("\n").slice(-1)[0] ?? ""))));
-    enc.on("error", reject);
+    enc.on("close", (code) => {
+      encGone = true;
+      if (code === 0) resolve();
+      else reject(new EngineError("Couldn't put the video together.", last(encErr)));
+    });
+    enc.on("error", (err) => {
+      encGone = true;
+      reject(err);
+    });
   });
+  // Awaited below; until then a failure must not count as unhandled.
+  done.catch(() => {});
+  // A write after the encoder died fails with EPIPE: that shows up through `done`, not as a crash of the server.
+  enc.stdin.on("error", () => {});
+  const decoded = new Promise<number | null>((resolve, reject) => {
+    dec.on("close", resolve);
+    dec.on("error", reject);
+  });
+  decoded.catch(() => {});
+  // The encoder took what it had, or is gone (an early exit used to leave this waiting for good).
+  const drained = () =>
+    new Promise<void>((resolve) => {
+      if (encGone) return resolve();
+      const go = () => {
+        enc.stdin.off("drain", go);
+        enc.off("close", go);
+        resolve();
+      };
+      enc.stdin.once("drain", go);
+      enc.once("close", go);
+    });
   let frame = 0;
-  let pending: Buffer = Buffer.alloc(0);
+  // Each frame is gathered from the pipe's pieces with ONE copy: growing a buffer piece by piece copied it ~48 times
+  // per 1080p frame, about 110 ms of the server's only thread a frame (every page and job waited meanwhile).
+  let parts: Buffer[] = [];
+  let have = 0;
   try {
     for await (const chunk of dec.stdout as AsyncIterable<Buffer>) {
-      pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
-      while (pending.length >= size) {
-        const img = Buffer.from(pending.subarray(0, size));
-        pending = pending.subarray(size);
+      let at = 0;
+      while (at < chunk.length) {
+        const take = Math.min(chunk.length - at, size - have);
+        parts.push(at === 0 && take === chunk.length ? chunk : chunk.subarray(at, at + take));
+        have += take;
+        at += take;
+        if (have < size) break;
+        const img = Buffer.concat(parts, size);
+        parts = [];
+        have = 0;
         const p = raw.get(frame);
         if (p) paste(img, p, width, height, ySize, cSize, cw);
         frame++;
-        if (!enc.stdin.write(img)) await new Promise((r) => enc.stdin.once("drain", r));
+        if (encGone) break;
+        if (!enc.stdin.write(img)) await drained();
       }
+      if (encGone) break;
     }
     enc.stdin.end();
+    // Stopped reading early (the encoder is gone): the decoder would wait on a full pipe for good.
+    if (encGone) dec.kill("SIGKILL");
+    const code = await decoded;
     await done;
+    // A decoder that stopped part-way would otherwise hand back a shortened video without a word.
+    if (code !== 0 && !signal.aborted) throw new EngineError("Couldn't read the clip's frames.", last(decErr));
   } catch (err) {
     kill();
     throw err;
   } finally {
+    clearTimeout(timer);
     signal.removeEventListener("abort", kill);
   }
-  if (frame === 0) throw new EngineError("Couldn't read the clip's frames.", decErr.trim().split("\n").slice(-1)[0] ?? "");
+  if (frame === 0) throw new EngineError("Couldn't read the clip's frames.", last(decErr));
 }
 
 /** A patch onto a YUV 4:2:0 frame: luma where it changed; each touched 2×2 block's chroma averaged from its changed pixels' and the block's own. */

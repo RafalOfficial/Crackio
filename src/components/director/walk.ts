@@ -13,7 +13,7 @@ import { useTakeView } from "./take-view";
  * F to frame the cast again. It eases into and out of every move and keeps its view while it moves: the point it looks
  * at is carried along ahead of it (the rig's `free` point, at the cast's depth so the focus stays on them). Moving it
  * around the cast instead (orbiting with a turn added) swung the view about near them, walked it into the cafe's front
- * and left it stuck (the user: lost after ten seconds).
+ * and left it stuck (lost after ten seconds in a test).
  */
 
 /** Set while the keys move the camera: the live camera follows exactly instead of easing (Stage3D). */
@@ -27,7 +27,7 @@ const LOOK = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
 
 /** A position kept inside the place: not through its walls, under its ceiling, over its floor, nor through anyone. */
 function inside(p: Vector3, elements: { x: number; z: number; height: number; lift: number }[]) {
-  // People and things on set are solid: walked into, the camera stood inside a coat (the user's studio).
+  // People and things on set are solid: walked into, the camera stood inside a coat (a studio test).
   for (const el of elements) {
     if (p.y > el.lift + el.height + 0.3) continue;
     const room = 0.2 + el.height * 0.18;

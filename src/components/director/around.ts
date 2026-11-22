@@ -1,24 +1,19 @@
 "use client";
 
-import { create } from "zustand";
 import { MathUtils, PerspectiveCamera, Quaternion, Vector3 } from "three";
 import { useDirector } from "@/lib/director/store";
 import { angleDelta } from "@/lib/director/camera";
 import { photoCamera } from "@/lib/director/reconstruct";
 import { capturePlateFrom, loadedViews } from "./stage/capture";
-import { placeModel } from "./place-model";
+import { placeModel, worldModel } from "./place-model";
 import type { WorldDepth, WorldLight } from "@/lib/director/types";
+import { loadTypical, useAround, useTypical, useWorld, useWorldClock, friendlyModelError } from "./status";
+
+// The busy flags live in status.ts (no three.js there, for pages that only read them); still importable from here.
+export { aboutTime, loadTypical, useAround, useTypical, useWorld, WORLD_DEPTH_VERSION } from "./status";
 
 /**
- * The place all around the photo's spot, from one photo: the view turned 60 degrees is rendered (what the photo showed
- * where it overlaps, gray where it didn't), a model fills only the gray, carrying on what borders it, and the result
- * joins the set as another photo at that turn; the next turn builds on it, then the next. A landmark stays where the
- * photo has it, so turning away from a gas station shows the coast, not a second gas station.
- */
-export const useAround = create<{ busy: boolean; done: number; total: number; error: string | null }>(() => ({ busy: false, done: 0, total: 0, error: null }));
-
-/**
- * The views to build, as the user laid it out: each keeps the outer third of the one before it and the model expands the
+ * The views to build: each keeps the outer third of the one before it and the model expands the
  * rest, to the right, then to the left, and so on outward; the last one, behind, has both chains' ends at its edges and
  * only its middle to draw, which closes the circle. A 58 degree photo: 36 degree steps, nine views.
  */
@@ -90,20 +85,11 @@ export async function buildAround(only?: number[]) {
       useAround.setState((s) => ({ done: s.done + 1 }));
     }
   } catch (err) {
-    useAround.setState({ error: (err as Error).message });
+    useAround.setState({ error: friendlyModelError((err as Error).message) });
   } finally {
     useAround.setState({ busy: false });
   }
 }
-
-/**
- * The place all around as one 360 picture (server/world), by the place's model: one world with one light, where the
- * views built one by one came out as different worlds side by side. `again` draws it anew.
- */
-export const useWorld = create<{ busy: boolean; error: string | null; measuring: boolean }>(() => ({ busy: false, error: null, measuring: false }));
-
-/** Bumped when the measuring changes: worlds measured before are measured again. */
-export const WORLD_DEPTH_VERSION = 8;
 
 /**
  * The world measured (server/world-depth): how far everything in it is, so the set is a place you walk into, and its
@@ -146,24 +132,20 @@ export async function sharpWhenReady(url: string) {
   }
 }
 
-/** "about 50 s", "about 1 min", "about 2½ min". */
-export function aboutTime(seconds: number) {
-  if (seconds < 75) return `about ${Math.max(10, Math.round(seconds / 5) * 5)} s`;
-  const halves = Math.round(seconds / 30);
-  return `about ${Math.floor(halves / 2) || ""}${halves % 2 ? "½" : ""} min`;
-}
+/** The place being built all around you right now: stopping it cancels its job on the GPU too (the route's signal). */
+let worldRun: AbortController | null = null;
 
-/** How long a new place usually takes here (seconds: its photo, its world), from the runs the server kept. */
-export const useTypical = create<{ photo: number | null; world: number | null; loaded: boolean }>(() => ({ photo: null, world: null, loaded: false }));
-export function loadTypical() {
-  if (useTypical.getState().loaded) return;
-  useTypical.setState({ loaded: true });
-  void fetch("/api/director/world")
-    .then((r) => r.json())
-    .then((t: { photo?: number | null; world?: number | null }) => useTypical.setState({ photo: t.photo ?? null, world: t.world ?? null }))
-    .catch(() => undefined);
-}
+// Why one photo's world couldn't be built isn't the next photo's business.
+useDirector.subscribe((s, before) => {
+  if (s.scene.place.image?.url !== before.scene.place.image?.url && useWorld.getState().error) useWorld.setState({ error: null });
+});
 
+/**
+ * The place all around as one 360 picture (server/world), by the place's model: one world with one light, where the
+ * views built one by one came out as different worlds side by side. `again` draws it anew. Another photo put in its
+ * place stops it: its picture would be thrown away, and on a GPU that runs one job at a time (RunPod Serverless) the
+ * new place's shots waited behind it for minutes.
+ */
 export async function buildWorld(again = false) {
   const scene = useDirector.getState().scene;
   const image = scene.place.image;
@@ -172,12 +154,19 @@ export async function buildWorld(again = false) {
     useWorld.setState({ error: "Choose the model that makes the place first." });
     return;
   }
+  const run = new AbortController();
+  worldRun = run;
+  const moved = useDirector.subscribe((s) => {
+    if (s.scene.place.image?.url !== image.url) run.abort();
+  });
   useWorld.setState({ busy: true, error: null });
+  useWorldClock.setState({ since: Date.now() });
   try {
     const res = await fetch("/api/director/world", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: image.url, view: image.view, place: scene.place.text, model: placeModel(), fresh: again }),
+      body: JSON.stringify({ url: image.url, view: image.view, place: scene.place.text, model: worldModel(), fresh: again }),
+      signal: run.signal,
     });
     const data = (await res.json().catch(() => ({}))) as { url?: string; width?: number; height?: number; depth?: WorldDepth; light?: WorldLight; error?: string };
     if (!res.ok || !data.url || !data.width || !data.height) throw new Error(data.error ?? "The model couldn't draw the place.");
@@ -187,11 +176,20 @@ export async function buildWorld(again = false) {
     if (data.depth && data.light) useDirector.getState().setWorldDepth(data.url, data.depth, data.light);
     void sharpWhenReady(data.url);
   } catch (err) {
-    useWorld.setState({ error: (err as Error).message });
+    // Stopped (by you, or by another photo): nothing went wrong.
+    if (!run.signal.aborted) useWorld.setState({ error: friendlyModelError((err as Error).message) });
   } finally {
+    moved();
+    if (worldRun === run) worldRun = null;
     useWorld.setState({ busy: false });
+    useWorldClock.setState({ since: null });
     // This run's time counts toward the next estimate.
     useTypical.setState({ loaded: false });
     loadTypical();
   }
+}
+
+/** Stops the place being built all around you; its job on the GPU is cancelled with it. */
+export function stopWorld() {
+  worldRun?.abort();
 }

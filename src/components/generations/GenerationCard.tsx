@@ -12,6 +12,8 @@ import { GeneratingField } from "@/components/ui/GeneratingField";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/clipboard";
 import { Media } from "@/components/ui/Media";
+import { TakeReveal, useJustFinished } from "@/components/ui/TakeReveal";
+import Link from "next/link";
 
 /** Picking several takes at once (the Library). */
 export type CardSelect = { active: boolean; selected: boolean; onToggle: (e: MouseEvent) => void };
@@ -26,6 +28,7 @@ export const GenerationCard = memo(function GenerationCard({
   onRemove,
   actions,
   select,
+  href,
 }: {
   gen: Generation;
   index?: number;
@@ -34,6 +37,8 @@ export const GenerationCard = memo(function GenerationCard({
   /** More buttons for the hover bar, before Copy. */
   actions?: ReactNode;
   select?: CardSelect;
+  /** Where a click on the picture opens it (Home's Recent: the Library's viewer). Without it the card only shows. */
+  href?: string;
 }) {
   const removeTake = useGenerationsStore((s) => s.remove);
   const cancel = useGenerationsStore((s) => s.cancel);
@@ -42,7 +47,11 @@ export const GenerationCard = memo(function GenerationCard({
   // Delete takes two clicks: the first arms it for a moment, so a stray click never loses a take.
   const [arming, setArming] = useState(false);
   const disarm = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
   useEffect(() => () => clearTimeout(disarm.current), []);
+  // Seen finishing here: the picture develops instead of popping in (TakeReveal).
+  const fresh = useJustFinished(gen.id, gen.status === "queued" || gen.status === "running");
   const output = gen.outputs[index];
   const aspect = aspectById(gen.aspect);
   const ratio = output?.width && output?.height ? output.width / output.height : aspect.w / aspect.h;
@@ -104,6 +113,7 @@ export const GenerationCard = memo(function GenerationCard({
       {output.kind === "audio" ? (
         <VoiceFace gen={gen} output={output} />
       ) : (
+      <Develop on={fresh}>
       <Media
         media={output}
         alt={gen.prompt}
@@ -113,15 +123,23 @@ export const GenerationCard = memo(function GenerationCard({
           select?.selected && "scale-[0.9] rounded-[12px]",
         )}
       />
+      </Develop>
       )}
+      {href && !picking && output.kind !== "audio" ? <Link href={href} aria-label="Open in the Library" className="absolute inset-0" /> : null}
       {picking ? (
         <SelectMark selected={select.selected} className="absolute left-3 top-3" />
       ) : output.kind === "audio" ? null : (
-        <figcaption className="absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/75 via-black/10 to-black/30 p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+        <figcaption
+          className={cn(
+            "absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/75 via-black/10 to-black/30 p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100",
+            // With a link under it, the caption lets clicks through to the picture; only its buttons take them.
+            href && "pointer-events-none",
+          )}
+        >
           <div className="flex items-center justify-between gap-2">
             {/* With a check in the corner, the label goes down with the prompt so neither gets cut short. */}
             {select ? (
-              <button type="button" onClick={select.onToggle} aria-label="Select this take" title="Select" className="press -m-1 grid shrink-0 place-items-center rounded-full p-1">
+              <button type="button" onClick={select.onToggle} aria-label="Select this take" title="Select" className="press pointer-events-auto -m-1 grid shrink-0 place-items-center rounded-full p-1">
                 <SelectMark selected={false} />
               </button>
             ) : (
@@ -129,14 +147,15 @@ export const GenerationCard = memo(function GenerationCard({
                 {label} · {gen.aspect}
               </Osd>
             )}
-            <div className="flex shrink-0 gap-1">
+            <div className="pointer-events-auto flex shrink-0 gap-1">
               {actions}
               <IconAction
                 label={copied ? "Copied" : "Copy prompt"}
                 onClick={async () => {
                   if (!(await copyText(gen.compiledPrompt ?? gen.prompt))) return;
                   setCopied(true);
-                  setTimeout(() => setCopied(false), 1400);
+                  clearTimeout(copiedTimer.current);
+                  copiedTimer.current = setTimeout(() => setCopied(false), 1400);
                 }}
               >
                 <Copy size={14} />
@@ -213,4 +232,9 @@ export function IconAction({ label, onClick, danger, children }: { label: string
 
 export function GenerationSpinner() {
   return <LoaderCircle className="animate-spin" size={16} />;
+}
+
+/** Develops its media once when the take just finished here; otherwise the media as it is. */
+function Develop({ on, children }: { on: boolean; children: ReactNode }) {
+  return on ? <TakeReveal>{children}</TakeReveal> : <>{children}</>;
 }

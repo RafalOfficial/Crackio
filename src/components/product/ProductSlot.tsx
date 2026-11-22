@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useRef, useState } from "react";
+import { previewUrl } from "@/lib/media-url";
 import { ImagePlus, LoaderCircle, Pencil, Plus, ScanSearch, X } from "lucide-react";
 import { SAMPLES, type SampleId } from "@/lib/product/previews";
 import type { ProductRead } from "@/lib/product/vocab";
@@ -153,7 +154,7 @@ export function ProductSlot({
     >
       <div className="flex gap-3">
         <div className="group relative size-[112px] shrink-0 overflow-hidden rounded-[12px] bg-[#e4e4e6]">
-          <img src={front.url} alt={front.name} className="size-full object-contain" />
+          <img src={previewUrl(front.url, 240)} alt={front.name} className="size-full object-contain" />
           <button
             type="button"
             onClick={() => pick("front")}
@@ -178,7 +179,7 @@ export function ProductSlot({
       <div className="mt-2 flex items-center gap-1.5">
         {photos.slice(1).map((p, i) => (
           <span key={p.url} className="group relative size-10 shrink-0 overflow-hidden rounded-[9px] bg-[#e4e4e6]">
-            <img src={p.url} alt={p.name} className="size-full object-contain" />
+            <img src={previewUrl(p.url, 96)} alt={p.name} className="size-full object-contain" />
             <button
               type="button"
               onClick={() => onPhotos(photos.filter((_, k) => k !== i + 1))}

@@ -61,9 +61,22 @@ export function lenderFor(machine: Machine | undefined, status: LocalStatus | nu
   return best ? { gb: best.lendsGb!, label: best.label === "ComfyUI" ? new URL(best.url).hostname : best.label } : null;
 }
 
+const NOTHING: ReadonlySet<string> = new Set();
+/** A machine's installed files as a set, made once per list (every look at the machine sends a new list). */
+const HAVE = new WeakMap<readonly string[], ReadonlySet<string>>();
+
+/** The files a machine has ("folder/name"), for quick lookups. */
+export function haveOf(target: TargetStatus | null | undefined): ReadonlySet<string> {
+  const list = target?.installed;
+  if (!list?.length) return NOTHING;
+  let have = HAVE.get(list);
+  if (!have) HAVE.set(list, (have = new Set(list)));
+  return have;
+}
+
 /** The version of a model a machine has every file of, if any. */
 export const installedVariant = (model: LocalModel, target: TargetStatus | null) => {
-  const have = new Set(target?.installed ?? []);
+  const have = haveOf(target);
   return model.variants.find((v) => v.files.length > 0 && v.files.every((f) => have.has(`${f.folder}/${f.name}`))) ?? null;
 };
 
@@ -130,7 +143,7 @@ export function byBest(a: Row, b: Row) {
 /** A version's files on a machine: installed, downloading (how far), or failed, and what's left to fetch. */
 export function installState(variant: LocalVariant | null, target: TargetStatus | null) {
   const files = variant?.files ?? [];
-  const have = new Set(target?.installed ?? []);
+  const have = haveOf(target);
   const downloads = target?.downloads ?? [];
   const mine = (d: Download) => files.some((f) => f.folder === d.folder && f.name === d.filename);
   const active = downloads.filter((d) => mine(d) && (d.state === "queued" || d.state === "downloading" || d.state === "checking"));

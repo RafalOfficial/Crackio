@@ -1,6 +1,5 @@
 "use client";
 
-import { create } from "zustand";
 import { Euler, MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { extendFrame, useDirector } from "@/lib/director/store";
 import { shotCamera } from "@/lib/director/camera";
@@ -11,9 +10,10 @@ import { capturePlateFrom } from "./stage/capture";
 import { placeModel } from "./place-model";
 import { usePlaceSize } from "./shot-model";
 import { sharpWhenReady } from "./around";
+import { useExtend } from "./status";
 
-/** An extend in progress (what it's doing), or why it couldn't be done. */
-export const useExtend = create<{ stage: string | null; error: string | null }>(() => ({ stage: null, error: null }));
+// The busy flag lives in status.ts (no three.js there); still importable from here.
+export { useExtend } from "./status";
 
 async function upload(blob: Blob) {
   const body = new FormData();
@@ -57,7 +57,7 @@ async function aroundFrom(scene: Scene) {
  * set's own view, gray where the 360 never saw) is drawn again by the place's model as a real photo from this spot,
  * carried on as asked, and the place is made again around where the camera stands (server/extend, then the world)
  * into what it already was there: the set's views all around from here are kept, and only what they never saw and
- * the photo's edges are drawn. Made from the photo alone, it was a whole new place (the user: extend INTO it).
+ * the photo's edges are drawn. Made from the photo alone, it came out a whole new place instead of more of this one.
  */
 export async function extendPlace(words: string) {
   const { scene } = useDirector.getState();

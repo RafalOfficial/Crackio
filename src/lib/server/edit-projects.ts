@@ -31,6 +31,9 @@ function tables() {
         project_id TEXT NOT NULL,
         filed_at INTEGER NOT NULL
       );
+      -- The project a finished take was made in, looked up by projectFiles (the expression must stay exactly as there):
+      -- every files list read every take ever made without it (60 ms a call at 2,000 takes).
+      CREATE INDEX IF NOT EXISTS generations_project ON generations(json_extract(data, '$.params.project')) WHERE status = 'done';
     `);
     g.__crackioEditTables = true;
   }
@@ -54,8 +57,10 @@ function writeDoc(doc: EditProject) {
 /** A project with its folder's name, icon and color; null once the folder is gone (deleted in the Library). */
 export function getEditProject(id: string): EditProject | null {
   const doc = readDoc(id);
-  const folder = listProjects().find((p) => p.id === id);
-  if (!doc || !folder) return null;
+  if (!doc) return null;
+  // Its own folder only (the Library's table): every save used to list every folder, icons and all, to find it.
+  const folder = tables().prepare("SELECT name, icon, color FROM library_projects WHERE id = ?").get(id) as { name: string; icon: string; color: string } | undefined;
+  if (!folder) return null;
   return { ...doc, name: folder.name, icon: folder.icon, color: folder.color };
 }
 
@@ -314,10 +319,18 @@ export function removeFile(id: string, key: string) {
  * The film made from the timeline in the background, as a take filed into the project (and its Library folder). `owner`:
  * the live demo's access code, so the page that started it can follow it (lib/demo shows a code only its own takes).
  */
+// Exports running now, one per project (on globalThis, so a hot reload doesn't lose them).
+const ge = globalThis as unknown as { __crackioExports?: Map<string, { genId: string; stop: AbortController }> };
+const exports_ = (ge.__crackioExports ??= new Map());
+
 export function startExport(id: string, quality: "720p" | "1080p", owner?: string): Generation {
   const doc = getEditProject(id);
   if (!doc) throw new LibraryError("That project doesn't exist anymore.", 404);
   if (!doc.timeline.main.length) throw new LibraryError("Put some pictures or clips on the timeline first.");
+  // One at a time per project: a second Export follows the one already putting the film together.
+  const running = exports_.get(id);
+  const already = running ? getGeneration(running.genId) : null;
+  if (already && already.status === "running") return already;
   const gen: Generation = {
     id: nanoid(14),
     tool: "storyboard",
@@ -335,22 +348,35 @@ export function startExport(id: string, quality: "720p" | "1080p", owner?: strin
     ...(owner ? { owner } : {}),
   };
   saveGeneration(gen);
+  const stop = new AbortController();
+  exports_.set(id, { genId: gen.id, stop });
+  // Cancelled or deleted meanwhile (the take isn't running any more): ffmpeg stops, and nothing saves over that.
+  const alive = () => {
+    if (getGeneration(gen.id)?.status === "running") return true;
+    stop.abort();
+    return false;
+  };
   const snapshot = structuredClone(doc);
   void (async () => {
     let last = 0;
     try {
       const film = await renderEdit(snapshot, quality, {
+        signal: stop.signal,
         progress: (share) => {
           const now = Date.now();
           if (now - last < 500) return;
           last = now;
-          saveGeneration({ ...gen, progress: 0.02 + share * 0.9 });
+          if (alive()) saveGeneration({ ...gen, progress: 0.02 + share * 0.9 });
         },
       });
+      if (!alive()) return;
       const outputs = await saveOutputs(gen.id, [{ data: film.data, mime: "video/mp4", width: film.width, height: film.height }]);
+      if (!alive()) return;
       saveGeneration({ ...gen, status: "done", outputs, progress: 1, stage: undefined, finishedAt: Date.now() });
     } catch (err) {
-      saveGeneration({ ...gen, status: "error", error: (err as Error).message, stage: undefined, finishedAt: Date.now() });
+      if (alive()) saveGeneration({ ...gen, status: "error", error: (err as Error).message, stage: undefined, finishedAt: Date.now() });
+    } finally {
+      if (exports_.get(id)?.genId === gen.id) exports_.delete(id);
     }
   })();
   return gen;

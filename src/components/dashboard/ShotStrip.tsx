@@ -8,6 +8,7 @@ import { ScrollRow } from "@/components/ui/ScrollRow";
 import type { LocalRef } from "@/lib/hooks/use-uploads";
 import { previewUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
+import { GeneratingField } from "@/components/ui/GeneratingField";
 
 /**
  * The pictures above the prompt, laid out like the shot: a clip's START → END frames, then its references, each with a tag
@@ -359,16 +360,11 @@ function Slot({
 
 /** A frame being made: where it will land, and how far along it is. */
 function MakingTile({ tag, ratio, making }: { tag: string; ratio: number; making: Making }) {
-  const pct = making.progress == null ? null : Math.round(making.progress <= 1 ? making.progress * 100 : making.progress);
+  // Like every take on its way: the dot field and its line (progress comes as 0–1 or as a percent).
+  const progress = making.progress == null ? null : making.progress > 1 ? making.progress / 100 : making.progress;
   return (
-    <div className="skeleton squircle relative shrink-0 overflow-hidden rounded-[13px] shadow-[0_0_0_1px_rgb(255_91_46/0.45)]" style={{ width: frameWidth(ratio), height: 68 }} title={making.stage}>
-      {/* Above the skeleton's light. */}
-      <span className="absolute inset-0 z-[1] grid place-items-center">
-        <span className="flex items-center gap-1 text-[11px] font-semibold text-paper">
-          <LoaderCircle size={13} className="animate-spin text-spike" />
-          {pct !== null && pct > 0 ? `${pct}%` : null}
-        </span>
-      </span>
+    <div className="squircle relative shrink-0 overflow-hidden rounded-[13px] shadow-[0_0_0_1px_rgb(255_91_46/0.45)]" style={{ width: frameWidth(ratio), height: 68 }} title={making.stage}>
+      <GeneratingField bare progress={progress} stage={making.stage} />
       <span className="absolute bottom-1 left-1/2 z-[1] -translate-x-1/2 whitespace-nowrap rounded-full bg-spike px-1.5 py-px text-[8.5px] font-bold uppercase tracking-[0.08em] text-spike-ink">{tag}</span>
     </div>
   );

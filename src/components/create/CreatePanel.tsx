@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clapperboard, ImagePlus, Images, LoaderCircle, Minus, Plus } from "lucide-react";
+import { Clapperboard, CornerDownLeft, ImagePlus, Images, LoaderCircle, Minus, Plus } from "lucide-react";
 import { Panel, PanelHeader, Row, RowGroup, Segmented, Switch } from "@/components/ui/Panel";
 import { MenuItem, Popover } from "@/components/ui/Popover";
 import { AspectGlyph } from "@/components/ui/AspectGlyph";
@@ -31,6 +31,7 @@ import { ASPECTS, aspectById, sizeFor, type AspectId } from "@/lib/shot";
 import { cn } from "@/lib/cn";
 import { useModelParam } from "@/lib/hooks/use-model-param";
 import { askForModel, useModelChoice } from "@/lib/hooks/use-model-choice";
+import { isSubmitEnter } from "@/lib/keys";
 
 const PLACEHOLDERS = [
   "A woman in a red coat on a rainy street at night, shot from low, neon behind her…",
@@ -287,7 +288,7 @@ export function CreatePanel() {
             }}
             onKeyDown={(e) => {
               if (mentions.onKeyDown(e)) return;
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (isSubmitEnter(e)) {
                 e.preventDefault();
                 void generate();
               }
@@ -415,12 +416,12 @@ export function CreatePanel() {
               </button>
             </div>
           </div>
-          <AdvancedOptions s={tuning} job={{ model: effectiveId, count, references: refsIgnored ? 0 : readyRefs.length, resolution: quality.resolution ?? undefined }} />
+          <AdvancedOptions s={tuning} job={{ model: effectiveId, count, references: refsIgnored ? 0 : readyRefs.length, resolution: quality.resolution ?? undefined, nativeOnly: tuning.nativeOnly }} />
         </RowGroup>
       </div>
 
       <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat/90 p-3 backdrop-blur-xl">
-        <LocalTimeLine modelId={effectiveId} count={count} references={refsIgnored ? 0 : readyRefs.length} resolution={quality.resolution ?? undefined} ratio={size.width / size.height} />
+        <LocalTimeLine modelId={effectiveId} count={count} references={refsIgnored ? 0 : readyRefs.length} resolution={quality.resolution ?? undefined} ratio={size.width / size.height} nativeOnly={tuning.nativeOnly} />
         <CostLine
           modelId={effectiveId}
           input={{ output: "image", count, ratio, ...quality.cost }}
@@ -430,10 +431,15 @@ export function CreatePanel() {
           type="button"
           onClick={() => void generate()}
           disabled={busy}
-          className="lip squircle flex h-12 w-full items-center justify-center gap-2 rounded-[16px] bg-spike text-[14px] font-bold uppercase tracking-[0.05em] text-spike-ink transition-[background-color,transform,box-shadow] duration-150 [--lip:var(--color-spike-lip)] hover:bg-spike-hi disabled:opacity-70"
+          // The same Generate as Home's bar: display face, sentence case, how many under it, the same glow.
+          className="lip squircle flex h-12 w-full items-center justify-center gap-2.5 rounded-[16px] bg-spike text-spike-ink transition-[background-color,transform,box-shadow] duration-150 [--lip-glow:0_10px_28px_-12px_rgb(255_91_46/0.5)] [--lip:var(--color-spike-lip)] hover:bg-spike-hi hover:[--lip-glow:0_12px_32px_-12px_rgb(255_91_46/0.62)] disabled:opacity-70"
         >
-          {busy ? <LoaderCircle size={17} className="animate-spin" /> : null}
-          Generate
+          {busy ? <LoaderCircle size={18} className="animate-spin" /> : <span className="font-display text-[19px] leading-none">Generate</span>}
+          {busy ? null : (
+            <span className="tabular inline-flex items-center gap-1 text-[11.5px] font-bold opacity-75">
+              ×{count} <CornerDownLeft size={11} />
+            </span>
+          )}
         </button>
         <div className="flex items-center justify-between gap-2 px-1">
           <p className="min-h-5 text-[12.5px]" aria-live="polite">

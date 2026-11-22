@@ -56,7 +56,18 @@ function SignIn({ compact = false }: { compact?: boolean }) {
         {busy ? <LoaderCircle size={14} className="animate-spin" /> : null}
         Sign in
       </button>
-      {error ? <p className={cn("text-[11.5px] leading-snug text-tally", compact && "sr-only")}>{error}</p> : null}
+      {error ? (
+        <p
+          role="alert"
+          className={cn(
+            "text-[11.5px] leading-snug text-tally",
+            // On a phone's bar there's no room under the field: a one-line pill just above the bar instead.
+            compact && "pointer-events-none absolute inset-x-3 -top-10 truncate rounded-full bg-[#1d1a22]/95 px-3.5 py-2 shadow-[0_8px_24px_rgb(0_0_0/0.45),inset_0_0_0_1px_rgb(255_255_255/0.08)]",
+          )}
+        >
+          {error}
+        </p>
+      ) : null}
     </form>
   );
 }
@@ -117,7 +128,7 @@ export function DemoCard({ collapsed }: { collapsed: boolean }) {
             onClick={toggle}
             aria-expanded={open}
             title={session.signedIn ? `${session.credits} credits left` : "Live demo: enter your access code"}
-            className="smoked-glass squircle mb-1.5 hidden h-12 w-full flex-col items-center justify-center rounded-[14px] text-paper lg:flex"
+            className="squircle mb-1.5 hidden h-12 w-full flex-col items-center justify-center rounded-[14px] bg-white/[0.05] text-paper shadow-[inset_0_0_0_1px_var(--color-line)] hover:bg-white/[0.08] lg:flex"
           >
             {session.signedIn ? (
               <>
@@ -135,18 +146,18 @@ export function DemoCard({ collapsed }: { collapsed: boolean }) {
     );
   }
   return (
-    <div className="smoked-glass squircle mb-2 hidden rounded-[16px] p-3 lg:block">
+    <div className="squircle mb-2 hidden rounded-[16px] bg-white/[0.05] p-3 shadow-[inset_0_0_0_1px_var(--color-line)] lg:block">
       <CardBody />
     </div>
   );
 }
 
-/** Phones: a slim glass bar along the bottom (the sidebar is a drawer there). */
+/** Phones: a slim bar along the bottom (the sidebar is a drawer there), solid like the rest of the chrome. */
 export function DemoBar() {
   const session = useDemoSession();
   if (!DEMO) return null;
   return (
-    <div className="smoked-glass fixed inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2.5 px-3 lg:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2.5 bg-[#121118]/95 px-3 shadow-[inset_0_1px_0_var(--color-line)] lg:hidden">
       {!session.loaded ? null : session.signedIn ? (
         <>
           <span className="flex items-center gap-1.5 text-[13px] font-semibold text-paper" aria-live="polite">

@@ -27,8 +27,8 @@ const DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "director");
  * The shot drawn fresh from the pieces: the model gets the shot's shape, not its pixels. A depth map of the set fixes the
  * camera, the ground and where everyone stands and how big; the place's photo shows what the place looks like; the
  * cast's own pictures, from the sides the camera sees, show who they are; the words say the rest. Everything is drawn
- * new, so nothing soft or digital from a world texture is copied into the shot (the user: "it's basically a copy paste
- * machine ... it has no breathing space"). Measured 2026-10-29 on the user's cafe, Qwen-Image 2.1: the same cafe, the
+ * new, so nothing soft or digital from a world texture is copied into the shot (shots built from copied pixels looked
+ * pasted together and cramped). Measured 2026-10-29 on a test photo of a cafe, Qwen-Image 2.1: the same cafe, the
  * two people where the set has them, a real photograph, where the plate and swap came back digital.
  *
  * `structure: "place"` reads the depth of the camera view itself (the world's buildings too, from its picture) where
@@ -47,8 +47,8 @@ export async function runDirectorFresh(job: EngineJob, gen: Generation, engine: 
   // 1. The shape of the shot: the set's depth, softened so the stand-ins read as bodies, not mannequins (Qwen-Image-Edit
   // 2511 drew wooden dolls from a sharp one); or the depth of the whole view, buildings included.
   const structure = gen.params?.structure === "place" ? "place" : "stage";
-  const shape = path.join(DIR, `fresh-depth-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.png`);
-  await fs.mkdir(DIR, { recursive: true });
+  const shape = path.join(/*turbopackIgnore: true*/ DIR, `fresh-depth-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.png`);
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
   if (structure === "place") {
     const d = await estimateDepth(blocking);
     const raw = Buffer.from(d.data, "base64");
@@ -64,7 +64,7 @@ export async function runDirectorFresh(job: EngineJob, gen: Generation, engine: 
     await sharp(await softFigures(depthFile, gen, W)).png().toFile(shape);
   } else {
     // The ground alone: the stand-ins taken out of the set's depth (each of their pixels given its row's ground), so
-    // the camera's height and angle stay and nobody's body is shaped by a mannequin's. The user's pick of three on
+    // the camera's height and angle stay and nobody's body is shaped by a mannequin's. The pick of three tried on
     // Qwen-Image 2.1 (sharp stand-ins stood Kai stiff like the mannequin and twisted Noor's hands); FLUX 3 places
     // everyone by its layout boxes. By default ("auto") those with a pose to hold keep their stand-in: on the 9-shot
     // benchmark (3 scenes x 3 ways) only the stand-ins got "Kai sitting at a table reading, Noor walking past" (with
@@ -91,7 +91,7 @@ export async function runDirectorFresh(job: EngineJob, gen: Generation, engine: 
   const castSheet = pictures.length && !separate ? await sheetOf(pictures.map((p) => p.file)) : null;
   // The place as this camera sees it in its world (rough is fine: it's drawn fresh), so the background turns with the
   // camera: given the place's photo, a shot down the side street came back with the photo's cafe front behind it
-  // (Qwen-Image 2.1, the user's cafe). `reference: "photo"` gives the photo instead.
+  // (Qwen-Image 2.1, a cafe test photo). `reference: "photo"` gives the photo instead.
   const comp = gen.params?.comp as { plateUrl?: string } | undefined;
   const view = scene.place.world && gen.params?.reference !== "photo" && comp?.plateUrl ? urlToPath(comp.plateUrl) : null;
   const place = view ?? (scene.place.image ? urlToPath(scene.place.image.url) : null);
@@ -142,7 +142,7 @@ export async function runDirectorFresh(job: EngineJob, gen: Generation, engine: 
       { signal: ctx.signal, progress: (v) => ctx.progress(0.05 + v * 0.93, "Drawing the shot") },
     );
     if (!outputs.length) throw new EngineError("The model returned no picture.");
-    // Faces drawn small come back soft or wrong (the user's crop: closed, smeared eyes on a laughing boy): each one is
+    // Faces drawn small come back soft or wrong (seen in a crop: closed, smeared eyes on a laughing boy): each one is
     // drawn again up close and put back.
     // Off unless asked for: a patch redrawn at half strength moved hands and cups, and the blend left them ghosted
     // (2K alone drew the faces clean).
@@ -152,10 +152,10 @@ export async function runDirectorFresh(job: EngineJob, gen: Generation, engine: 
       ctx.progress(0.9 + (0.08 * i) / outputs.length, "Drawing the faces up close");
       finished.push(faces.length ? { ...out, data: await withFaces(out.data, faces, boxes, W, H, beats, job, engine, ctx.signal).catch(() => out.data) } : out);
     }
-    const shapeSaved = await saveUpload(await fs.readFile(shape));
+    const shapeSaved = await saveUpload(await fs.readFile(/*turbopackIgnore: true*/ shape));
     return { outputs: finished, usedPrompt: fullPrompt, plateUrl: shapeSaved.url, swapUrl: shapeSaved.url };
   } finally {
-    await fs.rm(shape, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ shape, { force: true });
   }
 }
 
@@ -196,8 +196,8 @@ async function withFaces(
     const top = Math.round(Math.max(0, Math.min(OH - side, cy - side * 0.45)));
     const crop = await sharp(img).extract({ left, top, width: side, height: side }).resize(1024, 1024, { kernel: "lanczos3" }).png().toBuffer();
     const tag = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const cropFile = path.join(DIR, `face-${tag}.png`);
-    await fs.writeFile(cropFile, crop);
+    const cropFile = path.join(/*turbopackIgnore: true*/ DIR, `face-${tag}.png`);
+    await fs.writeFile(/*turbopackIgnore: true*/ cropFile, crop);
     const portrait = f.element.cast?.portrait ? urlToPath(f.element.cast.portrait) : null;
     const noun = nounOf(f.element);
     const beat = beats.get(f.element.id);
@@ -235,7 +235,7 @@ async function withFaces(
       const patch = await sharp(redrawn).joinChannel(alpha, { raw: { width: side, height: side, channels: 1 } }).png().toBuffer();
       img = await sharp(img).composite([{ input: patch, left, top }]).png().toBuffer();
     } finally {
-      await fs.rm(cropFile, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ cropFile, { force: true });
     }
   }
   return img;
@@ -297,9 +297,9 @@ function posedColors(gen: Generation) {
 /** The cast's pictures side by side on one plain sheet, the order they stand in the frame. */
 async function sheetOf(files: string[]) {
   const key = createHash("sha1").update(files.join("|")).digest("hex").slice(0, 20);
-  const out = path.join(DIR, `fresh-cast-${key}.png`);
+  const out = path.join(/*turbopackIgnore: true*/ DIR, `fresh-cast-${key}.png`);
   try {
-    await fs.access(out);
+    await fs.access(/*turbopackIgnore: true*/ out);
     return out;
   } catch {
     const tiles = await Promise.all(files.map((f) => sharp(f).flatten({ background: "#d9d9d9" }).resize(null, 1024).png().toBuffer()));
@@ -323,8 +323,8 @@ async function sheetOf(files: string[]) {
 /**
  * The Director's ControlNet shot (model Z-Image Director, engines/comfy-local-recipes `Z_IMAGE_DIRECTOR`): no pictures
  * go in, so nothing is copied. The model draws a whole new film still that follows a depth map of the shot through
- * the Fun ControlNet, and words say who is where: the user's pick over the reference-picture shots (Oct 2026, "it's
- * cinematic, it looks real, it doesn't look flat").
+ * the Fun ControlNet, and words say who is where: chosen in testing over the reference-picture shots (Oct 2026), as it
+ * looked more like a real film still.
  *
  * The depth is the whole view's (Depth Anything on the set as the camera sees it: the place's buildings and the
  * stand-ins), so the place keeps its shape; a set with no place gives its own depth (the ground and the stand-ins). The
@@ -340,11 +340,11 @@ export async function runDirectorControl(job: EngineJob, gen: Generation, engine
   const meta = await sharp(depthFile).metadata();
   const W = meta.width ?? 1536;
   const H = meta.height ?? 864;
-  const control = path.join(DIR, `control-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.png`);
-  await fs.mkdir(DIR, { recursive: true });
+  const control = path.join(/*turbopackIgnore: true*/ DIR, `control-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.png`);
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
   if (/qwen-director/.test(`${job.model} ${gen.model ?? ""}`)) {
     // Qwen Director follows the set as the camera sees it, in grey (the place and the stand-ins' light and shade), held
-    // for the first half of the steps (engines QWEN_DIRECTOR): the winner of the user's A/B/C over depth and edges.
+    // for the first half of the steps (engines QWEN_DIRECTOR): the winner of an A/B/C test over depth and edges.
     await sharp(blocking).greyscale().resize(W, H, { fit: "fill" }).png().toFile(control);
   } else if (scene.place.image) {
     const d = await estimateDepth(blocking);
@@ -386,16 +386,47 @@ export async function runDirectorControl(job: EngineJob, gen: Generation, engine
     }
   const prompt = controlPrompt(scene, framed, cam.position, { looks, keep: keepNotes(framed), place, sheet, refs });
   try {
-    const { outputs } = await engine.run(
-      { ...job, prompt, userPrompt: prompt, refine: false, references: pictures, depth: { path: control, label: "the shot's depth", role: "subject" }, guide: undefined, layout: undefined },
-      { signal: ctx.signal, progress: (v) => ctx.progress(0.05 + v * 0.93, "Drawing the shot") },
-    );
+    const drawn = { ...job, prompt, userPrompt: prompt, refine: false, references: pictures, depth: { path: control, label: "the shot's depth", role: "subject" as const }, guide: undefined, layout: undefined };
+    let { outputs } = await engine.run(drawn, { signal: ctx.signal, progress: (v) => ctx.progress(0.05 + v * 0.93, "Drawing the shot") });
     if (!outputs.length) throw new EngineError("The model returned no picture.");
-    const saved = await saveUpload(await fs.readFile(control));
+    // Now and then a seed comes out flat: posterised shapes and no texture, like a cut-paper illustration (Director v2's
+    // tests on a rented A40: one cafe take of five). Drawn once more with another seed, the sharper of the two is kept.
+    const first = await sharpness(outputs[0].data).catch(() => Infinity);
+    if (first < FLAT && !ctx.signal.aborted) {
+      const again = await engine
+        .run(drawn, { signal: ctx.signal, progress: (v) => ctx.progress(0.5 + v * 0.48, "Drawing it again: the first came out flat") })
+        .catch(() => null);
+      if (again?.outputs.length && (await sharpness(again.outputs[0].data).catch(() => 0)) > first) outputs = again.outputs;
+    }
+    const saved = await saveUpload(await fs.readFile(/*turbopackIgnore: true*/ control));
     return { outputs, usedPrompt: prompt, plateUrl: saved.url, swapUrl: saved.url };
   } finally {
-    await fs.rm(control, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ control, { force: true });
   }
+}
+
+/** Places that have nobody in them unless the shot says so: no passers-by asked for there. */
+const LONELY = /\b(lone|lonely|alien|planet|moon|lunar|mars|outer space|spaceship|space station|desert|dunes|wilderness|underwater|arctic|antarctic|glacier|tundra|summit|mountaintop|abandoned|deserted|ruins|empty|wasteland|forest|jungle|cave|desolate|barren|volcanic|remote|isolated|otherworldly|extraterrestrial|sci-fi|nebula|asteroid|crater)\b/i;
+
+/** A real take's fine detail (Laplacian variance, 512 px wide) is 200-1000+; a flat, posterised one about 50. */
+const FLAT = 90;
+async function sharpness(data: Buffer) {
+  const W = 512;
+  const { data: px, info } = await sharp(data).greyscale().resize(W).raw().toBuffer({ resolveWithObject: true });
+  const H = info.height;
+  let sum = 0;
+  let sum2 = 0;
+  let n = 0;
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      const l = px[i - 1] + px[i + 1] + px[i - W] + px[i + W] - 4 * px[i];
+      sum += l;
+      sum2 += l * l;
+      n++;
+    }
+  }
+  return sum2 / n - (sum / n) ** 2;
 }
 
 /** The place in a picture, in a set designer's words, read once per picture. */
@@ -517,7 +548,11 @@ function controlPrompt(scene: Scene, framed: Framing[], camPos: Vector3, pieces:
   if (people.length > 1) s.push("They are caught mid-moment, reacting to each other: relaxed, natural body language, real expressions, not posing.");
   else if (people.length === 1) s.push("Caught mid-moment: relaxed, natural body language and a real expression, not posing.");
   if (framed.length) s.push(`Every shape in the layout is the real thing: ${people.length ? "each person real and fully detailed (face, hair, skin, clothes), " : ""}never a mannequin, statue or grey shape.`);
-  if (!/(empty|alone|deserted|nobody|no one|abandoned)/i.test(scene.notes)) s.push("Around them the place has its usual life: other people and passers-by in the background.");
+  // A street has its passers-by; an alien beach or a desert has nobody (an astronaut test shot got strangers around him).
+  if (/(empty|alone|deserted|nobody|no one|abandoned)/i.test(scene.notes)) {
+    // The words already say so.
+  } else if (LONELY.test(`${scene.place.text} ${placeLine ?? ""}`)) s.push("Nobody else is around: no other people anywhere in the picture.");
+  else s.push("Around them the place has its usual life: other people and passers-by in the background.");
   if (people.length) s.push("Each of the people named here appears exactly once.");
   s.push(`${realistic ? "Real light on real materials, natural depth of field" : "One coherent picture"}, no text.`);
   return s.join(" ");
@@ -530,8 +565,8 @@ const PHOTO_STYLES: string[] = ["photo", "cinematic", "documentary", "editorial"
 /**
  * The words: where everyone is and roughly which way they're turned, what they're doing, and that they're caught in a
  * moment, not posing. Exact geometry ("full side profile: one eye and the right ear show") and the cast's own sheet
- * poses came back as people standing stiff where they were put (the user: "like someone copied the side photo of their
- * cast images"); where the model had to turn them itself, they held a coffee and looked round at each other.
+ * poses came back as people standing stiff where they were put, as if pasted from the cast's side photos; where the
+ * model had to turn them itself, they held a coffee and looked round at each other.
  */
 function freshPrompt(
   scene: Scene,
@@ -557,7 +592,7 @@ function freshPrompt(
       : "Image 1 is a depth map of the shot (white is near): keep its camera.",
   ];
   // The set's smooth grey shapes only mark where things stand: said what they become, or the model can draw the stand-in
-  // itself (a mannequin, a stick man). What the openfield Director's look frames taught: name the real thing.
+  // itself (a mannequin, a stick man). What look frames taught: name the real thing.
   if (n) s.push(`Its smooth grey shapes only mark where things stand: draw each ${framed.some((f) => PEOPLE.has(f.element.kind)) ? "person as a real, fully detailed person (face, hair, skin, clothes) and each thing" : "thing"} as the real thing, never as a mannequin, doll, statue or grey shape.`);
   const words = scene.place.text.trim();
   if (pieces.place && pieces.view) {
@@ -597,8 +632,7 @@ function freshPrompt(
   if (framed.some((f) => f.element.kind === "person") && (scene.notes.trim() || framed.some((f) => f.element.action?.trim()))) {
     s.push("Anything a person holds or uses is clearly visible and real in their hand.");
   }
-  // A place with nobody else in it looked like a set (the user: "why is everything with no other people? ... it looks
-  // lonely"): its usual life goes on, unless the notes say it's empty.
+  // A place with nobody else in it looked like a set: its usual life goes on, unless the notes say it's empty.
   if (!/(empty|alone|deserted|nobody|no one|abandoned)/i.test(scene.notes)) s.push("Around them the place has its usual life: other people and passers-by in the background.");
   if (n) s.push("Each of the people named here appears exactly once.");
   s.push(`${style.phrase}. A candid, natural ${realistic ? "photograph" : "picture"}${realistic ? ", real light on real materials" : ""}, no text.`);
@@ -712,15 +746,15 @@ async function matchedView(el: SceneElement, around: number): Promise<string | n
     const i = names.indexOf(want);
     if (i >= 0) {
       const flip = (want === "side" || want === "three-quarter") && around < 0;
-      const stat = await fs.stat(sheet);
+      const stat = await fs.stat(/*turbopackIgnore: true*/ sheet);
       const key = createHash("sha1").update(`sheet-view|${sheet}|${stat.size}|${stat.mtimeMs}|${i}|${flip}`).digest("hex").slice(0, 20);
-      const file = path.join(DIR, `${key}.png`);
+      const file = path.join(/*turbopackIgnore: true*/ DIR, `${key}.png`);
       try {
-        await fs.access(file);
+        await fs.access(/*turbopackIgnore: true*/ file);
       } catch {
-        await fs.mkdir(DIR, { recursive: true });
+        await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
         const view = sharp((await sheetViews(sheet))[i]);
-        await fs.writeFile(file, await (flip ? view.flop() : view).png().toBuffer());
+        await fs.writeFile(/*turbopackIgnore: true*/ file, await (flip ? view.flop() : view).png().toBuffer());
       }
       return file;
     }

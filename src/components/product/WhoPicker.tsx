@@ -58,7 +58,7 @@ export function WhoPicker({
                   active ? "text-[#16131b]" : "bg-white/[0.04] text-fog hover:bg-white/[0.08] hover:text-paper",
                 )}
               >
-                {active ? <motion.span layoutId="who-pill" className="absolute inset-0 rounded-[12px] bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
+                {active ? <motion.span layoutId="who-pill" layoutDependency={who} className="absolute inset-0 rounded-[12px] bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
                 <span className="relative">{o.label}</span>
               </button>
             );

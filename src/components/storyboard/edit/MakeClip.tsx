@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, ChevronDown, Clapperboard, ImagePlus, LoaderCircle, Plus, TriangleAlert, Volume2, VolumeX, X } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useEditor, type ClipPick } from "@/lib/storyboard/edit-store";
-import { clipFromFile, placed, type EditFile } from "@/lib/storyboard/edit";
+import { clipFromFile, type EditFile } from "@/lib/storyboard/edit";
 import { insertMain, patchClip } from "@/lib/storyboard/edit-ops";
 import { useGenerations } from "@/lib/hooks/use-generations";
 import { resolveAutoId, useModels } from "@/lib/hooks/use-models";
@@ -82,7 +82,14 @@ function MakeClipForm({ pick }: { pick: ClipPick }) {
   const submit = useGenerations((s) => s.submit);
   const makingId = useEditor((s) => (pick.clip ? s.timeline.main.find((c) => c.id === pick.clip)?.making : undefined));
   const making = useGenerations((s) => (makingId ? s.items.find((g) => g.id === makingId) : undefined));
-  const timeline = useEditor((s) => s.timeline);
+  // This shot's number and the still after it: the panel follows those, not every trim elsewhere on the timeline.
+  const shot = useEditor((s) => (pick.clip ? s.timeline.main.findIndex((c) => c.id === pick.clip) + 1 : 0));
+  const nextStill = useEditor((s) => {
+    if (!pick.clip) return null;
+    const at = s.timeline.main.findIndex((c) => c.id === pick.clip);
+    const next = at >= 0 ? s.timeline.main[at + 1] : undefined;
+    return next?.kind === "image" ? next : null;
+  });
   const filmAspect = useEditor((s) => s.project?.aspect ?? "16:9");
   const { models, defaults, loaded, setDefault } = useModels();
   const [model, setModel] = useModelChoice("video", "video");
@@ -93,14 +100,6 @@ function MakeClipForm({ pick }: { pick: ClipPick }) {
   const noModel = loaded && !effectiveId;
 
   const start: Frame = pick.file;
-  // The next picture on the timeline is the natural place for this one's clip to land.
-  const nextStill = useMemo(() => {
-    if (!pick.clip) return null;
-    const list = placed(timeline.main);
-    const at = list.findIndex((p) => p.clip.id === pick.clip);
-    const next = list[at + 1]?.clip;
-    return next?.kind === "image" ? next : null;
-  }, [timeline.main, pick.clip]);
   const [end, setEnd] = useState<Frame | null>(null);
   const [prompt, setPrompt] = useState("");
   const [refine, setRefine] = useState(true);
@@ -114,7 +113,6 @@ function MakeClipForm({ pick }: { pick: ClipPick }) {
   const [onTimeline, setOnTimeline] = useState(true);
   const [refs, setRefs] = useState<Frame[]>([]);
   const [more, setMore] = useState(false);
-  const shot = pick.clip ? timeline.main.findIndex((c) => c.id === pick.clip) + 1 : 0;
   const field = useRef<HTMLTextAreaElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

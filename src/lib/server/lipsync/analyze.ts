@@ -6,6 +6,7 @@ import { nanoid } from "nanoid";
 import { withTarget } from "../comfy-targets";
 import { DATA_DIR } from "../paths";
 import { urlToPath } from "../media";
+import { writeFileAtomic } from "../atomic-write";
 // The registry loads comfy-local whole first (see server/voice/setup).
 import "@/lib/engines/refine";
 import { downloadOutput, uploadFile } from "@/lib/engines/comfy-local";
@@ -21,7 +22,7 @@ import type { LipAnalysis, LipWord } from "@/lib/lipsync/types";
  * is heard once.
  */
 
-export const CACHE = path.join(DATA_DIR, "cache", "lipsync");
+export const CACHE = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "lipsync");
 
 export class LipsyncError extends Error {
   constructor(
@@ -33,14 +34,14 @@ export class LipsyncError extends Error {
 }
 
 async function keyOf(file: string) {
-  const st = await fs.stat(file);
-  return crypto.createHash("sha1").update(`${path.resolve(file)}|${st.size}|${st.mtimeMs}`).digest("hex").slice(0, 16);
+  const st = await fs.stat(/*turbopackIgnore: true*/ file);
+  return crypto.createHash("sha1").update(`${path.resolve(/*turbopackIgnore: true*/ file)}|${st.size}|${st.mtimeMs}`).digest("hex").slice(0, 16);
 }
 
 export async function analysisByKey(key: string): Promise<LipAnalysis | null> {
   if (!/^[0-9a-f]{16}$/.test(key)) return null;
   try {
-    return JSON.parse(await fs.readFile(path.join(CACHE, `${key}.json`), "utf8")) as LipAnalysis;
+    return JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ CACHE, `${key}.json`), "utf8")) as LipAnalysis;
   } catch {
     return null;
   }
@@ -48,7 +49,7 @@ export async function analysisByKey(key: string): Promise<LipAnalysis | null> {
 
 export async function analyzeClip(url: string, signal: AbortSignal, fresh = false): Promise<LipAnalysis> {
   const file = urlToPath(url);
-  if (!file || !(await fs.stat(file).catch(() => null))) throw new LipsyncError("Crackio can't find that clip.", 404);
+  if (!file || !(await fs.stat(/*turbopackIgnore: true*/ file).catch(() => null))) throw new LipsyncError("Crackio can't find that clip.", 404);
   const key = await keyOf(file);
   if (!fresh) {
     const kept = await analysisByKey(key);
@@ -71,8 +72,8 @@ export async function analyzeClip(url: string, signal: AbortSignal, fresh = fals
   if (info.audio) {
     const place = await machineWith((m) => m.hearing);
     if (!place?.target) throw new LipsyncError("Hearing what a clip says needs speech to text on one of your GPUs: get it under Voice models.", 409);
-    await fs.mkdir(CACHE, { recursive: true });
-    const wav = path.join(CACHE, `${nanoid(10)}.wav`);
+    await fs.mkdir(/*turbopackIgnore: true*/ CACHE, { recursive: true });
+    const wav = path.join(/*turbopackIgnore: true*/ CACHE, `${nanoid(10)}.wav`);
     try {
       await toWav(file, wav, { rate: 16000, signal });
       const up = await withTarget(place.target, () => uploadFile(wav, signal, "lipsync"));
@@ -104,10 +105,11 @@ export async function analyzeClip(url: string, signal: AbortSignal, fresh = fals
       const cut = sentencesOf(text, words);
       Object.assign(base, { text, words: cut.words, sentences: cut.sentences });
     } finally {
-      await fs.rm(wav, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ wav, { force: true });
     }
   }
-  await fs.mkdir(CACHE, { recursive: true });
-  await fs.writeFile(path.join(CACHE, `${key}.json`), JSON.stringify(base));
+  await fs.mkdir(/*turbopackIgnore: true*/ CACHE, { recursive: true });
+  // In one step: a crash mid-write never leaves half an analysis behind.
+  await writeFileAtomic(path.join(/*turbopackIgnore: true*/ CACHE, `${key}.json`), JSON.stringify(base));
   return base;
 }

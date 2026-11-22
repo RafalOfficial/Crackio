@@ -23,7 +23,9 @@ export type ModelFolder =
   /** Whisper and other speech encoders (ComfyUI's AudioEncoderLoader): HuMo hears speech through Whisper large v3. */
   | "audio_encoders"
   /** FlashVSR+'s own folder (models/FlashVSR; the Crackio bridge 1.5+ and its node both add it). */
-  | "FlashVSR";
+  | "FlashVSR"
+  /** MoGe's 3D-from-a-photo models (ComfyUI's own MoGe nodes, since May 2026). */
+  | "geometry_estimation";
 
 /**
  * A file the model needs, where ComfyUI looks for it, and what it is to the recipe (`role`: "model", "text", "vae"…;
@@ -212,6 +214,8 @@ export type TargetStatus = {
   cloud?: { provider: CloudGpu["provider"]; instance?: string; tunnel?: boolean };
   /** Nobody set it up: ComfyUI's usual address, checked in case one already runs there (not worth a warning when none does). */
   implicit?: boolean;
+  /** Billed per job (RunPod Serverless, Comfy Cloud): jobs go there only while it's the one chosen under Run on. */
+  metered?: boolean;
   connected: boolean;
   onThisComputer: boolean;
   bridge: string | null;

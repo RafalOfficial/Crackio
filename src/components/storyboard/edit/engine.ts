@@ -75,6 +75,39 @@ const fadeAt = (s: { fadeIn: number; fadeOut: number; end: number }, start: numb
 
 const ready = (v: HTMLVideoElement) => v.readyState >= 2 && !v.seeking && !v.error;
 
+/** Where a video was asked to go while it was still on its way to the last place (only the newest counts). */
+const wanted = new WeakMap<HTMLVideoElement, number>();
+
+/**
+ * One seek at a time: a trim or a scrub asks for a new place every frame, and stacking seeks on a video that's still
+ * seeking makes it fall behind (the picture lags the pointer). The newest place waits for the current seek to land.
+ */
+function seekTo(v: HTMLVideoElement, at: number, close = 1 / 30) {
+  if (v.seeking) {
+    if (!wanted.has(v)) {
+      v.addEventListener(
+        "seeked",
+        () => {
+          const next = wanted.get(v);
+          wanted.delete(v);
+          if (next !== undefined) seekTo(v, next, close);
+        },
+        { once: true },
+      );
+    }
+    wanted.set(v, at);
+    return;
+  }
+  // Placed directly: a wait left from a seek that never landed (an error) mustn't pull it back later.
+  wanted.delete(v);
+  if (Math.abs(v.currentTime - at) <= close) return;
+  try {
+    v.currentTime = at;
+  } catch {
+    /* not seekable yet: placed when it can be */
+  }
+}
+
 export class FilmEngine {
   private segs: Seg[] = [];
   private sounds: Sound[] = [];
@@ -199,18 +232,12 @@ export class FilmEngine {
   private load(v: HTMLVideoElement, seg: Seg, at: number) {
     if (v.dataset.url !== seg.url) {
       v.dataset.url = seg.url;
+      // A seek still waiting was for the clip it had before.
+      wanted.delete(v);
       v.src = seg.url;
     }
     v.dataset.seg = seg.id;
-    const place = () => {
-      if (Math.abs(v.currentTime - at) > 1 / 60) {
-        try {
-          v.currentTime = at;
-        } catch {
-          /* not seekable yet */
-        }
-      }
-    };
+    const place = () => seekTo(v, at, 1 / 60);
     if (v.readyState >= 1) place();
     else v.addEventListener("loadedmetadata", place, { once: true });
   }
@@ -236,15 +263,7 @@ export class FilmEngine {
         this.load(v, seg, seg.in + (t - seg.start) * seg.speed);
       }
       const at = seg.in + (t - seg.start) * seg.speed;
-      if (seeked || !playing) {
-        if (Math.abs(v.currentTime - at) > 1 / 30) {
-          try {
-            v.currentTime = at;
-          } catch {
-            /* loading: placed when it can be */
-          }
-        }
-      }
+      if (seeked || !playing) seekTo(v, at);
       v.playbackRate = seg.speed;
       v.muted = seg.muted || seg.volume <= 0;
       v.volume = Math.max(0, Math.min(1, seg.volume * fade));

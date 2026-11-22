@@ -54,9 +54,9 @@ export async function renderEdit(
       : `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,format=yuv420p`;
 
   // Working files next to Crackio's data (the system temp folder can sit on a nearly full drive).
-  const root = path.join(DATA_DIR, "cache", "storyboard-export");
-  await fs.mkdir(root, { recursive: true });
-  const dir = await fs.mkdtemp(path.join(root, "film-"));
+  const root = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "storyboard-export");
+  await fs.mkdir(/*turbopackIgnore: true*/ root, { recursive: true });
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ root, "film-"));
   try {
     const args = ["-hide_banner", "-y"];
     const graph: string[] = [];
@@ -65,14 +65,14 @@ export async function renderEdit(
     for (const [i, p] of list.entries()) {
       const c = p.clip;
       const file = urlToPath(c.url);
-      const there = file ? await fs.stat(file).then((st) => st.isFile()).catch(() => false) : false;
+      const there = file ? await fs.stat(/*turbopackIgnore: true*/ file).then((st) => st.isFile()).catch(() => false) : false;
       if (!file || !there) throw new Error(`“${c.name ?? "A piece of the film"}” isn't on this computer anymore: take it off the timeline and export again.`);
       const length = p.end - p.start;
       const D = num(length);
       const silence = `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${D},${AFMT}[a${i}]`;
       if (c.kind === "image") {
         // Any picture Crackio keeps (WebP, AVIF, a cut-out with alpha) as a plain PNG ffmpeg reads the same everywhere.
-        const still = path.join(dir, `still-${i}.png`);
+        const still = path.join(/*turbopackIgnore: true*/ dir, `still-${i}.png`);
         await sharp(file, { failOn: "none" }).rotate().flatten({ background: "#000000" }).png().toFile(still);
         if (c.push) {
           // A slow push in, drawn at twice the size so it glides instead of stepping.
@@ -111,7 +111,7 @@ export async function renderEdit(
     for (const [j, m] of doc.timeline.music.entries()) {
       const volume = m.muted ? 0 : (m.volume ?? 0.8);
       const file = urlToPath(m.url);
-      const there = file ? await fs.stat(file).then((st) => st.isFile()).catch(() => false) : false;
+      const there = file ? await fs.stat(/*turbopackIgnore: true*/ file).then((st) => st.isFile()).catch(() => false) : false;
       if (!file || !there || volume <= 0 || (m.at ?? 0) >= total) continue;
       args.push("-i", file);
       graph.push(
@@ -127,9 +127,9 @@ export async function renderEdit(
     }
 
     // The graph goes in a file: a long film's would pass the length Windows allows a command line.
-    const script = path.join(dir, "graph.txt");
-    await fs.writeFile(script, graph.join(";\n"));
-    const out = path.join(dir, "film.mp4");
+    const script = path.join(/*turbopackIgnore: true*/ dir, "graph.txt");
+    await fs.writeFile(/*turbopackIgnore: true*/ script, graph.join(";\n"));
+    const out = path.join(/*turbopackIgnore: true*/ dir, "film.mp4");
     args.push(
       "-filter_complex_script",
       script,
@@ -158,9 +158,9 @@ export async function renderEdit(
       out,
     );
     await ffmpegWithProgress(args, total, { signal, progress });
-    return { data: await fs.readFile(out), width: W, height: H, duration: total };
+    return { data: await fs.readFile(/*turbopackIgnore: true*/ out), width: W, height: H, duration: total };
   } finally {
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => {});
   }
 }
 

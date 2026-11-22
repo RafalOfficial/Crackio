@@ -9,6 +9,7 @@ import path from "node:path";
 import type { Gpu, Machine } from "@/lib/local/types";
 import { writeFileAtomic } from "./atomic-write";
 import { amdWindowsRocm, thisComputer } from "./hardware";
+import { netAddresses } from "./net-addresses";
 import { DATA_DIR } from "./paths";
 
 /**
@@ -35,7 +36,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** A line without terminal colors (ComfyUI colors its log even into a file). */
 const plain = (line: string) => line.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 /** Windows paths ignore case. */
-const samePath = (a: string, b: string) => (WIN ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b));
+const samePath = (a: string, b: string) => (WIN ? path.resolve(/*turbopackIgnore: true*/ a).toLowerCase() === path.resolve(/*turbopackIgnore: true*/ b).toLowerCase() : path.resolve(/*turbopackIgnore: true*/ a) === path.resolve(/*turbopackIgnore: true*/ b));
 
 /** 8188 is ComfyUI's usual port; on this setup an SSH tunnel to a rented GPU holds it. */
 export const DEFAULT_PORT = 8189;
@@ -43,7 +44,7 @@ const PYTHON = "3.12";
 /** github.com/comfyanonymous/ComfyUI moved here (the old address redirects). */
 const COMFY_REPO = "https://github.com/Comfy-Org/ComfyUI";
 const PYTORCH = "https://download.pytorch.org/whl";
-const RECORD_FILE = path.join(DATA_DIR, "comfy-install.json");
+const RECORD_FILE = path.join(/*turbopackIgnore: true*/ DATA_DIR, "comfy-install.json");
 const MARKER = ".crackio-install.json";
 
 /* ------------------------------------------------------------------ which PyTorch */
@@ -290,7 +291,7 @@ async function windowsDrives(): Promise<Drive[]> {
  */
 async function chooseFolder(needGb: number): Promise<Folder> {
   const override = process.env.CRACKIO_COMFY_DIR?.trim();
-  if (override) return { path: path.resolve(override), why: "Set by CRACKIO_COMFY_DIR." };
+  if (override) return { path: path.resolve(/*turbopackIgnore: true*/ override), why: "Set by CRACKIO_COMFY_DIR." };
   const home = besideApp(path.join(/*turbopackIgnore: true*/ os.homedir(), "Crackio", "ComfyUI"));
   if (!WIN) return { path: home, why: "In your home folder." };
   const drives = (await windowsDrives()).filter((d) => /^(NTFS|ReFS)$/i.test(d.fs) && !REMOVABLE_BUS.has(d.bus));
@@ -311,14 +312,14 @@ async function chooseFolder(needGb: number): Promise<Folder> {
  */
 function besideApp(dir: string) {
   const app = path.resolve(/*turbopackIgnore: true*/ process.cwd()).toLowerCase();
-  const d = path.resolve(dir).toLowerCase();
+  const d = path.resolve(/*turbopackIgnore: true*/ dir).toLowerCase();
   if (d !== app && !d.startsWith(app + path.sep)) return dir;
-  return path.join(path.dirname(path.dirname(path.resolve(dir))), "Crackio-ComfyUI");
+  return path.join(/*turbopackIgnore: true*/ path.dirname(path.dirname(path.resolve(/*turbopackIgnore: true*/ dir))), "Crackio-ComfyUI");
 }
 
 /** Free space where `dir` is (or would be), in GB. */
 async function freeAt(dir: string): Promise<number | null> {
-  for (let p = path.resolve(dir); ; p = path.dirname(p)) {
+  for (let p = path.resolve(/*turbopackIgnore: true*/ dir); ; p = path.dirname(p)) {
     try {
       const s = await fs.statfs(p);
       return round1((s.bavail * s.bsize) / GB);
@@ -352,7 +353,7 @@ function layout(root: string) {
 type Layout = ReturnType<typeof layout>;
 
 const exists = (p: string) =>
-  fs.access(p).then(
+  fs.access(/*turbopackIgnore: true*/ p).then(
     () => true,
     () => false,
   );
@@ -385,7 +386,7 @@ export type InstallRecord = {
 
 async function readRecord(): Promise<InstallRecord | null> {
   try {
-    return JSON.parse(await fs.readFile(RECORD_FILE, "utf8")) as InstallRecord;
+    return JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ RECORD_FILE, "utf8")) as InstallRecord;
   } catch {
     return null;
   }
@@ -531,7 +532,18 @@ function run(cmd: string, args: string[], { cwd, env, timeoutMs = 10 * 60_000, o
       clearTimeout(timer);
       resolve({ code, out, err });
     };
-    const timer = setTimeout(() => child?.pid && killPid(child.pid), timeoutMs);
+    const timer = setTimeout(() => {
+      if (child?.pid) void killPid(child.pid);
+      // The tree kill can hang itself (taskkill /T while Windows' WMI service is stuck, as are the WMI queries this runs),
+      // and the command's "close" then never comes: end the direct child and stop waiting.
+      try {
+        child?.kill();
+      } catch {}
+      setTimeout(() => {
+        err += `\n(stopped after ${Math.round(timeoutMs / 1000)} s)`;
+        done(-1);
+      }, 2000);
+    }, timeoutMs);
     try {
       child = spawn(cmd, args, { cwd, env, windowsHide: true });
     } catch (e) {
@@ -560,7 +572,14 @@ function run(cmd: string, args: string[], { cwd, env, timeoutMs = 10 * 60_000, o
 /** Stops a process and everything it started. */
 async function killPid(pid: number) {
   if (WIN) {
-    await new Promise((r) => execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }, r));
+    await new Promise((r) => execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, timeout: 8_000 }, r));
+    // The tree kill hangs while Windows' WMI service is stuck (it then never ended ComfyUI, and Settings said "Stopped"
+    // over a ComfyUI still running): end the process itself.
+    if (alive(pid)) {
+      try {
+        process.kill(pid);
+      } catch {}
+    }
     return;
   }
   try {
@@ -606,7 +625,7 @@ function installEnv(l: Layout) {
     UV_PYTHON_INSTALL_DIR: l.pythons,
     UV_NO_MODIFY_PATH: "1",
     UV_HTTP_TIMEOUT: "300",
-    PIP_CACHE_DIR: path.join(l.cache, "pip"),
+    PIP_CACHE_DIR: path.join(/*turbopackIgnore: true*/ l.cache, "pip"),
     PIP_DISABLE_PIP_VERSION_CHECK: "1",
     TMP: l.tmp,
     TEMP: l.tmp,
@@ -710,7 +729,7 @@ export async function installComfy(opts: { path?: string; port?: number; start?:
   const { plan, folder } = await planInfo();
   if (!plan.supported) throw new SetupError(plan.reason);
   const rec = await readRecord();
-  const root = path.resolve(opts.path ?? rec?.path ?? folder.path);
+  const root = path.resolve(/*turbopackIgnore: true*/ opts.path ?? rec?.path ?? folder.path);
   if (rec?.complete && !samePath(rec.path, root) && (await exists(rec.path))) {
     throw new SetupError(`ComfyUI is already installed in ${rec.path}. Uninstall it first to move it.`, 409);
   }
@@ -731,7 +750,7 @@ async function checkTarget(root: string) {
   if (!path.isAbsolute(root) || path.parse(root).root === root || samePath(root, os.homedir())) {
     throw new SetupError("Pick a folder of its own for ComfyUI, not a drive or your home folder.");
   }
-  const entries = await fs.readdir(root).catch(() => [] as string[]);
+  const entries = await fs.readdir(/*turbopackIgnore: true*/ root).catch(() => [] as string[]);
   if (entries.length && !entries.includes(MARKER)) throw new SetupError(`${root} already has other files in it. Pick an empty folder.`, 409);
 }
 
@@ -783,7 +802,7 @@ async function runInstall(job: Job, root: string, port: number, plan: SetupPlan,
     say(job, `✗ ${job.error}`);
   }
   // Kept for later: what went wrong, after Crackio restarts.
-  await fs.writeFile(path.join(l.logs, "install.log"), `${job.log.join("\n")}\n`).catch(() => {});
+  await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ l.logs, "install.log"), `${job.log.join("\n")}\n`).catch(() => {});
 }
 
 async function prepare({ job, l, plan }: Ctx) {
@@ -792,9 +811,9 @@ async function prepare({ job, l, plan }: Ctx) {
     say(job, "Stopping ComfyUI while its files change.");
     await stopComfy();
   }
-  await fs.mkdir(l.root, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ l.root, { recursive: true });
   await writeFileAtomic(l.marker, JSON.stringify({ madeBy: "Crackio", path: l.root, at: new Date().toISOString() }, null, 2));
-  for (const dir of [l.tmp, l.logs, l.cache, l.downloads]) await fs.mkdir(dir, { recursive: true });
+  for (const dir of [l.tmp, l.logs, l.cache, l.downloads]) await fs.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
   const need = (await exists(l.python)) ? 2 : plan.diskGb + 1;
   const free = await freeAt(l.root);
   say(job, `Installing into ${l.root} (${free ?? "?"} GB free).`);
@@ -902,7 +921,7 @@ async function latestRelease() {
 }
 
 async function comfyVersionAt(l: Layout) {
-  const text = await fs.readFile(path.join(l.comfy, "comfyui_version.py"), "utf8").catch(() => "");
+  const text = await fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ l.comfy, "comfyui_version.py"), "utf8").catch(() => "");
   return text.match(/__version__\s*=\s*["']([^"']+)/)?.[1] ?? "";
 }
 
@@ -913,7 +932,7 @@ async function getComfyUI(ctx: Ctx) {
     say(job, `ComfyUI ${ctx.comfyuiVersion} is already there.`);
     return;
   }
-  await fs.rm(l.comfy, { recursive: true, force: true });
+  await fs.rm(/*turbopackIgnore: true*/ l.comfy, { recursive: true, force: true });
   const tag = await latestRelease();
   say(job, `ComfyUI ${tag ?? "(latest)"} from ${COMFY_REPO}.`);
   if ((await run("git", ["--version"], { timeoutMs: 20_000 })).code === 0) {
@@ -935,18 +954,18 @@ async function getComfyUI(ctx: Ctx) {
 /** Without git: GitHub's zip of the release, unpacked with the environment's own Python. */
 async function comfyFromZip(ctx: Ctx, tag: string | null) {
   const { job, l } = ctx;
-  const zip = path.join(l.tmp, "comfyui.zip");
-  const out = path.join(l.tmp, "comfyui-unzipped");
+  const zip = path.join(/*turbopackIgnore: true*/ l.tmp, "comfyui.zip");
+  const out = path.join(/*turbopackIgnore: true*/ l.tmp, "comfyui-unzipped");
   const url = `${COMFY_REPO}/archive/refs/${tag ? `tags/${tag}` : "heads/master"}.zip`;
   say(job, "No git here: downloading ComfyUI as a zip.");
   await download(url, zip, null, (got) => (job.detail = `${round1(got / 1024 ** 2)} MB`));
-  await fs.rm(out, { recursive: true, force: true });
+  await fs.rm(/*turbopackIgnore: true*/ out, { recursive: true, force: true });
   await must(job, "Unpacking ComfyUI", ctx.l.python, ["-I", "-m", "zipfile", "-e", zip, out]);
-  const [inner] = await fs.readdir(out);
+  const [inner] = await fs.readdir(/*turbopackIgnore: true*/ out);
   if (!inner) throw new Error("ComfyUI's zip was empty.");
-  await fs.rename(path.join(out, inner), l.comfy);
-  await fs.rm(out, { recursive: true, force: true });
-  await fs.rm(zip, { force: true });
+  await fs.rename(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ out, inner), l.comfy);
+  await fs.rm(/*turbopackIgnore: true*/ out, { recursive: true, force: true });
+  await fs.rm(/*turbopackIgnore: true*/ zip, { force: true });
 }
 
 /** The installed version of a package ("2.14.1+cu126"), or null. */
@@ -988,7 +1007,7 @@ async function installTorch(ctx: Ctx) {
   job.detail = null;
   if (ctx.uv) await must(job, "Installing PyTorch", ctx.uv, ["pip", "install", "--python", l.python, ...index, ...specs], { env: ctx.env, timeoutMs: 60 * 60_000 });
   else await must(job, "Installing PyTorch", l.python, ["-m", "pip", "install", "--no-cache-dir", "--progress-bar", "off", ...index, ...specs], { env: ctx.env, timeoutMs: 60 * 60_000 });
-  if (wheel) await fs.rm(wheel, { force: true });
+  if (wheel) await fs.rm(/*turbopackIgnore: true*/ wheel, { force: true });
 }
 
 /** pip's platform tag for this computer, or null where PyTorch's own index isn't used. */
@@ -1009,7 +1028,7 @@ async function torchWheel(ctx: Ctx): Promise<string | null> {
   if (!plan.torch || !plan.index?.startsWith(PYTORCH) || !platform) return null;
   const py = `cp${ctx.pyVersion.split(".").slice(0, 2).join("")}`;
   const file = `torch-${plan.torch}+${plan.build}-${py}-${py}-${platform}.whl`;
-  const dest = path.join(l.downloads, file);
+  const dest = path.join(/*turbopackIgnore: true*/ l.downloads, file);
   if (await exists(dest)) return dest;
   const html = await (await fetch(`${plan.index}/torch/`, { cache: "no-store", signal: AbortSignal.timeout(60_000) })).text();
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1053,15 +1072,15 @@ async function download(url: string, dest: string, sha256: string | null, onProg
     const hash = createHash("sha256");
     for await (const chunk of createReadStream(part)) hash.update(chunk as Buffer);
     if (hash.digest("hex") !== sha256) {
-      await fs.rm(part, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ part, { force: true });
       throw new Error("The download didn't match its checksum. Try again.");
     }
   }
-  await fs.rename(part, dest);
+  await fs.rename(/*turbopackIgnore: true*/ part, dest);
 }
 
 async function downloadOnce(url: string, part: string, onProgress: (got: number, total: number) => void) {
-  const have = (await fs.stat(part).catch(() => null))?.size ?? 0;
+  const have = (await fs.stat(/*turbopackIgnore: true*/ part).catch(() => null))?.size ?? 0;
   // A connection that goes quiet for a minute is dropped and resumed.
   const idle = new AbortController();
   let timer = setTimeout(() => idle.abort(), 60_000);
@@ -1072,7 +1091,7 @@ async function downloadOnce(url: string, part: string, onProgress: (got: number,
     const resumed = have > 0 && res.status === 206;
     let got = resumed ? have : 0;
     const total = got + Number(res.headers.get("content-length") ?? 0);
-    const fh = await fs.open(part, resumed ? "a" : "w");
+    const fh = await fs.open(/*turbopackIgnore: true*/ part, resumed ? "a" : "w");
     try {
       for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
         clearTimeout(timer);
@@ -1096,8 +1115,8 @@ async function installPackages(ctx: Ctx) {
   // build (CPU-only on Windows) for a package that asks for a newer one. Better a clear failure than a silent one.
   const torch = await installedVersion(l.python, "torch");
   const vision = await installedVersion(l.python, "torchvision");
-  await fs.writeFile(l.constraints, [torch && `torch==${torch}`, vision && `torchvision==${vision}`].filter(Boolean).join("\n") + "\n");
-  const req = path.join(l.comfy, "requirements.txt");
+  await fs.writeFile(/*turbopackIgnore: true*/ l.constraints, [torch && `torch==${torch}`, vision && `torchvision==${vision}`].filter(Boolean).join("\n") + "\n");
+  const req = path.join(/*turbopackIgnore: true*/ l.comfy, "requirements.txt");
   if (ctx.uv) await must(job, "Installing ComfyUI's packages", ctx.uv, ["pip", "install", "--python", l.python, "-r", req, "-c", l.constraints], { env: ctx.env, timeoutMs: 40 * 60_000 });
   else await must(job, "Installing ComfyUI's packages", l.python, ["-m", "pip", "install", "--progress-bar", "off", "-r", req, "-c", l.constraints], { env: ctx.env, timeoutMs: 40 * 60_000 });
 }
@@ -1105,13 +1124,13 @@ async function installPackages(ctx: Ctx) {
 /** Copies comfyui/crackio_bridge into custom_nodes, so Crackio can read the machine and install models into it. */
 async function addBridge({ job, l }: Ctx) {
   const from = path.join(/*turbopackIgnore: true*/ process.cwd(), "comfyui", "crackio_bridge");
-  const to = path.join(l.comfy, "custom_nodes", "crackio_bridge");
-  if (!(await exists(path.join(from, "__init__.py")))) {
+  const to = path.join(/*turbopackIgnore: true*/ l.comfy, "custom_nodes", "crackio_bridge");
+  if (!(await exists(path.join(/*turbopackIgnore: true*/ from, "__init__.py")))) {
     say(job, `The bridge isn't at ${from}; ComfyUI works without it on this computer.`);
     return;
   }
-  await fs.rm(to, { recursive: true, force: true });
-  await fs.cp(from, to, { recursive: true, filter: (src) => !src.includes("__pycache__") });
+  await fs.rm(/*turbopackIgnore: true*/ to, { recursive: true, force: true });
+  await fs.cp(/*turbopackIgnore: true*/ from, to, { recursive: true, filter: (src) => !src.includes("__pycache__") });
   say(job, `Copied it to ${to}.`);
 }
 
@@ -1123,12 +1142,12 @@ async function refreshBridge(rec: InstallRecord) {
   const from = path.join(/*turbopackIgnore: true*/ process.cwd(), "comfyui", "crackio_bridge");
   const to = path.join(/*turbopackIgnore: true*/ rec.comfyui, "custom_nodes", "crackio_bridge");
   try {
-    const files = (await fs.readdir(from)).filter((f) => /\.(py|md)$/.test(f));
+    const files = (await fs.readdir(/*turbopackIgnore: true*/ from)).filter((f) => /\.(py|md)$/.test(f));
     if (!files.includes("__init__.py")) return;
     for (const f of files) {
-      const [mine, theirs] = await Promise.all([fs.readFile(path.join(from, f), "utf8"), fs.readFile(path.join(to, f), "utf8").catch(() => null)]);
+      const [mine, theirs] = await Promise.all([fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ from, f), "utf8"), fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ to, f), "utf8").catch(() => null)]);
       if (mine === theirs) continue;
-      await fs.cp(from, to, { recursive: true, force: true, filter: (src) => !src.includes("__pycache__") });
+      await fs.cp(/*turbopackIgnore: true*/ from, to, { recursive: true, force: true, filter: (src) => !src.includes("__pycache__") });
       return;
     }
   } catch {
@@ -1206,7 +1225,7 @@ export async function uninstallComfy(confirm: boolean) {
   if (busy()) throw new SetupError("Crackio is already setting up ComfyUI.", 409);
   const l = layout(root);
   if (!(await exists(root))) {
-    await fs.rm(RECORD_FILE, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ RECORD_FILE, { force: true });
     throw new SetupError("ComfyUI isn't installed on this computer.", 404);
   }
   if (!(await madeByCrackio(l))) throw new SetupError(`${root} wasn't made by Crackio, so it isn't deleted.`, 409);
@@ -1218,7 +1237,7 @@ export async function uninstallComfy(confirm: boolean) {
       await stopComfy();
       enter(job, "remove");
       await removeFolder(job, l);
-      await fs.rm(RECORD_FILE, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ RECORD_FILE, { force: true });
       job.finishedAt = Date.now();
       say(job, `Removed ${root}.`);
     } catch (err) {
@@ -1231,7 +1250,7 @@ export async function uninstallComfy(confirm: boolean) {
 
 async function madeByCrackio(l: Layout) {
   try {
-    const marker = JSON.parse(await fs.readFile(l.marker, "utf8")) as { madeBy?: string; path?: string };
+    const marker = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ l.marker, "utf8")) as { madeBy?: string; path?: string };
     return marker.madeBy === "Crackio" && samePath(marker.path ?? "", l.root);
   } catch {
     return false;
@@ -1240,16 +1259,16 @@ async function madeByCrackio(l: Layout) {
 
 /** One part of the folder at a time, so the page shows it going; the marker goes last. */
 async function removeFolder(job: Job, l: Layout) {
-  const entries = (await fs.readdir(l.root)).filter((e) => e !== MARKER);
+  const entries = (await fs.readdir(/*turbopackIgnore: true*/ l.root)).filter((e) => e !== MARKER);
   for (const [i, entry] of entries.entries()) {
     job.detail = entry;
-    await fs.rm(path.join(l.root, entry), { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    await fs.rm(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ l.root, entry), { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
     job.fraction = (i + 1) / (entries.length + 1);
   }
-  await fs.rm(l.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  await fs.rm(/*turbopackIgnore: true*/ l.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   // An empty "Crackio" folder above it goes too.
   const parent = path.dirname(l.root);
-  if (path.basename(parent) === "Crackio" && !(await fs.readdir(parent).catch(() => ["?"])).length) await fs.rmdir(parent).catch(() => {});
+  if (path.basename(parent) === "Crackio" && !(await fs.readdir(/*turbopackIgnore: true*/ parent).catch(() => ["?"])).length) await fs.rmdir(parent).catch(() => {});
 }
 
 /* ------------------------------------------------------------------ running ComfyUI */
@@ -1273,7 +1292,7 @@ async function probe(port: number): Promise<Stats | null> {
  */
 function isOurs(stats: Stats, rec: InstallRecord) {
   const argv0 = stats.system?.argv?.[0];
-  return Boolean(argv0 && path.isAbsolute(argv0) && samePath(argv0, path.join(rec.comfyui, "main.py")));
+  return Boolean(argv0 && path.isAbsolute(argv0) && samePath(argv0, path.join(/*turbopackIgnore: true*/ rec.comfyui, "main.py")));
 }
 
 /**
@@ -1286,7 +1305,7 @@ async function ourPid(pid: number | null, rec: InstallRecord): Promise<number | 
     ? await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).Path`], { timeoutMs: 15_000 })
     : await run("ps", ["-o", "command=", "-p", String(pid)], { timeoutMs: 10_000 });
   const exe = r.out.trim();
-  const root = path.resolve(rec.path) + path.sep;
+  const root = path.resolve(/*turbopackIgnore: true*/ rec.path) + path.sep;
   const inside = WIN ? exe.toLowerCase().startsWith(root.toLowerCase()) : exe.includes(root);
   return exe && inside ? pid : null;
 }
@@ -1299,20 +1318,39 @@ function portFree(port: number) {
   });
 }
 
-/** The process listening on a port: how Crackio finds a ComfyUI that restarted itself (the bridge's restart). */
+/**
+ * The process listening on a port: how Crackio finds a ComfyUI that restarted itself (the bridge's restart). On Windows
+ * from netstat, not Get-NetTCPConnection: that's a WMI class, and it hangs while Windows' WMI service is stuck.
+ */
 async function portOwner(port: number): Promise<number | null> {
-  const r = WIN
-    ? await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess`], { timeoutMs: 15_000 })
-    : await run("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], { timeoutMs: 10_000 });
+  if (WIN) {
+    const r = await run("netstat", ["-ano", "-p", "TCP"], { timeoutMs: 15_000 });
+    return listenerOf(r.out, port);
+  }
+  const r = await run("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], { timeoutMs: 10_000 });
   const pid = Number(r.out.trim().split(/\s+/)[0]);
   return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
+/**
+ * The pid listening on that port in `netstat -ano`'s rows ("TCP 0.0.0.0:8189 0.0.0.0:0 LISTENING 9604"). A listener is
+ * told by its foreign address (0.0.0.0:0), as the state's word is in the system's language.
+ */
+export function listenerOf(netstat: string, port: number): number | null {
+  for (const line of netstat.split(/\r?\n/)) {
+    const f = line.trim().split(/\s+/);
+    if (f.length < 5 || !/^TCP/i.test(f[0]) || !f[1].endsWith(`:${port}`) || !/^(0\.0\.0\.0|\[::\]):0$/.test(f[2])) continue;
+    const pid = Number(f[f.length - 1]);
+    if (Number.isInteger(pid) && pid > 0) return pid;
+  }
+  return null;
 }
 
 /** The record of a finished install whose files are all still there. */
 async function installed(): Promise<InstallRecord | null> {
   const rec = await readRecord();
   if (!rec?.complete) return null;
-  return (await exists(rec.python)) && (await exists(path.join(rec.comfyui, "main.py"))) ? rec : null;
+  return (await exists(rec.python)) && (await exists(path.join(/*turbopackIgnore: true*/ rec.comfyui, "main.py"))) ? rec : null;
 }
 
 /**
@@ -1364,8 +1402,8 @@ async function launch(rec: InstallRecord) {
   if (!(await portFree(rec.port))) throw new SetupError(`Port ${rec.port} is taken by another program.`, 409);
   await refreshBridge(rec);
   const l = layout(rec.path);
-  await fs.mkdir(l.logs, { recursive: true });
-  await fs.rename(l.log, path.join(l.logs, "comfyui.previous.log")).catch(() => {});
+  await fs.mkdir(/*turbopackIgnore: true*/ l.logs, { recursive: true });
+  await fs.rename(/*turbopackIgnore: true*/ l.log, path.join(/*turbopackIgnore: true*/ l.logs, "comfyui.previous.log")).catch(() => {});
   const fd = openSync(l.log, "a");
   let child: ChildProcess;
   // Windows counts pinned memory against its commit limit, and ComfyUI pins up to 40% of RAM for the weights it
@@ -1464,21 +1502,22 @@ async function gone(code: number | null) {
   }
 }
 
-/** A process running this install's main.py: what the bridge's restart leaves on Windows. */
+/**
+ * A process running this install's main.py: what the bridge's restart leaves on Windows. There, the install's own
+ * Python by its path (Get-Process): a query of command lines goes through WMI, which hangs while its service is stuck.
+ */
 async function successor(rec: InstallRecord): Promise<number | null> {
-  const main = path.join(rec.comfyui, "main.py");
-  const r = WIN
-    ? await run(
-        "powershell.exe",
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-Command",
-          `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -and $_.CommandLine.Contains('${main.replace(/'/g, "''")}') } | Select-Object -First 1 -ExpandProperty ProcessId`,
-        ],
-        { timeoutMs: 15_000 },
-      )
-    : await run("pgrep", ["-f", main], { timeoutMs: 10_000 });
+  const main = path.join(/*turbopackIgnore: true*/ rec.comfyui, "main.py");
+  if (WIN) {
+    const r = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-Process python,pythonw -ErrorAction SilentlyContinue | ForEach-Object { \"$($_.Id) $($_.Path)\" }"], { timeoutMs: 15_000 });
+    const root = path.resolve(/*turbopackIgnore: true*/ rec.path).toLowerCase() + path.sep;
+    for (const line of r.out.split(/\r?\n/)) {
+      const m = /^(\d+)\s+(.+)$/.exec(line.trim());
+      if (m && m[2].toLowerCase().startsWith(root)) return Number(m[1]);
+    }
+    return null;
+  }
+  const r = await run("pgrep", ["-f", main], { timeoutMs: 10_000 });
   const pid = Number(r.out.trim().split(/\s+/)[0]);
   return Number.isInteger(pid) && pid > 0 ? pid : null;
 }
@@ -1572,6 +1611,13 @@ export async function stopComfy(opts: { byUser?: boolean } = {}) {
       await sleep(700);
     }
   }
+  // Still answering: Crackio couldn't end it. Say so, rather than show "Stopped" over a ComfyUI still running.
+  const still = rec ? await probe(port) : null;
+  if (rec && still && isOurs(still, rec)) {
+    p.state = "running";
+    p.pid = pid ?? p.pid;
+    throw new SetupError("ComfyUI is still running: Crackio couldn't end its process. Try Stop again, or end python.exe in Task Manager.", 409);
+  }
   Object.assign(p, { state: "stopped", child: null, pid: null, readyAt: null, error: null });
   await updateRecord({ run: null, ...(opts.byUser ? { stoppedByUser: true } : {}) });
 }
@@ -1581,7 +1627,7 @@ async function logTail(rec: InstallRecord | null, lines = 60) {
   if (!rec) return [];
   const file = layout(rec.path).log;
   try {
-    const fh = await fs.open(file, "r");
+    const fh = await fs.open(/*turbopackIgnore: true*/ file, "r");
     try {
       const { size } = await fh.stat();
       const length = Math.min(size, 32_000);
@@ -1647,9 +1693,8 @@ export type SetupStatus = {
 
 /** This computer's address on its local network (a private IPv4), for other computers to reach a shared ComfyUI. */
 function lanUrl(port: number) {
-  const ips = Object.values(os.networkInterfaces())
-    .flat()
-    .filter((n): n is os.NetworkInterfaceInfo => Boolean(n && n.family === "IPv4" && !n.internal))
+  const ips = netAddresses()
+    .filter((n) => n.family === "IPv4" && !n.internal)
     .map((n) => n.address);
   const ip = ips.find((a) => /^192\.168\./.test(a)) ?? ips.find((a) => /^10\./.test(a)) ?? ips.find((a) => /^172\.(1[6-9]|2\d|3[01])\./.test(a)) ?? ips[0];
   return ip ? `http://${ip}:${port}` : null;
@@ -1659,6 +1704,14 @@ export async function setupStatus(): Promise<SetupStatus> {
   await adopt();
   const [{ plan, folder }, rec] = await Promise.all([planInfo(), readRecord()]);
   const done = await installed();
+  // "Stopped", yet this install's ComfyUI answers (a stop that couldn't end it, one started by hand): it's running.
+  if (done && state.proc.state === "stopped" && !(state.job && !state.job.finishedAt)) {
+    const stats = await probe(done.port);
+    if (stats && isOurs(stats, done) && state.proc.state === "stopped") {
+      Object.assign(state.proc, { state: "running", pid: await ourPid(await portOwner(done.port), done), port: done.port, startedAt: Date.now(), readyAt: Date.now(), error: null });
+      watch();
+    }
+  }
   const root = rec?.path ?? folder.path;
   const partial = !done && (await exists(layout(root).marker));
   const p = state.proc;

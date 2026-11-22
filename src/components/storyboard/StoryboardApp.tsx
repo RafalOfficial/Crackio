@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Activity, useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "motion/react";
 import { create } from "zustand";
-import { Check, ChevronDown, Clapperboard, CloudOff, Download, Film, LoaderCircle, Plus, Scissors, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Clapperboard, CloudOff, Download, Film, LoaderCircle, Plus, Scissors, Trash2, TriangleAlert, X } from "lucide-react";
 import { useEditProjects } from "@/lib/hooks/use-edit-projects";
 import { flushSaves, queueSave, useEditor } from "@/lib/storyboard/edit-store";
 import { FPS, filmLength, timecode, type EditFile, type EditMode, type EditProject, type EditTimeline } from "@/lib/storyboard/edit";
 import { becomeClip, patchClip, replaceClip } from "@/lib/storyboard/edit-ops";
-import { useGenerations, useSubmitTags } from "@/lib/hooks/use-generations";
+import { isLive, useGenerations, useGenerationsStore, useSubmitTags } from "@/lib/hooks/use-generations";
 import type { Generation } from "@/lib/generations/types";
 import { emptyScene, useDirector } from "@/lib/director/store";
 import { room } from "@/lib/director/room";
@@ -20,11 +20,13 @@ import { useLocation } from "@/components/director/location";
 import { useAround, useWorld } from "@/components/director/around";
 import { useLift } from "@/components/director/lift";
 import { useExtend } from "@/components/director/extend";
+import { useGrow } from "@/components/director/grow-place";
 import { Popover } from "@/components/ui/Popover";
 import { ProjectIcon } from "@/components/library/ProjectIcon";
 import { previewUrl, posterUrl } from "@/lib/media-url";
 import { Monitor } from "./edit/Monitor";
 import { Timeline, cut } from "./edit/Timeline";
+import { Controls } from "./edit/Controls";
 import { Files, isFilm } from "./edit/Files";
 import { MakeClip } from "./edit/MakeClip";
 import { useProjectFiles } from "./edit/project-files";
@@ -33,13 +35,19 @@ import { usePlayhead } from "./edit/engine";
 import { isExporting, useExport } from "./edit/exporting";
 import { cn } from "@/lib/cn";
 
-const DirectorWorkspace = dynamic(() => import("@/components/director/DirectorWorkspace").then((m) => m.DirectorWorkspace), {
+/**
+ * The Director's code, fetched before it's needed: pointing at its switch is enough. It's the same Director as /director
+ * (v2: the photo in 3D, the challenge winner's 3D World for moved shots), under Storyboard's bar.
+ */
+const loadDirector = () => import("@/components/director/v2/Director");
+
+const DirectorV2 = dynamic(() => loadDirector().then((m) => m.Director), {
   ssr: false,
   loading: () => (
-    <div className="grid grid-cols-1 gap-3 p-3 sm:p-4 lg:h-full lg:grid-cols-[300px_minmax(0,1fr)_330px] lg:py-4">
-      <div className="skeleton hidden rounded-panel lg:block" />
-      <div className="skeleton h-[60vh] rounded-panel lg:h-auto" />
-      <div className="skeleton hidden rounded-panel lg:block" />
+    <div className="grid grid-cols-1 gap-3 p-3 sm:p-4 lg:h-full lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[minmax(0,1fr)_auto] lg:py-4">
+      <div className="skeleton h-[58vh] rounded-panel lg:h-auto" />
+      <div className="skeleton hidden rounded-panel lg:row-span-2 lg:block" />
+      <div className="skeleton h-14 rounded-panel" />
     </div>
   ),
 });
@@ -86,6 +94,8 @@ export function StoryboardApp() {
   // The open project: the last one's changes saved first, then this one's timeline, files and set.
   useEffect(() => {
     if (!current) return;
+    // Already open (the page was only hidden, then shown again): its undo, selection, zoom and playhead stay as they were.
+    if (useEditor.getState().project?.id === current) return;
     let alive = true;
     void (async () => {
       await flushSaves();
@@ -99,7 +109,10 @@ export function StoryboardApp() {
       }
       film.pause();
       usePlayhead.setState({ t: 0, playing: false });
+      // What the server has is the newest: a set remembered from before is the old one now.
+      lastScene.delete(data.project.id);
       useEditor.getState().open(data.project);
+      useExport.getState().restore(data.project.id);
       if (data.project.mode === "direct") useDirectorSince.setState({ project: data.project.id, at: Date.now() });
       void useProjectFiles.getState().load(data.project.id);
       setProblem(null);
@@ -114,23 +127,70 @@ export function StoryboardApp() {
   useMadeClips(project?.id ?? null);
 
   const mode: EditMode = project?.mode ?? "edit";
+  // The Director stays mounted once it's been opened (hidden while you edit), so switching back is instant.
+  const [directed, setDirected] = useState(false);
+  if (mode === "direct" && !directed) setDirected(true);
   const setMode = (m: EditMode) => {
     film.pause();
     if (m === "direct") useDirectorSince.setState({ project: project?.id ?? null, at: Date.now() });
     useEditor.getState().setMode(m);
   };
+  const projectId = project?.id ?? null;
+  // A picture in Files as a new Director set: its place is the picture, and over to the Director with it (the set before
+  // it comes back with Undo there).
+  const directFrom = useCallback(
+    async (file: EditFile) => {
+      if (directorBusy()) return useProjectFiles.setState({ error: "The Director is still building this project's place: try again when it's done." });
+      let { width, height } = file;
+      if (!width || !height) {
+        const img = new Image();
+        img.src = file.url;
+        await img.decode().catch(() => {});
+        [width, height] = [img.naturalWidth, img.naturalHeight];
+      }
+      if (!width || !height) return useProjectFiles.setState({ error: "Couldn't read that picture." });
+      const director = useDirector.getState();
+      director.reset();
+      director.setPlace({ url: file.url, width, height }, "");
+      film.pause();
+      useDirectorSince.setState({ project: projectId, at: Date.now() });
+      useEditor.getState().setMode("direct");
+    },
+    [projectId],
+  );
 
   return (
     <div className="flex flex-col lg:h-dvh">
       <TopBar mode={mode} onMode={setMode} />
-      {problem ? <p className="mx-4 mt-3 rounded-[12px] bg-tally/10 px-3 py-2 text-[13px] text-tally">{problem}</p> : null}
+      {/* A problem floats over the editor as a pill: it never shrinks the screen or the timeline. */}
+      {problem ? (
+        <div
+          role="alert"
+          className="fixed left-1/2 top-[64px] z-40 flex max-w-[min(560px,calc(100vw-32px))] -translate-x-1/2 items-center gap-2 rounded-full bg-[#2a1416] py-1.5 pl-3.5 pr-1.5 text-[12.5px] text-tally shadow-[0_12px_32px_-12px_rgb(0_0_0/0.8),inset_0_0_0_1px_rgb(255_91_74/0.3)]"
+        >
+          <TriangleAlert size={13} className="shrink-0" />
+          <span className="min-w-0 truncate" title={problem}>
+            {problem}
+          </span>
+          <button type="button" onClick={() => setProblem(null)} aria-label="Dismiss" className="press grid size-6 shrink-0 place-items-center rounded-full text-tally/80 hover:bg-white/[0.08] hover:text-paper">
+            <X size={12} />
+          </button>
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1">
         {!project ? (
           <Frame main={<div className="skeleton h-[60vh] rounded-panel lg:h-full" />} side={<div className="skeleton h-full min-h-[200px] rounded-panel" />} />
-        ) : mode === "direct" ? (
-          <DirectorWorkspace className="lg:h-full" />
         ) : (
-          <EditorMode projectId={project.id} onDirect={() => setMode("direct")} />
+          <>
+            <Activity mode={mode === "edit" ? "visible" : "hidden"}>
+              <EditorMode projectId={project.id} onDirect={() => setMode("direct")} onDirectFrom={(f) => void directFrom(f)} />
+            </Activity>
+            {directed ? (
+              <Activity mode={mode === "direct" ? "visible" : "hidden"}>
+                <DirectorV2 embedded />
+              </Activity>
+            ) : null}
+          </>
         )}
       </div>
     </div>
@@ -139,7 +199,7 @@ export function StoryboardApp() {
 
 /* ------------------------------------------------------------------ editor */
 
-function EditorMode({ projectId, onDirect }: { projectId: string; onDirect: () => void }) {
+function EditorMode({ projectId, onDirect, onDirectFrom }: { projectId: string; onDirect: () => void; onDirectFrom: (file: EditFile) => void }) {
   useEditorKeys();
   const upload = useProjectFiles((s) => s.upload);
   const input = useRef<HTMLInputElement>(null);
@@ -147,14 +207,16 @@ function EditorMode({ projectId, onDirect }: { projectId: string; onDirect: () =
     <>
       <Frame
         main={
-          <>
+          // One surface: the screen, the controls under it, the timeline (three panels with a bar each before).
+          <section aria-label="Editor" className="surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel">
             <Monitor onDirect={onDirect} onUpload={() => input.current?.click()} />
-            <Timeline onDirect={onDirect} />
-          </>
+            <Controls />
+            <Timeline />
+          </section>
         }
         side={
           <>
-            <Files projectId={projectId} onDirect={onDirect} />
+            <Files projectId={projectId} onDirect={onDirect} onDirectFrom={onDirectFrom} />
             <MakeClip />
           </>
         }
@@ -174,7 +236,7 @@ function EditorMode({ projectId, onDirect }: { projectId: string; onDirect: () =
   );
 }
 
-/** Space plays, S splits, Delete deletes, the arrows step a frame (a second with Shift), Ctrl+Z undoes. */
+/** Space plays, S splits, Delete deletes, the arrows step a frame (a second with Shift; with Alt they move the selected shot), Ctrl+Z undoes. */
 function useEditorKeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -194,6 +256,11 @@ function useEditorKeys() {
       if (mod && key === "d") {
         e.preventDefault();
         return cut.duplicate();
+      }
+      // Alt + an arrow: the selected shot one place earlier or later.
+      if (e.altKey && !mod && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        return cut.nudge(e.key === "ArrowLeft" ? -1 : 1);
       }
       if (mod || e.altKey) return;
       if (e.key === " ") {
@@ -244,7 +311,8 @@ export function directorBusy() {
     useWorld.getState().busy ||
     useWorld.getState().measuring ||
     Boolean(useLift.getState().busy) ||
-    Boolean(useExtend.getState().stage)
+    Boolean(useExtend.getState().stage) ||
+    useGrow.getState().busy
   );
 }
 
@@ -252,13 +320,22 @@ export function directorBusy() {
  * While Storyboard is open, the Director's set is the open project's: it's saved with the project (never over
  * /director's own set, which comes back when you leave), and the Director shows only this project's takes.
  */
+/**
+ * The set each project had when it was last seen here. Hiding the page (another route) puts /director's own set back;
+ * showing it again brings this one back as it was, not as it was when the project opened.
+ */
+const lastScene = new Map<string, Scene>();
+
 function useProjectScene(project: EditProject | null) {
   const owner = useRef<string | null>(null);
   useEffect(() => {
     const standalone = useDirector.getState().scene;
     useDirector.persist.setOptions({ name: "crackio-director:storyboard" });
     const unsubscribe = useDirector.subscribe((s, prev) => {
-      if (s.scene !== prev.scene && owner.current) queueSave(owner.current, { scene: s.scene });
+      if (s.scene !== prev.scene && owner.current) {
+        lastScene.set(owner.current, s.scene);
+        queueSave(owner.current, { scene: s.scene });
+      }
     });
     return () => {
       unsubscribe();
@@ -284,7 +361,7 @@ function useProjectScene(project: EditProject | null) {
     if (!project || !id) return;
     // Loading the set isn't a change to save.
     owner.current = null;
-    const saved = project.scene as Scene | undefined;
+    const saved = (lastScene.get(id) ?? project.scene) as Scene | undefined;
     const scene = saved && Array.isArray(saved.elements) && saved.camera ? saved : { ...emptyScene(), aspect: project.aspect };
     room.current = null;
     useTakeView.setState({ viewing: null });
@@ -309,19 +386,30 @@ function useMadeClips(projectId: string | null) {
   const making = useEditor((s) => s.timeline.main.flatMap((c) => (c.making ? [c.making] : [])).join(","));
   useEffect(() => {
     if (!making || !projectId) return;
+    const ids = [...new Set(making.split(","))];
     let stopped = false;
-    const check = async () => {
-      const ids = [...new Set(making.split(","))];
-      const res = await fetch(`/api/generations?ids=${ids.join(",")}`, { cache: "no-store" }).catch(() => null);
-      const data = (await res?.json().catch(() => null)) as { items?: Generation[] } | null;
-      if (stopped || !data?.items || useEditor.getState().project?.id !== projectId) return;
-      const found = new Map(data.items.map((g) => [g.id, g]));
+    let timer: number | undefined;
+    // The shared takes list already follows what was made here: only takes it doesn't have (made before it loaded,
+    // or older than its window) are asked for directly. null = the server doesn't have it any more.
+    const asked = new Map<string, Generation | null>();
+    const inList = (id: string) => useGenerationsStore.getState().items.find((g) => g.id === id);
+    const lookup = (id: string) => inList(id) ?? asked.get(id);
+    const pending = (id: string) => {
+      const g = asked.get(id);
+      return g === undefined || (g !== null && isLive(g));
+    };
+
+    const settle = () => {
+      if (stopped || useEditor.getState().project?.id !== projectId) return;
       const { timeline, change } = useEditor.getState();
       let next = timeline;
+      const settled = new Set<string>();
       for (const c of timeline.main) {
-        if (!c.making) continue;
-        const g = found.get(c.making);
-        if (g && (g.status === "queued" || g.status === "running")) continue;
+        if (!c.making || !ids.includes(c.making)) continue;
+        const g = lookup(c.making);
+        // Not known yet, or still being made: it waits under the dots.
+        if (g === undefined || (g && isLive(g))) continue;
+        settled.add(c.making);
         const index = g?.status === "done" ? g.outputs.findIndex((o) => o.kind === "video") : -1;
         const out = g && index >= 0 ? g.outputs[index] : null;
         if (g && out) {
@@ -340,19 +428,40 @@ function useMadeClips(projectId: string | null) {
           next = replaceClip(next, c.id, becomeClip(c, file));
         } else next = patchClip(next, c.id, { making: undefined });
       }
-      if (next !== timeline) {
-        change(() => next);
-        const settled = new Set(ids.filter((id) => !next.main.some((c) => c.making === id)));
-        const plain = (t: EditTimeline) => (t.main.some((c) => c.making && settled.has(c.making)) ? { ...t, main: t.main.map((c) => (c.making && settled.has(c.making) ? { ...c, making: undefined } : c)) } : t);
-        useEditor.setState((s) => ({ past: s.past.map(plain), future: s.future.map(plain) }));
-        void useProjectFiles.getState().refresh();
-      }
+      if (next === timeline) return;
+      change(() => next);
+      const plain = (t: EditTimeline) => (t.main.some((c) => c.making && settled.has(c.making)) ? { ...t, main: t.main.map((c) => (c.making && settled.has(c.making) ? { ...c, making: undefined } : c)) } : t);
+      useEditor.setState((s) => ({ past: s.past.map(plain), future: s.future.map(plain) }));
+      void useProjectFiles.getState().refresh();
     };
-    void check();
-    const timer = setInterval(() => void check(), 2500);
+
+    const ask = async () => {
+      timer = undefined;
+      const { loaded } = useGenerationsStore.getState();
+      const missing = loaded ? ids.filter((id) => !inList(id) && pending(id)) : [];
+      if (missing.length) {
+        const res = await fetch(`/api/generations?ids=${missing.join(",")}`, { cache: "no-store" }).catch(() => null);
+        const data = (await res?.json().catch(() => null)) as { items?: Generation[] } | null;
+        if (stopped) return;
+        if (data?.items) {
+          for (const id of missing) asked.set(id, data.items.find((g) => g.id === id) ?? null);
+          settle();
+        }
+      }
+      if (stopped) return;
+      // Again later while the list hasn't loaded or a take it doesn't follow is still being made.
+      if (!loaded || ids.some((id) => !inList(id) && pending(id))) timer = window.setTimeout(() => void ask(), !loaded ? 1500 : document.visibilityState === "visible" ? 4000 : 15000);
+    };
+
+    const off = useGenerationsStore.subscribe((s, prev) => {
+      if (s.items !== prev.items) settle();
+    });
+    settle();
+    void ask();
     return () => {
       stopped = true;
-      clearInterval(timer);
+      off();
+      window.clearTimeout(timer);
     };
   }, [making, projectId]);
 }
@@ -386,8 +495,10 @@ function ModeSwitch({ mode, onMode }: { mode: EditMode; onMode: (m: EditMode) =>
   // Shots and clips of this project that finished while you were in the Director: they wait in the Editor's Files.
   const since = useDirectorSince();
   const project = useEditor((s) => s.project?.id ?? null);
-  const items = useGenerations((s) => s.items);
-  const fresh = mode === "direct" && since.project === project ? items.filter((g) => g.params?.project === project && g.status === "done" && (g.finishedAt ?? 0) > since.at).length : 0;
+  // A count, not the list: the switch redraws when one more lands, not on every progress tick of every take.
+  const fresh = useGenerations((s) =>
+    mode === "direct" && since.project === project ? s.items.filter((g) => g.params?.project === project && g.status === "done" && (g.finishedAt ?? 0) > since.at).length : 0,
+  );
   return (
     <div role="radiogroup" aria-label="Mode" className="squircle flex h-10 rounded-[14px] bg-white/[0.04] p-1 shadow-[inset_0_0_0_1px_var(--color-line)]">
       {MODES.map((m) => {
@@ -401,11 +512,14 @@ function ModeSwitch({ mode, onMode }: { mode: EditMode; onMode: (m: EditMode) =>
             aria-checked={on}
             title={m.title}
             onClick={() => onMode(m.id)}
+            onPointerEnter={m.id === "direct" ? () => void loadDirector() : undefined}
+            onFocus={m.id === "direct" ? () => void loadDirector() : undefined}
             className={cn("press squircle relative inline-flex h-8 w-[124px] items-center justify-center gap-1.5 rounded-[10px] text-[13px] font-semibold", on ? "text-paper" : "text-fog hover:text-paper")}
           >
             {on ? (
               <motion.span
                 layoutId="storyboard-mode"
+                layoutDependency={mode}
                 className="squircle absolute inset-0 rounded-[10px] bg-white/[0.12] shadow-[inset_0_1px_0_rgb(255_255_255/0.09),0_1px_2px_rgb(0_0_0/0.25)]"
                 transition={{ type: "spring", bounce: 0.16, duration: 0.4 }}
               />

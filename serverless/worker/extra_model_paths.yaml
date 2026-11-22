@@ -19,3 +19,4 @@ runpod_volume:
   style_models: style_models
   embeddings: embeddings
   sam3: sam3
+  geometry_estimation: geometry_estimation

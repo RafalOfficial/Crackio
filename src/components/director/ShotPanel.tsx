@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useDirector } from "@/lib/director/store";
-import { useCompiled } from "@/lib/director/use-compiled";
+import { useShotCompiled } from "@/lib/director/use-compiled";
 import { cameraHeight, horizontalFov, pedestalTo } from "@/lib/director/camera";
 import { ANGLES, APERTURES, LENSES, LIGHT_SETUPS, MOODS, SHOT_SIZES, STYLES } from "@/lib/director/vocab";
 import { ASPECTS, aspectById } from "@/lib/shot";
@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn";
 /**
  * Right panel: the shot, picked by sight, all in one list: how close, from where, the look and the frame. Lens, focus,
  * light and exact numbers wait under More (light comes from the place itself once it's built all around). Three tabs
- * hid Light and Look so well that even the user forgot them.
+ * hid Light and Look so well that they were easy to forget.
  */
 export function ShotPanel() {
   return (
@@ -54,8 +54,9 @@ function More({ title, children }: { title: string; children: ReactNode }) {
 
 /** What the camera is doing right now, in film terms. */
 function ShotReadout() {
-  const scene = useDirector((s) => s.scene);
-  const { sheet } = useCompiled();
+  const camera = useDirector((s) => s.scene.camera);
+  const aspect = useDirector((s) => s.scene.aspect);
+  const { sheet } = useShotCompiled();
   const get = (key: string) => sheet.find((s) => s.key === key)?.value;
   return (
     <div className="squircle rounded-[14px] bg-white/[0.03] px-3 py-2.5 shadow-[inset_0_0_0_1px_var(--color-line)]">
@@ -63,7 +64,7 @@ function ShotReadout() {
         {get("shot")} <span className="text-haze">·</span> {get("angle")}
       </p>
       <p className="tabular mt-0.5 truncate font-mono text-[11.5px] text-haze">
-        {Math.round(scene.camera.focal)}mm · f/{scene.camera.aperture} · {scene.aspect} · {scene.camera.distance.toFixed(1)} m away
+        {Math.round(camera.focal)}mm · f/{camera.aperture} · {aspect} · {camera.distance.toFixed(1)} m away
       </p>
     </div>
   );
@@ -107,23 +108,23 @@ function Tile({
         selected ? "bg-white/[0.07] shadow-[inset_0_0_0_1.5px_var(--color-spike)]" : "hover:bg-white/[0.04]",
       )}
     >
-      <div className={cn("relative grid aspect-[3/2] place-items-center overflow-hidden rounded-[9px] bg-white/[0.035]", selected ? "text-paper" : "text-paper/70")}>
+      <div className={cn("relative grid aspect-[2/1] place-items-center overflow-hidden rounded-[9px] bg-white/[0.035]", selected ? "text-paper" : "text-paper/70")}>
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt="" loading="lazy" className="size-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
+          <img src={image} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
         ) : (
           <div className="size-full p-1.5">{visual}</div>
         )}
       </div>
       <div className={cn("mt-1.5 px-0.5 text-[12.5px] font-semibold leading-tight", selected && "text-spike")}>{term}</div>
-      <div className="line-clamp-1 px-0.5 pt-0.5 text-[11.5px] leading-snug text-haze">{plain}</div>
+      <div className="line-clamp-2 min-h-[2lh] px-0.5 pt-0.5 text-[11.5px] leading-snug text-haze">{plain}</div>
     </button>
   );
 }
 
 function CameraTab() {
   const { applyShotSize, applyAngle } = useDirector.getState();
-  const { measured } = useCompiled();
+  const { measured } = useShotCompiled();
 
   return (
     <>
@@ -155,11 +156,11 @@ function CameraTab() {
 
 /** Lens, focus and exact camera numbers. */
 function CameraMore() {
-  const scene = useDirector((s) => s.scene);
+  const cam = useDirector((s) => s.scene.camera);
+  const aspect = useDirector((s) => s.scene.aspect);
   const { applyLens, setCamera, checkpoint } = useDirector.getState();
-  const { measured } = useCompiled();
-  const a = aspectById(scene.aspect);
-  const cam = scene.camera;
+  const { measured } = useShotCompiled();
+  const a = aspectById(aspect);
 
   return (
     <>
@@ -207,6 +208,7 @@ function CameraMore() {
             label="Height angle"
             value={cam.elevation}
             min={-80}
+            origin={0}
             max={89}
             onStart={checkpoint}
             onChange={(v) => setCamera({ elevation: v }, true)}
@@ -217,6 +219,7 @@ function CameraMore() {
             label="Around the subject"
             value={normalize(cam.azimuth)}
             min={-180}
+            origin={0}
             max={180}
             onStart={checkpoint}
             onChange={(v) => setCamera({ azimuth: v }, true)}
@@ -236,6 +239,7 @@ function CameraMore() {
             label="Dutch tilt"
             value={cam.roll}
             min={-30}
+            origin={0}
             max={30}
             onStart={checkpoint}
             onChange={(v) => setCamera({ roll: v }, true)}
@@ -280,11 +284,11 @@ function PlaceLight() {
 }
 
 function LightTab() {
-  const scene = useDirector((s) => s.scene);
+  const light = useDirector((s) => s.scene.light);
+  const cameraAzimuth = useDirector((s) => s.scene.camera.azimuth);
+  const world = useDirector((s) => Boolean(s.scene.place.world));
   const { applyLightSetup, applyMood, setLight, checkpoint } = useDirector.getState();
-  const { measured } = useCompiled();
-  const light = scene.light;
-  const world = Boolean(scene.place.world);
+  const { measured } = useShotCompiled();
 
   return (
     <>
@@ -316,11 +320,12 @@ function LightTab() {
         <div className="squircle space-y-4 rounded-[14px] bg-white/[0.03] p-3.5 shadow-[inset_0_0_0_1px_var(--color-line)]">
           <Slider
             label="Direction"
-            value={normalize(light.azimuth - scene.camera.azimuth)}
+            value={normalize(light.azimuth - cameraAzimuth)}
             min={-180}
+            origin={0}
             max={180}
             onStart={checkpoint}
-            onChange={(v) => setLight({ azimuth: scene.camera.azimuth + v }, true)}
+            onChange={(v) => setLight({ azimuth: cameraAzimuth + v }, true)}
             format={(v) => (Math.abs(v) < 15 ? "Front" : Math.abs(v) > 160 ? "Behind" : `${Math.abs(Math.round(v))}° ${v > 0 ? "right" : "left"}`)}
             hint={["From the left", "From the right"]}
           />
@@ -328,6 +333,7 @@ function LightTab() {
             label="Light height"
             value={light.elevation}
             min={-20}
+            origin={0}
             max={85}
             onStart={checkpoint}
             onChange={(v) => setLight({ elevation: v }, true)}
@@ -364,21 +370,22 @@ function LightTab() {
 }
 
 function LookTab() {
-  const scene = useDirector((s) => s.scene);
+  const style = useDirector((s) => s.scene.style);
+  const aspect = useDirector((s) => s.scene.aspect);
   const { setScene } = useDirector.getState();
   return (
     <>
       <Section title="Style">
         <div className="grid grid-cols-2 gap-1.5">
           {STYLES.map((s) => (
-            <Tile key={s.id} selected={scene.style === s.id} onClick={() => setScene({ style: s.id })} image={`/assets/vocab-style-${s.id}.webp`} term={s.term} plain={s.plain} />
+            <Tile key={s.id} selected={style === s.id} onClick={() => setScene({ style: s.id })} image={`/assets/vocab-style-${s.id}.webp`} term={s.term} plain={s.plain} />
           ))}
         </div>
       </Section>
       <Section title="Frame">
         <div className="grid grid-cols-4 gap-1.5">
           {ASPECTS.map((a) => {
-            const selected = scene.aspect === a.id;
+            const selected = aspect === a.id;
             const max = 26;
             const w = a.w >= a.h ? max : (max * a.w) / a.h;
             const h = a.h >= a.w ? max : (max * a.h) / a.w;

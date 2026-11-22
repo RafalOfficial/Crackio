@@ -15,9 +15,9 @@ import type { Caps } from "@/lib/models/caps";
  * or from Comfy's public copy when that fails). Nested request shapes (Seedance, Wan, Veo, Kling
  * Omni…) are described by hand in comfy-families.
  */
-const CACHE_DIR = path.join(DATA_DIR, "cache", "comfy");
-const CATALOG_FILE = path.join(CACHE_DIR, "catalog.json");
-const CAPS_FILE = path.join(CACHE_DIR, "caps.json");
+const CACHE_DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "comfy");
+const CATALOG_FILE = path.join(/*turbopackIgnore: true*/ CACHE_DIR, "catalog.json");
+const CAPS_FILE = path.join(/*turbopackIgnore: true*/ CACHE_DIR, "caps.json");
 /** Bump when the readers change, so cached capabilities are read again. */
 const CAPS_VERSION = 2;
 const CATALOG_TTL = 12 * 3600_000;
@@ -40,6 +40,8 @@ type State = {
   /** The caps version `models` was read for: a hot reload with a new version reads again. */
   version?: number;
   warm: { running: boolean; done: number; total: number };
+  /** What Comfy answered when each model was last asked for (see `noteComfyServed`). */
+  served?: Record<string, { at: number; served: boolean }> | null;
 };
 const g = globalThis as unknown as { __crackioComfyModels?: State };
 const state: State = (g.__crackioComfyModels ??= { catalog: null, loading: null, models: null, warm: { running: false, done: 0, total: 0 } });
@@ -50,7 +52,7 @@ export async function comfyKey() {
 
 async function readJson<T>(file: string): Promise<T | null> {
   try {
-    return JSON.parse(await fs.readFile(file, "utf8")) as T;
+    return JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ file, "utf8")) as T;
   } catch {
     return null;
   }
@@ -157,6 +159,34 @@ export async function comfyModel(id: string): Promise<ComfyModel> {
   map.set(id, model);
   save();
   return model;
+}
+
+const SERVED_FILE = path.join(/*turbopackIgnore: true*/ CACHE_DIR, "served.json");
+const SERVED_TTL = 12 * 3600_000;
+
+async function servedMap() {
+  if (!state.served) state.served = (await readJson<Record<string, { at: number; served: boolean }>>(SERVED_FILE)) ?? {};
+  return state.served;
+}
+
+/**
+ * Router lists some models before it runs them: a price or a job for one is answered 403 "does not run this model yet"
+ * (seen Nov 2026 with a video model shown as ready). What Comfy said is kept 12 hours: `notServed` for the model lists,
+ * `asked` for the price check that learns it (engines/comfy-quote `probeServed`).
+ */
+export async function comfyServed() {
+  const map = await servedMap();
+  const fresh = (id: string) => (map[id] && Date.now() - map[id].at < SERVED_TTL ? map[id] : undefined);
+  return { notServed: (id: string) => fresh(id)?.served === false, asked: (id: string) => Boolean(fresh(id)) };
+}
+
+/** Keeps Comfy's answer for a model. True when it changed what was known (the model lists are then made again). */
+export async function noteComfyServed(id: string, served: boolean) {
+  const map = await servedMap();
+  const had = map[id];
+  map[id] = { at: Date.now(), served };
+  await writeJson(SERVED_FILE, map).catch(() => {});
+  return !had || had.served !== served;
 }
 
 /** Models already read, without a network call. */

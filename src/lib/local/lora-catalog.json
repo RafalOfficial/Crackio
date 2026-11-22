@@ -1455,7 +1455,9 @@
    "likes": 76,
    "gated": false,
    "preview": "https://huggingface.co/ostris/wan22_i2v_14b_orbit_shot_lora/resolve/7b637fe0079bbf4ac0f977ff2c58971b8835b9c7/images/ComfyUI_00787_.webp",
-   "author": "ostris"
+   "author": "ostris",
+   "clip": true,
+   "tested": "2026-11-21"
   },
   {
    "id": "wan22-360-rotation",
@@ -1495,7 +1497,8 @@
    "likes": 4,
    "gated": false,
    "preview": "https://huggingface.co/artificialguybr/360Rotation-Redmond-WAN2-I2V-14B/resolve/f89d5e868c483364279cd62e282c33eb8c6b6a1b/Videos/i2v_1080x720_8e1c2392-a9d5-4a78-a410-ecfaa57931ed.mp4",
-   "author": "artificialguybr"
+   "author": "artificialguybr",
+   "tested": "2026-11-21"
   },
   {
    "id": "wan22-wiggle",
@@ -1535,7 +1538,8 @@
    "likes": 0,
    "gated": false,
    "preview": "https://huggingface.co/artificialguybr/Wiggle-Redmond-WAN2-I2V-14B/resolve/3bfe3508f46aea2d691f09cf74425799e6487c4c/Videos/i2v_1096x832_08752d2b-abc1-416d-9a55-89e9ca156db6.mp4",
-   "author": "artificialguybr"
+   "author": "artificialguybr",
+   "tested": "2026-11-21"
   },
   {
    "id": "wan22-explosion",
@@ -1575,7 +1579,8 @@
    "likes": 4,
    "gated": false,
    "preview": "https://huggingface.co/artificialguybr/Explosion-Redmond-WAN2-I2V-14B/resolve/145ca6ad0d7ab8370225b0de4650601128437a5c/Video/i2v_752x1000_02c5734e-a28b-456e-b103-ac61a12952c2.mp4",
-   "author": "artificialguybr"
+   "author": "artificialguybr",
+   "tested": "2026-11-21"
   },
   {
    "id": "wan22-disintegration",
@@ -1615,7 +1620,8 @@
    "likes": 3,
    "gated": false,
    "preview": "https://huggingface.co/artificialguybr/Disintegration-Redmond-WAN2-I2V-14B/resolve/a68546e6cbba0260db15db78f117f5085f2be5c2/Videos/i2v_1168x776_c3495d2e-52a6-4ecf-b30e-abf35c021310.mp4",
-   "author": "artificialguybr"
+   "author": "artificialguybr",
+   "tested": "2026-11-21"
   },
   {
    "id": "wan22-disappearing",
@@ -1655,7 +1661,8 @@
    "likes": 3,
    "gated": false,
    "preview": "https://huggingface.co/artificialguybr/Disappearing-Redmond-WAN2-I2V-14B/resolve/0d01d44a17a45a2ef88441869f62dcc83226cbd1/Videos/i2v_960x960_61b9bce7-77b1-4597-842f-799281af5764.mp4",
-   "author": "artificialguybr"
+   "author": "artificialguybr",
+   "tested": "2026-11-21"
   },
   {
    "id": "wan22-inflate",
@@ -1695,7 +1702,8 @@
    "likes": 6,
    "gated": false,
    "preview": "https://huggingface.co/systms/SYSTMS-INFL8-LoRA-Wan22/resolve/2d48a72ce9e34eff34f175e96630b04e41035519/images/INFL8_01.png",
-   "author": "systms"
+   "author": "systms",
+   "tested": "2026-11-21"
   },
   {
    "id": "wan22-thunder-hero",
@@ -1735,7 +1743,8 @@
    "likes": 1,
    "gated": false,
    "preview": "https://huggingface.co/artificialguybr/ThunderHero-Redmond-WAN2-I2V-14B/resolve/27ea8397e55918269810f951b8947a4b024b72d1/Videos/i2v_1032x880_3f6d4e76-f3ec-409d-8f71-182e38ce45bb.mp4",
-   "author": "artificialguybr"
+   "author": "artificialguybr",
+   "tested": "2026-11-21"
   },
   {
    "id": "wan22-sprite-attack",
@@ -1814,7 +1823,8 @@
    "likes": 2,
    "gated": false,
    "author": "Ashmotv",
-   "note": "New and little-used; describe the paint (impasto, glossy pigment, brushstroke) in the prompt."
+   "note": "New and little-used; describe the paint (impasto, glossy pigment, brushstroke) in the prompt.",
+   "tested": "2026-11-21"
   },
   {
    "id": "ltx25-cinemagraph",
@@ -4310,7 +4320,8 @@
    "likes": 41,
    "preview": "https://huggingface.co/motimalu/wan-flat-color-v2/resolve/1dfba6440282ec13b96b4750ea83db098e836de7/images/ComfyUI_00177_.webp",
    "note": "Made for Wan 2.1 14B, which VACE is built on.",
-   "author": "motimalu"
+   "author": "motimalu",
+   "clip": true
   },
   {
    "id": "vace-fire",
@@ -4607,7 +4618,8 @@
    "likes": 1,
    "preview": "https://huggingface.co/AdamLucek/Wan2.1-T2V-14B-OldBookIllustrations/resolve/c45c4632a8543e174431c74fa8eaf4fd65e2a43d/images/example_1.webp",
    "note": "Made for Wan 2.1 14B, which VACE is built on.",
-   "author": "AdamLucek"
+   "author": "AdamLucek",
+   "clip": true
   },
   {
    "id": "f2dev-historic-color",

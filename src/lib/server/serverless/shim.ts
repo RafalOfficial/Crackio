@@ -24,14 +24,29 @@ const HOST = "127.0.0.2";
  * Bumped when this server or what it calls changes: one started by older code (it outlives a code reload, and keeps
  * calling that code) is closed and started again.
  */
-const VERSION = 3;
+const VERSION = 7;
 const OUTPUT_SLOTS = 32;
 /** How long a list of what the endpoint holds is trusted at start-up before it's asked again. */
 const MANIFEST_FRESH_MS = 6 * 3_600_000;
 const INLINE_LIMIT = 8 * 1024 * 1024;
 const LINK_SECONDS = 6 * 3600;
 
-type Kept = { key?: string; data?: Buffer; mime: string; bytes: number };
+type Kept = { key?: string; data?: Buffer; mime: string; bytes: number; at?: number };
+
+/**
+ * Inputs held in memory (no R2): a job sends them when it starts, so they go after 2 h, or past 4 GB once they're 10
+ * minutes old (never the ones a job being put together right now still needs).
+ */
+function pruneUploads(uploads: Map<string, Kept>) {
+  const now = Date.now();
+  let held = 0;
+  for (const [name, k] of [...uploads].reverse()) {
+    if (!k.data) continue;
+    held += k.bytes;
+    const age = now - (k.at ?? now);
+    if (age > 2 * 3_600_000 || (held > 4 * 1024 ** 3 && age > 10 * 60_000)) uploads.delete(name);
+  }
+}
 type WorkerOutput = {
   prompt_id?: string;
   status?: { status_str?: string; completed?: boolean; messages?: [string, Record<string, unknown>][] };
@@ -70,13 +85,18 @@ type State = {
   server?: http.Server;
   port?: number;
   version?: number;
+  /** When a job last finished on the endpoint's worker (its idle minute runs from then), and the loaders it ran. */
+  lastDone?: number;
+  lastLoaders?: string[];
+  /** When RunPod's health last answered. */
+  lastOk?: number;
 };
 
 const g = globalThis as unknown as { __crackioShims?: Map<string, State>; __crackioShimStarts?: Map<string, Promise<State>> };
 const states = (g.__crackioShims ??= new Map());
 const starts = (g.__crackioShimStarts ??= new Map());
 
-const manifestFile = (ep: ServerlessEndpoint) => path.join(DATA_DIR, "serverless", `${ep.endpointId.replace(/[^\w-]/g, "")}.json`);
+const manifestFile = (ep: ServerlessEndpoint) => path.join(/*turbopackIgnore: true*/ DATA_DIR, "serverless", `${ep.endpointId.replace(/[^\w-]/g, "")}.json`);
 const portFor = (id: string) => 39_100 + (createHash("sha1").update(id).digest().readUInt16BE(0) % 400);
 
 /** The local address that stands for this endpoint's ComfyUI, its server started on first use. */
@@ -101,7 +121,7 @@ async function launch(ep: ServerlessEndpoint): Promise<State> {
   const s: State = states.get(ep.endpointId) ?? { ep, uploads: new Map(), outputs: new Map(), jobs: new Map(), counter: 0, manifest: null, listing: null, health: null };
   s.ep = ep;
   states.set(ep.endpointId, s);
-  if (!s.manifest) s.manifest = (await fs.readFile(manifestFile(ep), "utf8").then((t) => JSON.parse(t) as Manifest).catch(() => null)) ?? null;
+  if (!s.manifest) s.manifest = (await fs.readFile(/*turbopackIgnore: true*/ manifestFile(ep), "utf8").then((t) => JSON.parse(t) as Manifest).catch(() => null)) ?? null;
   // Never listed (a fresh data folder), or listed more than 6 hours ago: asked now, in the background (an older list keeps
   // answering meanwhile), so its models show up without anyone opening a picker first. A recent one is used as it is: a
   // live demo starts a Crackio per visitor, and a list job each time would cost a cold start.
@@ -175,10 +195,17 @@ async function handle(s: State, req: http.IncomingMessage, res: http.ServerRespo
   return send(res, 404, { error: "not here" });
 }
 
-/** Whether the endpoint answers (RunPod's health, free), looked at once a minute. */
+/**
+ * Whether the endpoint answers (RunPod's health, free), looked at once a minute. One failed answer (RunPod's API slow,
+ * or busy with this computer's job polls) doesn't take it offline while it answered in the last 3 minutes or a job of
+ * ours is on it: on Nov 13 one did, and for a minute every model on it read "Connect ComfyUI" and a shot sent then failed
+ * with "Unknown model". A failure is asked about again after 10 s.
+ */
 async function healthy(s: State) {
-  if (s.health && Date.now() - s.health.at < 60_000) return s.health.ok;
-  const ok = await health(s.ep).then(() => true).catch(() => false);
+  if (s.health && Date.now() - s.health.at < (s.health.ok ? 60_000 : 10_000)) return s.health.ok;
+  const answered = await health(s.ep).then(() => true).catch(() => false);
+  if (answered) s.lastOk = Date.now();
+  const ok = answered || Date.now() - (s.lastOk ?? 0) < 3 * 60_000 || [...s.jobs.values()].some((j) => j.state === "pending" || j.state === "running");
   s.health = { at: Date.now(), ok };
   return ok;
 }
@@ -193,13 +220,19 @@ async function systemStats(s: State, res: http.ServerResponse) {
   });
 }
 
-/** What the endpoint's worker holds (files, nodes, GPU): from its last answer, else asked once with a "list" job. */
-async function manifest(s: State, wait = false, refresh = false) {
+/**
+ * What the endpoint's worker holds (files, nodes, GPU): from its last answer, else asked once with a "list" job. `ttlMs`:
+ * how long it may wait for a GPU (a keep-warm ping's is short).
+ */
+async function manifest(s: State, wait = false, refresh = false, ttlMs?: number) {
   if ((!s.manifest || refresh) && !s.listing) {
     s.listing = (async () => {
-      const sent = await submit(s.ep, { action: "list" }, 10 * 60_000);
+      const sent = await submit(s.ep, { action: "list" }, 10 * 60_000, ttlMs);
       const done = await settle(s, sent.id);
-      if (done.status === "COMPLETED") remember(s, done.output as WorkerOutput & Manifest);
+      if (done.status === "COMPLETED") {
+        s.lastDone = Date.now();
+        remember(s, done.output as WorkerOutput & Manifest);
+      }
     })()
       .catch((err) => console.warn(`[serverless] couldn't list ${s.ep.label}: ${(err as Error).message}`))
       .finally(() => void (s.listing = null));
@@ -219,7 +252,7 @@ function remember(s: State, out: Partial<Manifest> & { files?: Manifest["files"]
   };
   s.manifest = next;
   const file = manifestFile(s.ep);
-  void fs.mkdir(path.dirname(file), { recursive: true }).then(() => fs.writeFile(file, JSON.stringify(next)));
+  void fs.mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true }).then(() => fs.writeFile(/*turbopackIgnore: true*/ file, JSON.stringify(next)));
 }
 
 async function settle(s: State, id: string, onStatus?: (st: JobStatus) => void): Promise<JobStatus> {
@@ -289,8 +322,17 @@ async function follow(s: State, job: Job) {
       if (now.status === "IN_PROGRESS" && job.state === "pending") job.state = "running";
       const p = now.status === "IN_PROGRESS" ? progressOf(now.output) : null;
       if (p) broadcast(s.sockets, { type: "progress", data: { prompt_id: job.promptId, ...p } });
+      // Crackio's LoRA trainer says more than a step count (its loss, speed, log lines): passed on as ComfyUI would.
+      const t = now.status === "IN_PROGRESS" ? trainingOf(now.output) : null;
+      if (t) broadcast(s.sockets, { type: "crackio.train", data: { ...t, prompt_id: job.promptId } });
     });
     job.status = st;
+    // It ran on a worker: that worker's idle minute starts now, holding this graph's models (ComfyUI keeps the last
+    // prompt's), unless it failed partway.
+    if (st.status === "COMPLETED" || (st.executionTime ?? 0) > 0) {
+      s.lastDone = Date.now();
+      s.lastLoaders = st.status === "COMPLETED" ? loadersOf(job.graph) : [];
+    }
     const out = (st.output ?? {}) as WorkerOutput;
     if (st.status !== "COMPLETED") {
       job.state = "error";
@@ -338,6 +380,20 @@ function progressOf(output: unknown): { node: string; value: number; max: number
   return p && typeof p.value === "number" && typeof p.max === "number" && p.max > 0 ? { node: String(p.node ?? ""), value: p.value, max: p.max } : null;
 }
 
+/** The worker's last word from Crackio's LoRA trainer (handler: `crackio_train`), while a training job runs. */
+function trainingOf(output: unknown): Record<string, unknown> | null {
+  let o = output;
+  if (typeof o === "string") {
+    try {
+      o = JSON.parse(o);
+    } catch {
+      return null;
+    }
+  }
+  const t = (o as { crackio_train?: unknown } | null)?.crackio_train;
+  return t && typeof t === "object" ? (t as Record<string, unknown>) : null;
+}
+
 function stop(s: State, id: string) {
   const job = s.jobs.get(id);
   if (!job || job.state === "done" || job.state === "error") return;
@@ -350,7 +406,12 @@ const entry = (j: Job) => [j.number, j.promptId, j.graph, j.extra, []];
 
 function queue(s: State) {
   const jobs = [...s.jobs.values()].sort((a, b) => a.number - b.number);
-  return { queue_running: jobs.filter((j) => j.state === "running").map(entry), queue_pending: jobs.filter((j) => j.state === "pending").map(entry) };
+  return {
+    queue_running: jobs.filter((j) => j.state === "running").map(entry),
+    queue_pending: jobs.filter((j) => j.state === "pending").map(entry),
+    // Crackio's own: whether a worker is up (in its idle minute), so a job in line says it's on its way, not "starting".
+    crackio: { ready: Date.now() - (s.lastDone ?? 0) < IDLE_MS },
+  };
 }
 
 /** A finished job as ComfyUI's /history tells it, with what RunPod billed for it (`crackio_serverless`). */
@@ -393,7 +454,11 @@ async function upload(s: State, req: http.IncomingMessage, res: http.ServerRespo
     const key = `in/${createHash("sha256").update(data).digest("hex")}${path.extname(filename).toLowerCase()}`;
     if (!(await hasObject(cfg, key))) await putObject(cfg, key, data, mime);
     s.uploads.set(name, { key, mime, bytes: data.length });
-  } else s.uploads.set(name, { data, mime, bytes: data.length });
+  } else {
+    s.uploads.delete(name);
+    s.uploads.set(name, { data, mime, bytes: data.length, at: Date.now() });
+    pruneUploads(s.uploads);
+  }
   send(res, 200, { name: filename, subfolder, type: "input" });
 }
 
@@ -437,11 +502,83 @@ export async function serverlessInfo(ep: ServerlessEndpoint, refresh = false) {
 }
 
 /** Model files into the endpoint's volume (one "fetch" job): Crackio's catalog says where each comes from. */
-export async function fetchModels(ep: ServerlessEndpoint, files: { url: string; folder: string; name: string; bytes?: number }[]) {
+export async function fetchModels(ep: ServerlessEndpoint, files: { url: string; folder: string; name: string; bytes?: number }[], timeoutMs = 60 * 60_000) {
   await shimFor(ep);
   const s = states.get(ep.endpointId)!;
-  const sent = await submit(ep, { action: "fetch", files }, 60 * 60_000);
+  const sent = await submit(ep, { action: "fetch", files }, timeoutMs);
   const done = await settle(s, sent.id);
-  if (done.status === "COMPLETED") remember(s, done.output as WorkerOutput & Manifest);
+  if (done.status === "COMPLETED") {
+    s.lastDone = Date.now();
+    remember(s, done.output as WorkerOutput & Manifest);
+  }
   return done;
+}
+
+/** Deletes model files from the endpoint's volume (a short job there); its file list comes back with the answer. */
+export async function deleteModels(ep: ServerlessEndpoint, files: { folder: string; name: string }[]) {
+  await shimFor(ep);
+  const s = states.get(ep.endpointId)!;
+  const sent = await submit(ep, { action: "delete", files }, 10 * 60_000);
+  const done = await settle(s, sent.id);
+  if (done.status === "COMPLETED") {
+    s.lastDone = Date.now();
+    remember(s, done.output as WorkerOutput & Manifest);
+  }
+  return done;
+}
+
+/** A graph's model loaders, each as its node and settings: what ComfyUI's cache keeps them by. */
+function loadersOf(graph: unknown): string[] {
+  if (!graph || typeof graph !== "object") return [];
+  return Object.values(graph as Record<string, { class_type?: string; inputs?: Record<string, unknown> }>)
+    .filter((n) => /Loader|^LoadMoGeModel$/.test(n?.class_type ?? ""))
+    .map((n) => `${n.class_type}:${JSON.stringify(Object.entries(n.inputs ?? {}).filter(([, v]) => !Array.isArray(v)).sort(([a], [b]) => a.localeCompare(b)))}`);
+}
+
+/** RunPod stops a worker this long after its last job: the endpoint's idle timeout (docs/SERVERLESS.md). */
+const IDLE_MS = 60_000;
+
+/**
+ * Keeps the endpoint's GPU from stopping while someone works with it (Director v2 asks every 25 s while you're active),
+ * and loads the next job's models ahead when `load` asks. RunPod stops a worker a minute after its last job; the next
+ * shot then waited for a new worker and for its models to come off the network volume (Nov 13: 94–129 s before it
+ * began, then 85–100 s to run, against about 35 s on a worker that had them). In the worker's idle minute a "list" job
+ * (no ComfyUI prompt, so what ComfyUI holds stays) gives it another minute. `load` (a graph of the next job's loaders,
+ * engines/comfy-local-recipes `studioWarmGraph`) runs when the worker won't have them: after what's queued, or on a new
+ * worker once it has stopped. Without `load`, never a new worker.
+ */
+export async function keepWarm(ep: ServerlessEndpoint, load?: { graph: Record<string, unknown>; model: string }): Promise<"busy" | "kept" | "loading" | "cold"> {
+  await shimFor(ep);
+  const s = states.get(ep.endpointId)!;
+  const live = [...s.jobs.values()].filter((j) => j.state === "pending" || j.state === "running").sort((a, b) => a.number - b.number);
+  const alive = Date.now() - (s.lastDone ?? 0) < IDLE_MS - 15_000;
+  if (load) {
+    if (live.some((j) => (j.extra as { crackio?: { model?: string } } | undefined)?.crackio?.model === load.model)) return "loading";
+    // What ComfyUI will hold once the line is through: the last job's loaders (its cache keeps the last prompt's).
+    const held = live.length ? loadersOf(live[live.length - 1].graph) : alive ? (s.lastLoaders ?? []) : [];
+    if (!loadersOf(load.graph).every((l) => held.includes(l))) {
+      await warmJob(s, load);
+      return "loading";
+    }
+  }
+  if (live.length) return "busy";
+  if (!alive) return "cold";
+  // Dropped by RunPod if no worker takes it within 30 s (the one it was for has gone): never a GPU started for it later.
+  void manifest(s, false, true, 30_000);
+  return "kept";
+}
+
+/** A graph run only for the models it loads (`keepWarm`), in line like any job, so a shot behind it can say so. */
+async function warmJob(s: State, load: { graph: Record<string, unknown>; model: string }) {
+  const promptId = randomUUID();
+  const job: Job = { promptId, number: ++s.counter, graph: load.graph, extra: { crackio: { model: load.model } }, state: "pending", at: Date.now() };
+  s.jobs.set(promptId, job);
+  try {
+    // Dropped after 5 minutes without a free GPU (RunPod's 4090s run short): by then you may have gone.
+    job.runpodId = (await submit(s.ep, { action: "run", graph: load.graph, prompt_id: promptId, inputs: [], outputs: [] }, 10 * 60_000, 5 * 60_000)).id;
+  } catch (err) {
+    s.jobs.delete(promptId);
+    throw err;
+  }
+  void follow(s, job);
 }

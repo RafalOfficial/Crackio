@@ -1,6 +1,6 @@
 {
   "name": "crackio",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Open-source AI studio for images and video. Stage the shot instead of guessing the prompt. Built on ComfyUI.",
   "license": "MIT",
@@ -29,7 +29,7 @@
     "lucide-react": "^1.58.0",
     "motion": "^14.3.0",
     "nanoid": "^6.0.2",
-    "next": "16.4.2",
+    "next": "16.4.6",
     "onnxruntime-node": "1.30.0",
     "playwright-core": "1.56.1",
     "react": "19.3.0",
@@ -48,7 +48,7 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.186.0",
     "eslint": "^9",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

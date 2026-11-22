@@ -79,7 +79,59 @@ const LTX_LICENCE: LocalModel["licence"] = {
 const RIPPLE_LORA = file("lora", "loras", "LTX25_Ripple_v11.safetensors", "WepeNerd/LTX-Ripple", "LTX25_Ripple_v11.safetensors", 654_443_392, "bde543610144e5bba78782fb0ac18daa663fc087c2212244b8116deb1925ee2a");
 /** Lightricks' in/outpainting IC-LoRA (LTX-2.3, gated; their own LTX-2.5 workflows use it): a removal draws what was behind. */
 const INPAINT_LORA = file("inpaint", "loras", "ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors", "Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting", "ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors", 1_308_778_338, "73dd0841c0d4f0eb26fb1f017781b841b2752021944ac5ecefe57917f6dae6b5");
-const KLEIN_INT8 = file("model", "diffusion_models", "flux3-image-klein-int8-convrot.safetensors", "black-forest-labs/flux-3-image-klein-comfy", "diffusion_models/flux3-image-klein-int8-convrot.safetensors", 5_827_874_779, "847d8933548afd93df4af2cac2498e70891bf28d9dae06d695f536992e168fe2");
+/** nomadoor's 360 ERP outpaint LoRA for FLUX.2 klein base 4B (Apache-2.0, V1, pinned): a 2:1 picture's green filled as a whole panorama. */
+const KLEIN_360_LORA: LocalFile = {
+  role: "lora",
+  folder: "loras",
+  name: "flux-2-klein-4B-360-erp-outpaint-lora_V1.safetensors",
+  url: "https://huggingface.co/nomadoor/flux-2-klein-4B-360-erp-outpaint-lora/resolve/124129f3ebce357c007ffca177d19567246f8bff/flux-2-klein-4B-360-erp-outpaint-lora_V1.safetensors",
+  bytes: 46_224_184,
+  sha256: "567cc22de03800d2c9d4309e0cf6f971cc00da6b39fb26b0311031f2563de166",
+};
+/**
+ * nomadoor's 360 panorama outpaint LoRA for Qwen-Image 2.1 (v0.1, pinned; Qwen Research License like its base): the one
+ * his ComfyUI-Panorama-Stickers workflow runs, the Crackio challenge's winner. A 2:1 picture's green filled as one panorama.
+ */
+const QWEN_360_LORA: LocalFile = {
+  role: "lora",
+  folder: "loras",
+  name: "qwen_image_2_1_360_panorama_outpaint_lora_v0_1.safetensors",
+  url: "https://huggingface.co/nomadoor/qwen-image-2.1-360-panorama-outpaint-lora/resolve/e559d4437d9d4a997f21a98713d501c8743cce1d/qwen_image_2_1_360_panorama_outpaint_lora_v0_1.safetensors",
+  bytes: 159_435_984,
+  sha256: "340453ec90c87d241f73979adc1be149e591867d45d92df250ddeb8446393dd6",
+};
+/** lilylilith's AnyAngle for Qwen-Image 2.1 (Apache-2.0), pinned: trained on rough 3D renders paired with the real shot. */
+const ANY_ANGLE_LORA: LocalFile = {
+  role: "angles",
+  folder: "loras",
+  name: "QI2.1_AnyAngle.safetensors",
+  url: "https://huggingface.co/lilylilith/QI_2.1_AnyAngle/resolve/5c8b4c8e05ba6328d54bf8d34ec724fef5a414ae/QI2.1_AnyAngle.safetensors",
+  bytes: 119_590_312,
+  sha256: "e4d7a0d44a45ed62daabd0f2484a1a59046618a4c47e76b1eab5e386a7a35d8a",
+};
+/** Microsoft's MoGe-3 ViT-G as Comfy-Org packed it for ComfyUI's own MoGe nodes (MIT), pinned: a photo measured in 3D. */
+const MOGE3_VITG: LocalFile = {
+  role: "geometry",
+  folder: "geometry_estimation",
+  name: "moge_3_vitg_fp16.safetensors",
+  url: "https://huggingface.co/Comfy-Org/MoGe/resolve/1484985258ba7ef45c314144fcf0e90924ffbf44/geometry_estimation/moge_3_vitg_fp16.safetensors",
+  bytes: 2_501_605_198,
+  sha256: "a587e42936ae7080b419df4c047b0f0b075d3492418f76ce81fb0779925a1fe6",
+};
+/** nomadoor's Panorama Stickers custom node (the Crackio bridge 1.10.4 sets it up): its Panorama Studio renders a MoGe world. */
+const PANORAMA_NODE = "ComfyUI-Panorama-Stickers";
+/** Crackio's own video re-shoot nodes (Crackio IC-LoRA Guide, Crackio MoGe Clay): part of the Crackio bridge from 1.10.5. */
+const CRACKIO_VIDEO_NODES = "Crackio-Video";
+/** Lightricks' Layout to Render IC-LoRA for LTX-2.5 (gated, LTX-2 licence), pinned: a clay viewport video finished as a real shot. */
+const LAYOUT_TO_RENDER_LORA: LocalFile = {
+  role: "layout",
+  folder: "loras",
+  name: "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors",
+  url: "https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render/resolve/bd765d5592f0ae78457162852a353b6a375cb00f/ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors",
+  bytes: 1_308_787_439,
+  sha256: "77567d81d71b4df558d622dffc0ec218ba1e22c69b2932f6fa12f34772697eae",
+};
+const KLEIN_INT8 =file("model", "diffusion_models", "flux3-image-klein-int8-convrot.safetensors", "black-forest-labs/flux-3-image-klein-comfy", "diffusion_models/flux3-image-klein-int8-convrot.safetensors", 5_827_874_779, "847d8933548afd93df4af2cac2498e70891bf28d9dae06d695f536992e168fe2");
 const QWEN3VL_4B_INT8 = file("text", "text_encoders", "qwen3vl_4b_int8_convrot.safetensors", "black-forest-labs/flux-3-image-klein-comfy", "text_encoders/qwen3vl_4b_int8_convrot.safetensors", 4_858_559_240);
 /** The same file under the role a recipe asks for it by. */
 const as = (role: string, f: LocalFile): LocalFile => ({ ...f, role });
@@ -535,15 +587,7 @@ export const LOCAL_MODELS: LocalModel[] = [
           file("model", "diffusion_models", "qwen_image_2.1_turbo_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors", 7_256_787_829, "8144a0182964aa8403ad6dbc011db837304167d235161b9aabaa8532e967314c"),
           file("text", "text_encoders", "qwen3vl_8b_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 9_350_798_360, "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"),
           file("vae", "vae", "qwen_image_2.1_vae_bf16.safetensors", "Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", 675_509_688, "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"),
-          // lilylilith's AnyAngle (Apache-2.0), pinned: trained on rough 3D renders paired with the real shot.
-          {
-            role: "angles",
-            folder: "loras",
-            name: "QI2.1_AnyAngle.safetensors",
-            url: "https://huggingface.co/lilylilith/QI_2.1_AnyAngle/resolve/5c8b4c8e05ba6328d54bf8d34ec724fef5a414ae/QI2.1_AnyAngle.safetensors",
-            bytes: 119_590_312,
-            sha256: "e4d7a0d44a45ed62daabd0f2484a1a59046618a4c47e76b1eab5e386a7a35d8a",
-          },
+          ANY_ANGLE_LORA,
           // gribbliest's QMA camera angles (Apache-2.0), pinned: 96 named views, for the backs of things.
           {
             role: "views",
@@ -554,6 +598,94 @@ export const LOCAL_MODELS: LocalModel[] = [
             sha256: "ad2c20e0e103b6ad3ffffc56ab4e89c0822263c488aa4dd70e7e03091ff37b8d",
           },
         ],
+      },
+    ],
+  },
+  {
+    // The Director's moved-camera shots and its 3D stage, the Crackio challenge winner's 3D World (engines/
+    // comfy-local-recipes `studioWorld`, server/photo-mesh): MoGe-3 measures the photo, nomadoor's Panorama Studio renders
+    // it from the Camera, Qwen-Image 2.1 with AnyAngle re-shoots the photo from there. Its Qwen files are the Director's
+    // shot model's (Qwen-Image 2.1 Turbo), so beside it Turbo's version adds only MoGe-3, AnyAngle and the node. A card that
+    // runs it well gets the full Qwen-Image 2.1 (25 steps, the winner's workflow); smaller ones Turbo's 8 steps, at less
+    // than half the time. Same Camera on the RunPod 4090 (Nov 14): Turbo matched the full model in 2 of 3 shots, and in
+    // the third drew the astronaut into a view turned away from him, which the full model kept empty.
+    id: "director-world",
+    name: "Director 3D World",
+    maker: "Alibaba Qwen + lilylilith (AnyAngle) + Microsoft (MoGe-3) + nomadoor (Panorama Stickers)",
+    tasks: ["edit"],
+    blurb:
+      "The Director's shots from anywhere on the photo's 3D set, the Crackio challenge winner's way: MoGe-3 measures the photo in 3D, his Panorama Studio renders it from your Camera, and Qwen-Image 2.1 with AnyAngle re-shoots your photo from there in its own style. Research and non-commercial use only.",
+    quality: 85,
+    unit: "image",
+    licence: { name: "Qwen Research", url: "https://huggingface.co/Qwen/Qwen-Image-2.1", commercial: "no" },
+    crackio: "local:director-world",
+    tool: "director",
+    thumb: "image_qwen_image_2_1_image_edit",
+    variants: [
+      {
+        id: "int8",
+        label: "INT8",
+        // The full Qwen-Image 2.1 with its Qwen3-VL text encoder (loaded one after the other) and MoGe-3 ViT-G before them.
+        needGb: 17,
+        fidelity: 1,
+        // 25 steps at about 2 MP: 52-57 s a shot on the RunPod 4090 with MoGe-3 and the render (Nov 14).
+        seconds5090: 35,
+        steps: 25,
+        requires: { ...NVIDIA, customNodes: [PANORAMA_NODE] },
+        files: [
+          file("model", "diffusion_models", "qwen_image_2.1_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_int8_convrot.safetensors", 7_256_783_064, "cb74113cb03faecd79611b01fd7fd642f0aa60d6f0b95086abee214d75eaa57d"),
+          file("text", "text_encoders", "qwen3vl_8b_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 9_350_798_360, "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"),
+          file("vae", "vae", "qwen_image_2.1_vae_bf16.safetensors", "Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", 675_509_688, "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"),
+          ANY_ANGLE_LORA,
+          MOGE3_VITG,
+        ],
+      },
+      {
+        id: "int8-turbo",
+        label: "INT8 Turbo",
+        needGb: 17,
+        fidelity: 0.97,
+        // 8 steps: 24 s a shot on the RunPod 4090 with MoGe-3 and the render (Nov 14).
+        seconds5090: 15,
+        steps: 8,
+        requires: { ...NVIDIA, customNodes: [PANORAMA_NODE] },
+        files: [
+          file("model", "diffusion_models", "qwen_image_2.1_turbo_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors", 7_256_787_829, "8144a0182964aa8403ad6dbc011db837304167d235161b9aabaa8532e967314c"),
+          file("text", "text_encoders", "qwen3vl_8b_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 9_350_798_360, "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"),
+          file("vae", "vae", "qwen_image_2.1_vae_bf16.safetensors", "Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", 675_509_688, "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"),
+          ANY_ANGLE_LORA,
+          MOGE3_VITG,
+        ],
+      },
+    ],
+  },
+  {
+    // The Director's video re-shoot (engines/comfy-local-recipes DIRECTOR_VIDEO): the Crackio challenge winner's video
+    // re-shoot (MoGe-3 on every frame, his Panorama Studio rendering them from your Camera path), finished by LTX-2.5 with
+    // Lightricks' Layout to Render IC-LoRA instead of his MiniMax H3 (whose licence leaves out the EU, the UK and the US).
+    // Its first frame is the 3D World's shot from the new angle (director-world).
+    id: "director-video",
+    name: "Director Video Re-shoot",
+    maker: "Lightricks (LTX-2.5, Layout to Render) + Microsoft (MoGe-3) + nomadoor (Panorama Stickers)",
+    tasks: ["video"],
+    blurb:
+      "Drop a video in the Director and film it again from anywhere: MoGe-3 measures every frame in 3D, the challenge winner's Panorama Studio renders them from your Camera path, and LTX-2.5 with Lightricks' Layout to Render draws the finished shot over that, starting from the first frame from the new angle.",
+    quality: 84,
+    unit: "clip",
+    licence: LTX_LICENCE,
+    gated: { repo: "Lightricks/LTX-2.5", also: ["Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"] },
+    crackio: "local:director-video",
+    tool: "director",
+    variants: [
+      {
+        id: "int8",
+        label: "INT8",
+        needGb: 24,
+        fidelity: 1,
+        seconds5090: 150,
+        steps: 11,
+        requires: { ...NVIDIA, customNodes: [PANORAMA_NODE, CRACKIO_VIDEO_NODES] },
+        files: [LTX_INT8, LTX_TEXT_INT8, LTX_VAES[0], LTX_UPSCALER, LAYOUT_TO_RENDER_LORA, MOGE3_VITG],
       },
     ],
   },
@@ -718,6 +850,90 @@ export const LOCAL_MODELS: LocalModel[] = [
           file("model", "diffusion_models", "flux-2-klein-4b-Q5_K_M.gguf", "unsloth/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q5_K_M.gguf", 3_073_368_640, "58c01c75fee2272eadb127f53e26dd05a5a8e7f812e37c36fa44603301f91e54"),
           QWEN3_4B_Q4,
           FLUX2_VAE,
+        ],
+      },
+    ],
+  },
+  {
+    // The Director's 360 places (server/world, engines/comfy-local-recipes KLEIN_360): FLUX.2 klein's BASE 4B with
+    // nomadoor's 360 ERP outpaint LoRA, trained for exactly that job on ~1000 real panoramas (its card: the distilled klein
+    // draws badly with it). The same text encoder and VAE as klein 4B.
+    id: "flux2-klein-base-4b-360",
+    name: "FLUX.2 klein 360",
+    maker: "Black Forest Labs + nomadoor",
+    tasks: ["edit"],
+    blurb: "Draws the whole 360 place around your photo, sky and floor included: FLUX.2 klein base 4B with a LoRA trained on real panoramas for exactly that. A 4B model, so it fits smaller GPUs; about 90 s a pass on an A40, and a second pass joins the ends when they don't meet.",
+    quality: 62,
+    unit: "image",
+    licence: { name: "Apache-2.0", url: "https://huggingface.co/nomadoor/flux-2-klein-4B-360-erp-outpaint-lora", commercial: "yes" },
+    crackio: "local:flux2-klein-base-4b-360",
+    tool: "director",
+    variants: [
+      {
+        id: "bf16",
+        label: "BF16",
+        // A place is drawn at 2048×1024 with the 2:1 picture it fills read beside it, 20 steps at CFG 5 (6.4 units).
+        needGb: 12,
+        fidelity: 1,
+        // Measured on a rented A40: 87–90 s a place pass, 13.7 s a unit (2026-11-12); at the A40's 0.35 of a 5090.
+        seconds5090: 4.8,
+        steps: 20,
+        files: [
+          file("model", "diffusion_models", "flux-2-klein-base-4b.safetensors", "black-forest-labs/FLUX.2-klein-base-4B", "flux-2-klein-base-4b.safetensors", 7_751_105_712, "9c5fed22b76baea749d88fc2abe3ad53245e7b21a0d353a762665eea00043b92"),
+          QWEN3_4B,
+          FLUX2_VAE,
+          KLEIN_360_LORA,
+        ],
+      },
+      {
+        id: "fp8",
+        label: "FP8",
+        needGb: 8,
+        fidelity: 0.97,
+        // Not run yet: BF16's time at FP8's usual speed-up on RTX 40/50.
+        seconds5090: 3.7,
+        steps: 20,
+        requires: FP8,
+        files: [
+          file("model", "diffusion_models", "flux-2-klein-base-4b-fp8.safetensors", "black-forest-labs/FLUX.2-klein-base-4b-fp8", "flux-2-klein-base-4b-fp8.safetensors", 4_089_498_488, "44bab3a86fe98b85d21dd2a4729ebdc3ae51fb8a39f76e457e18c724219e6840"),
+          QWEN3_4B,
+          FLUX2_VAE,
+          KLEIN_360_LORA,
+        ],
+      },
+    ],
+  },
+  {
+    // The Director's 360 places the challenge winner's way (server/world, engines/comfy-local-recipes QWEN_360): the full
+    // Qwen-Image 2.1 with nomadoor's 360 panorama outpaint LoRA, the pair his ComfyUI-Panorama-Stickers workflow runs.
+    // Qwen-Image 2.1's INT8 files plus the LoRA: installing it next to Qwen-Image 2.1 adds only the LoRA.
+    id: "qwen-image-2.1-360",
+    name: "Qwen-Image 2.1 360",
+    maker: "Alibaba Qwen + nomadoor",
+    tasks: ["edit"],
+    blurb: "Draws the whole 360 place around your photo the way the Crackio challenge's winner does: Qwen-Image 2.1 with nomadoor's LoRA trained on real panoramas, a full world all around in your photo's own style. About 3 minutes a pass on an A40; a second pass joins the ends when they don't meet. Research and non-commercial use only.",
+    quality: 80,
+    unit: "image",
+    licence: { name: "Qwen Research", url: "https://huggingface.co/nomadoor/qwen-image-2.1-360-panorama-outpaint-lora", commercial: "no" },
+    crackio: "local:qwen-image-2.1-360",
+    tool: "director",
+    variants: [
+      {
+        id: "int8",
+        label: "INT8",
+        // A place is a 2880×1440 panorama drawn beside the 2880×1440 one it fills, 25 steps at CFG 1 (15.6 units); the A40
+        // ran it in about 18 GB.
+        needGb: 22,
+        fidelity: 0.99,
+        // Measured on a rented A40: 190 s a place pass, 12.2 s a unit (2026-11-13); at the A40's 0.35 of a 5090.
+        seconds5090: 4.3,
+        steps: 25,
+        requires: NVIDIA,
+        files: [
+          file("model", "diffusion_models", "qwen_image_2.1_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_int8_convrot.safetensors", 7_256_783_064, "cb74113cb03faecd79611b01fd7fd642f0aa60d6f0b95086abee214d75eaa57d"),
+          file("text", "text_encoders", "qwen3vl_8b_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 9_350_798_360, "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"),
+          file("vae", "vae", "qwen_image_2.1_vae_bf16.safetensors", "Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", 675_509_688, "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"),
+          QWEN_360_LORA,
         ],
       },
     ],
@@ -893,6 +1109,32 @@ export const LOCAL_MODELS: LocalModel[] = [
     crackio: "local:humo-lipsync",
     tool: "lipsync",
     variants: [
+      {
+        // Crackio's MXFP8 build of Comfy-Org's fp16 HuMo (TR4F/crackio-humo-17b-mxfp8, Apache-2.0): every Linear
+        // weight MXFP8, the rest fp16. The same pictures as FP8 in 0.6 of the drawing time on the RTX 5090, whose
+        // tensor cores do MXFP8 themselves (2026-11-03); older cards would only unpack it, so it's for RTX 50s.
+        id: "mxfp8",
+        label: "MXFP8",
+        needGb: 28,
+        fidelity: 0.98,
+        seconds5090: 245,
+        measured: true,
+        steps: 6,
+        requires: RTX50,
+        files: [
+          {
+            role: "model",
+            folder: "diffusion_models",
+            name: "humo_17B_mxfp8_crackio.safetensors",
+            url: "https://huggingface.co/TR4F/crackio-humo-17b-mxfp8/resolve/226e1ae6e82e8632d38ebea3642f672ad364ff9a/humo_17B_mxfp8_crackio.safetensors",
+            bytes: 17_860_786_432,
+            sha256: "e8901000e61c89197aea5c8c76afceb8415293440d305bcba3aaa212d15726ff",
+          },
+          file("audio", "audio_encoders", "whisper_large_v3_fp16.safetensors", "Comfy-Org/HuMo", "split_files/audio_encoders/whisper_large_v3_fp16.safetensors", 3_087_130_976, "a8e94b85976e5864ba3e9525c7e6c83b2a1eca42d4b797a0c7c24d778e40fd95"),
+          UMT5_FP8,
+          file("vae", "vae", "wan_2.1_vae.safetensors", "Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/vae/wan_2.1_vae.safetensors", 253_815_318, "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"),
+        ],
+      },
       {
         id: "fp8",
         label: "FP8",

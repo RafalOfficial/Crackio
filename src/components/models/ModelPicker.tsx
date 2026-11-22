@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronRight, LayoutGrid, Sparkles } from "lucide-react";
 import { Popover } from "@/components/ui/Popover";
 import { Row } from "@/components/ui/Panel";
@@ -10,6 +11,7 @@ import { resolveAuto, revalidateModels, useModels } from "@/lib/hooks/use-models
 import { ASK, type ModelAsk } from "@/lib/hooks/use-model-choice";
 import { prefetchLocal } from "@/lib/hooks/use-local";
 import { isCustomModel, useCustomModels } from "@/lib/hooks/use-custom-models";
+import { useLorasOn } from "@/lib/hooks/use-loras-on";
 import { engineShortName } from "@/lib/providers/names";
 import { capsFit, type Caps, type ModelTask } from "@/lib/models/caps";
 import { cardName } from "@/lib/models/gallery";
@@ -18,7 +20,7 @@ import type { CustomRow } from "@/lib/models/custom-types";
 import type { ProviderId } from "@/lib/providers/types";
 import { formatSeconds } from "@/lib/local/fit";
 import { localJob } from "@/lib/local/work";
-import { ModelLibrary } from "./ModelLibrary";
+import type { ModelLibrary as ModelLibraryComponent } from "./ModelLibrary";
 import { cn } from "@/lib/cn";
 
 // Real company logos now live in components/brand/BrandMark; re-exported for existing imports.
@@ -31,6 +33,14 @@ const DEFAULT_TASK: Partial<Record<ModelKind, ModelTask>> = { image: "image", vi
 
 /** Kinds whose models have something to show open the model library; prompt writers and the one reframe model keep a short list. */
 const LIBRARY: ModelKind[] = ["image", "video", "upscale"];
+
+/**
+ * The library's code (the drawer, its cards, LoRA pages and the open-model data behind them) isn't part of the page: it
+ * loads the first time a picker needs it (built ahead at idle, or the pointer on its way to a picker), once for the app.
+ */
+let libraryCode: Promise<typeof ModelLibraryComponent> | null = null;
+let libraryReady: typeof ModelLibraryComponent | null = null;
+const loadLibrary = () => (libraryCode ??= import("./ModelLibrary").then((m) => (libraryReady = m.ModelLibrary)));
 
 /** One picker a page draws the library ahead (ModelLibrary `warm`). */
 let warmClaimed = false;
@@ -60,6 +70,7 @@ export function ModelPicker({
   fit,
   fits,
   surface,
+  emptyLabel,
   library: libraryProp = false,
 }: {
   kind: ModelKind;
@@ -92,18 +103,32 @@ export function ModelPicker({
   fit?: (id: string, caps: Caps | null) => ClipFit | null;
   /** Models this tool's Auto can run (Cast: only ones that take pictures); the server must pick with the same rule. */
   fits?: (m: ModelAvailability) => boolean;
-  /** "glass": the library is smoked glass, like Home's composer it opens from. Tool pages keep the solid sheet. */
+  /** "glass": the library is smoked glass, like Home's composer it opens from. Only on Home: tool pages keep the solid sheet. */
   surface?: "glass";
+  /** What the trigger says with nothing chosen, in plain grey (Settings' defaults: having none is normal, not a to-do). */
+  emptyLabel?: string;
   /** A text picker that opens the model library too (Motion). Its "auto" still means the model Auto uses, shown by name. */
   library?: boolean;
 }) {
   const { models, defaults, loaded } = useModels();
+  const pathname = usePathname();
   const task = taskProp ?? DEFAULT_TASK[kind];
+  // The library under it is memoized: what a caller writes inline (a new `only` array, `tags` object, `onChange` or `fit`
+  // function on every render) is kept as long as what it says is the same, so typing in a prompt doesn't redraw every card.
+  const onlyKey = only?.join("|") ?? null;
+  const onlyIds = useMemo(() => (onlyKey === null ? undefined : onlyKey.split("|").filter(Boolean)), [onlyKey]);
+  const tagsKey = tags ? JSON.stringify(tags) : "";
+  const stableTags = useMemo(() => (tagsKey ? (JSON.parse(tagsKey) as Record<string, string>) : undefined), [tagsKey]);
+  const latestChange = useRef(onChange);
+  useLayoutEffect(() => {
+    latestChange.current = onChange;
+  });
+  const pickModel = useCallback((id: string) => latestChange.current(id), []);
   // Models a tool names in `only` are shown as they are; others only when what they take fits the task
   // (the clip-only swap model isn't offered where there's no clip).
   const list = useMemo(
-    () => models.filter((m) => m.kind === kind && (!only || only.includes(m.id)) && (!task || only?.includes(m.id) || !m.caps || capsFit(m.caps, task))),
-    [models, kind, only, task],
+    () => models.filter((m) => m.kind === kind && (!onlyIds || onlyIds.includes(m.id)) && (!task || onlyIds?.includes(m.id) || !m.caps || capsFit(m.caps, task))),
+    [models, kind, onlyIds, task],
   );
   const auto = resolveAuto(kind, models, defaults, prefer, fits);
   const custom = isCustomModel(value);
@@ -121,6 +146,13 @@ export function ModelPicker({
     for (const id of featuredKey ? featuredKey.split("|") : []) if (!useCustomModels.getState().rows[id]) void useCustomModels.getState().load(id);
   }, [featuredKey]);
   const picks = useMemo(() => (featuredKey ? featuredKey.split("|") : []).map((id) => rows[id]).filter((r): r is CustomRow => Boolean(r)), [featuredKey, rows]);
+  // How each listed model fits the job, by its answers: a caller's new `fit` function that says the same keeps the cards.
+  const fitAnswers = fit ? JSON.stringify([...list.map((m) => [m.id, fit(m.id, m.caps ?? null)]), ...picks.map((r) => [r.id, fit(r.id, r.caps)])]) : "";
+  const stableFit = useMemo(() => {
+    if (!fitAnswers) return undefined;
+    const table = new Map(JSON.parse(fitAnswers) as [string, ClipFit | null][]);
+    return (id: string) => table.get(id) ?? null;
+  }, [fitAnswers]);
 
   // Picture, video and upscale models are always chosen by you: "auto" there means nothing is chosen yet.
   const library = LIBRARY.includes(kind) || libraryProp;
@@ -136,6 +168,20 @@ export function ModelPicker({
         ? { name: pick.name, vendor: pick.vendor, via: pick.provider }
         : (selected ?? auto);
   const autoDetail = savedCustom ? `Uses your default, ${savedRow?.name ?? "a custom model"}` : auto ? `Uses ${cardName(auto.name)} right now` : "Picks the first ready model";
+
+  // The LoRAs switched on for the model chosen (they go with every job it runs): said on the trigger, so what a job
+  // carries is in sight wherever a model is picked. They live in this browser, so they show once the page is in it.
+  const lorasOn = useLorasOn(value.startsWith("local:") ? value : null);
+  const [inBrowser, setInBrowser] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setInBrowser(true), 0);
+    return () => clearTimeout(t);
+  }, []);
+  const loras = inBrowser && lorasOn ? (
+    <span className="shrink-0 rounded-full bg-chroma/15 px-1.5 py-px text-[10.5px] font-bold text-chroma" title={`${lorasOn} LoRA${lorasOn === 1 ? "" : "s"} on: open the model's card to change them`}>
+      {lorasOn} LoRA{lorasOn === 1 ? "" : "s"}
+    </span>
+  ) : null;
 
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -184,6 +230,17 @@ export function ModelPicker({
     const t = setTimeout(() => setDrawAhead(true), 600);
     return () => clearTimeout(t);
   }, [warmer, loaded, drawAhead]);
+  // Its code, once it's wanted (built ahead or opened); a click before it's here opens it as soon as it is.
+  const [Library, setLibrary] = useState<typeof ModelLibraryComponent | null>(() => libraryReady);
+  const wantsLibrary = library && (primed || open);
+  useEffect(() => {
+    if (!wantsLibrary || Library) return;
+    let live = true;
+    void loadLibrary().then((L) => live && setLibrary(() => L));
+    return () => {
+      live = false;
+    };
+  }, [wantsLibrary, Library]);
   const warm = library
     ? () => {
         prefetchLocal();
@@ -191,7 +248,11 @@ export function ModelPicker({
         setPrimed(true);
       }
     : undefined;
-  const none = !loaded ? "Loading…" : unchosen ? "Choose a model" : "None connected";
+  // Nothing to show on the trigger, in the same words on every kind of trigger: loading, nothing chosen yet (or the one
+  // chosen isn't there any more), or no model at all for a short list.
+  const empty = !loaded && !custom ? "Loading models…" : (unchosen || library) && emptyLabel ? emptyLabel : unchosen || library ? "Choose a model" : "No model connected";
+  // A to-do (orange) only where a tool needs a model chosen; Settings' "no default" is calm.
+  const alarm = unchosen && loaded && !emptyLabel;
 
   const trigger = (isOpen: boolean, toggle: () => void): ReactNode =>
     variant === "setting" ? (
@@ -200,9 +261,9 @@ export function ModelPicker({
         onPointerEnter={warm}
         aria-expanded={isOpen}
         aria-haspopup="dialog"
-        thumb={shown ? <VendorMark vendor={shown.vendor} model={shown.name} variant="bare" size={16} /> : <LayoutGrid size={14} className={unchosen ? "text-spike" : "text-haze"} />}
+        thumb={shown ? <VendorMark vendor={shown.vendor} model={shown.name} variant="bare" size={16} /> : <LayoutGrid size={14} className={alarm ? "text-spike" : "text-haze"} />}
         label={label}
-        value={loaded && shown ? cardName(shown.name) : none}
+        value={(loaded || custom) && shown ? cardName(shown.name) : empty}
         tags={value === "auto" && !library ? ["Auto"] : shown?.via ? [engineShortName(shown.via)] : undefined}
       />
     ) : variant === "chip" ? (
@@ -219,8 +280,9 @@ export function ModelPicker({
           chipClassName,
         )}
       >
-        {shown ? <VendorMark vendor={shown.vendor} model={shown.name} variant="bare" size={15} /> : <LayoutGrid size={14} className={unchosen ? "text-spike" : "text-haze"} />}
-        <span className={cn("truncate", unchosen && loaded && "text-spike")}>{!loaded ? "Models…" : shown ? cardName(shown.name) : unchosen ? "Choose a model" : "No model"}</span>
+        {shown ? <VendorMark vendor={shown.vendor} model={shown.name} variant="bare" size={15} /> : <LayoutGrid size={14} className={alarm ? "text-spike" : "text-haze"} />}
+        <span className={cn("truncate", alarm && "text-spike", !shown && emptyLabel && "font-medium text-haze")}>{(loaded || custom) && shown ? cardName(shown.name) : empty}</span>
+        {loras}
         <ChevronDown size={13} className={cn("shrink-0 text-haze transition-transform", isOpen && "rotate-180")} />
       </button>
     ) : (
@@ -233,20 +295,21 @@ export function ModelPicker({
         className={cn(
           "press squircle flex h-12 w-full items-center gap-2.5 rounded-[14px] pl-2 pr-3 text-left shadow-[inset_0_0_0_1px_var(--color-line)] hover:bg-white/[0.03]",
           isOpen && "bg-white/[0.04] shadow-[inset_0_0_0_1px_var(--color-line-strong)]",
-          unchosen && loaded && "shadow-[inset_0_0_0_1px_rgb(255_91_46/0.45)] hover:bg-spike/[0.05]",
+          alarm && "shadow-[inset_0_0_0_1px_rgb(255_91_46/0.45)] hover:bg-spike/[0.05]",
         )}
       >
         {shown ? (
           <VendorMark vendor={shown.vendor} model={shown.name} size={32} />
         ) : (
           <span className="brand-tile squircle grid size-8 shrink-0 place-items-center rounded-[10px]">
-            <LayoutGrid size={15} className={unchosen ? "text-spike" : "text-haze"} />
+            <LayoutGrid size={15} className={alarm ? "text-spike" : "text-haze"} />
           </span>
         )}
-        <span className={cn("min-w-0 flex-1 truncate text-[14px] font-semibold", unchosen && loaded && "text-spike")}>
-          {!loaded && !custom ? "Loading models…" : shown ? cardName(shown.name) : unchosen ? "Choose a model" : "No model connected"}
+        <span className={cn("min-w-0 flex-1 truncate text-[14px] font-semibold", alarm && "text-spike", !shown && emptyLabel && "font-medium text-haze")}>
+          {(loaded || custom) && shown ? cardName(shown.name) : empty}
         </span>
         {value === "auto" && !library ? <span className="text-[12px] text-haze">Auto</span> : null}
+        {loras}
         {shown?.via ? <span className="rounded-[6px] bg-apple-2 px-1.5 py-0.5 text-[11px] text-fog">{engineShortName(shown.via)}</span> : null}
         {library ? <ChevronRight size={15} className="shrink-0 text-haze" /> : <ChevronDown size={15} className={cn("shrink-0 text-haze transition-transform", isOpen && "rotate-180")} />}
       </button>
@@ -257,24 +320,27 @@ export function ModelPicker({
       // Keyboard users get the library built as they reach the picker too.
       <div ref={setAnchor} onFocus={warm} className={cn("relative", className)}>
         {trigger(open, () => setOpen((o) => !o))}
-        <ModelLibrary
-          open={open}
-          primed={primed}
-          warm={drawAhead}
-          onClose={close}
-          anchor={anchor}
-          kind={kind}
-          task={task}
-          tool={tool}
-          // A text picker on Auto shows the model Auto uses as the chosen card.
-          value={value === "auto" && !unchosen ? (auto?.id ?? value) : value}
-          onChange={onChange}
-          list={list}
-          picks={picks}
-          tags={tags}
-          fit={fit}
-          glass={surface === "glass"}
-        />
+        {Library ? (
+          <Library
+            open={open}
+            primed={primed}
+            warm={drawAhead}
+            onClose={close}
+            anchor={anchor}
+            kind={kind}
+            task={task}
+            tool={tool}
+            // A text picker on Auto shows the model Auto uses as the chosen card.
+            value={value === "auto" && !unchosen ? (auto?.id ?? value) : value}
+            onChange={pickModel}
+            list={list}
+            picks={picks}
+            tags={stableTags}
+            fit={stableFit}
+            // Smoked glass belongs to Home's composer: anywhere else the sheet is solid, whatever the caller asks.
+            glass={surface === "glass" && pathname === "/"}
+          />
+        ) : null}
       </div>
     );
   }

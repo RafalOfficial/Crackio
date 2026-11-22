@@ -1,6 +1,7 @@
 import { builtinCaps } from "@/lib/models/builtin-caps";
 import { DEFAULT_RESOLUTION, IMAGE_RESOLUTIONS } from "@/lib/local/resolution";
 import type { LocalModel } from "@/lib/local/types";
+import type { Caps } from "@/lib/models/caps";
 import type { ApiQuote } from "./api-prices";
 
 /**
@@ -40,15 +41,19 @@ export const UPSCALE_SOURCES: UpscaleSource[] = [
 
 /**
  * Estimates show a little more time than the math says (and the cost of it): a rented GPU can be a little slower than the
- * one benchmarked, and a promise kept beats one missed. 7%: the middle of the 5–10% the user asked for.
+ * one benchmarked, and a promise kept beats one missed. 7%: the middle of a 5–10% margin.
  */
 export const SAFETY = 1.07;
 
 /** A voice job: seconds of speech (a line is 3–10 s, a scene a minute or more). */
 export const VOICE_KNOBS: Knobs = { kind: "voice", seconds: { min: 5, max: 180, default: 30 } };
 
-/** `task`: what the tool's part uses it for ("edit" for the picture editors), when not the model's main job. */
-export function knobsFor(model: Pick<LocalModel, "crackio" | "id" | "tasks" | "unit">, task?: string): Knobs {
+/**
+ * `task`: what the tool's part uses it for ("edit" for the picture editors), when not the model's main job. `known`:
+ * what the model takes when the caller has read it (a template model's caps come from its templates, on the server);
+ * the hand-tuned models' are built in.
+ */
+export function knobsFor(model: Pick<LocalModel, "crackio" | "id" | "tasks" | "unit">, task?: string, known?: Caps | null): Knobs {
   const id = model.crackio ?? `local:${model.id}`;
   if (model.tasks.includes("swap")) {
     const caps = builtinCaps({ id, kind: "video", family: "comfy-local", maxRefs: 0 });
@@ -65,7 +70,7 @@ export function knobsFor(model: Pick<LocalModel, "crackio" | "id" | "tasks" | "u
     return { kind: "upscale", sources: UPSCALE_SOURCES, scales: [2, 4] };
   }
   if (model.unit === "clip") {
-    const caps = builtinCaps({ id, kind: "video", family: "comfy-local", maxRefs: 0 });
+    const caps = known ?? builtinCaps({ id, kind: "video", family: "comfy-local", maxRefs: 0 });
     const d = caps?.duration;
     const res = caps?.resolution?.choices ?? [{ value: "720p", label: "720p" }];
     return {

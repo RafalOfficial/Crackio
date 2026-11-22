@@ -47,6 +47,8 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
 let loading: Promise<void> | null = null;
 /** Bumped by every change made here, so a load that started before one can't undo it. */
 let edits = 0;
+/** The version of the listing on show (the server's ETag): the same one again isn't parsed or set. */
+let shown: string | null = null;
 
 export const useLibrary = create<LibraryState>((set, get) => ({
   projects: [],
@@ -58,11 +60,18 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     (loading ??= (async () => {
       const startedAt = edits;
       try {
-        const data = await call<{ projects: LibraryProject[]; placements: Placement[]; items: Generation[] }>("/api/library");
+        // Revalidated, not fetched again: the server keeps the listing (a few MB) and answers 304 while nothing
+        // changed, and a version already on show isn't parsed or set again, so returning to the Library is free.
+        const res = await fetch("/api/library", { cache: "no-cache" });
+        const version = res.headers.get("etag");
+        if (res.ok && version && version === shown && get().loaded) return;
+        const data = (await res.json().catch(() => ({}))) as { projects?: LibraryProject[]; placements?: Placement[]; items?: Generation[]; error?: string };
+        if (!res.ok || !Array.isArray(data.items)) throw new Error(data.error ?? "The Library didn't load.");
+        shown = version;
         if (edits === startedAt) {
           const placements: Record<TakeKey, string> = {};
-          for (const p of data.placements) placements[takeKey(p.id, p.index)] = p.project;
-          set({ projects: data.projects, placements, history: data.items, loaded: true });
+          for (const p of data.placements ?? []) placements[takeKey(p.id, p.index)] = p.project;
+          set({ projects: data.projects ?? [], placements, history: data.items, loaded: true });
         } else set({ history: data.items, loaded: true });
       } catch {
         set({ loaded: true });

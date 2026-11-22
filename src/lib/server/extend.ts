@@ -61,8 +61,8 @@ export async function extendView(viewUrl: string, place: string, words: string, 
 /** Saved as big as it was made (uploads are capped at 2560 wide, which would undo a 4K place). */
 async function saveFull(data: Buffer, width: number, height: number) {
   const name = `${nanoid(12)}.jpg`;
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  await fs.writeFile(path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, name), await sharp(data).resize(width, height, { fit: "cover" }).jpeg({ quality: 93 }).toBuffer());
+  await fs.mkdir(/*turbopackIgnore: true*/ UPLOADS_DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, name), await sharp(data).resize(width, height, { fit: "cover" }).jpeg({ quality: 93 }).toBuffer());
   return { url: `/api/media/uploads/${name}`, width, height };
 }
 

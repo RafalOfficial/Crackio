@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useDirector } from "@/lib/director/store";
 import { useThree } from "@react-three/fiber";
 import { BufferGeometry, Float32BufferAttribute, type Mesh, ShaderMaterial, type Texture, Vector3, Vector4 } from "three";
@@ -23,7 +23,12 @@ const CEILING = 2;
 const SKY = 3;
 const FAR = 300;
 /** Neighbors farther apart than this (a ratio of distances) aren't one surface. */
-const CUT = 1.25;
+/**
+ * 1.25 (Oct 2026) still stretched awnings and shelf edges into shards when seen from beside the photo's spot; the
+ * challenge winner tears at a 4% jump between neighbouring depth pixels. This grid is a few times coarser than a depth
+ * map's pixels, so its walls step more per quad: 1.1 tears what's in front of something else and keeps the walls whole.
+ */
+const CUT = 1.1;
 
 type DepthMap = { w: number; h: number; r: Float32Array; cls: Uint8Array };
 const maps = new Map<string, Promise<DepthMap>>();
@@ -324,7 +329,7 @@ const fragment = /* glsl */ `
     float guess = smoothstep(0.1, 0.3, off) * smoothstep(1.3, 0.8, vWorld.y);
     if (unknown > 0.5) {
       // The model's view keeps only what the picture really shows from here; the rest is gray for the model to draw
-      // fresh. Walked 9 m off, the user's street came back with a warped curb and blurred chunks the model copied:
+      // fresh. Walked 9 m off, a test street came back with a warped curb and blurred chunks the model copied:
       // the soft layer behind the cuts, low clutter seen from far off its photographed angle (walls hold up: grayed at
       // any height, a cafe front seen 40 degrees round went), and anything shown over three times bigger than the
       // picture saw it from its spot, or twice and stretched one way (cobbles in streaks in front of the camera).
@@ -362,7 +367,7 @@ function material(blur: number, front: boolean) {
 /**
  * The world built around `center`; `children` (the world as a backdrop) until its depth has loaded. It stays the place
  * from any height: up high it went back to a flat backdrop, and the switch was the place suddenly turning into a 2D
- * picture (the user); seen from above, the tops of things it never saw stretch instead. `eye`: the shot camera while
+ * picture; seen from above, the tops of things it never saw stretch instead. `eye`: the shot camera while
  * scouting (the place looks the way the shot sees it).
  */
 export function WalkIn({
@@ -401,8 +406,10 @@ export function WalkIn({
     const t = setTimeout(() => setMarksKey(standing), 250);
     return () => clearTimeout(t);
   }, [standing]);
+  // The far layer and the walls come from the world alone: worked out once per world, not again after every move.
+  const fixed = useMemo(() => (map ? { far: behind(map), walls: wallsOf(map, map.r, new Vector3(x, y, z), span) } : null), [map, x, y, z, span]);
   const geometries = useMemo(() => {
-    if (!map) return null;
+    if (!map || !fixed) return null;
     const at = new Vector3(x, y, z);
     const marks = marksKey
       .split(";")
@@ -414,16 +421,18 @@ export function WalkIn({
     const near = clearedFor(map, map.r, at, span, marks);
     return {
       front: shell(map, near, depth.ceiling, at, span, 512, true),
-      back: shell(map, clearedFor(map, behind(map), at, span, marks), depth.ceiling, at, span, 192, false),
+      back: shell(map, clearedFor(map, fixed.far, at, span, marks), depth.ceiling, at, span, 192, false),
       reach: reachOf(map, near, at, span),
-      walls: wallsOf(map, map.r, at, span),
+      walls: fixed.walls,
     };
-  }, [map, depth.ceiling, x, y, z, span, marksKey]);
+  }, [map, fixed, depth.ceiling, x, y, z, span, marksKey]);
+  // The camera is put back in the room only when the room changed (its walls), not after every move of the cast.
+  const keptFor = useRef<Float32Array | null>(null);
   // Where walking may take the camera, in the stage's own units (the place is scaled by its group).
   useEffect(() => {
     if (!geometries) return;
     // Openings, and walls the measuring missed, end well past most of the room's walls, and nothing goes past 12 m:
-    // the user's store had a 47 m corridor behind the camera, and zooming out down it showed the place from outside.
+    // a test photo of a store had a 47 m corridor behind the camera, and zooming out down it showed the place from outside.
     const most = Float32Array.from(geometries.walls).sort()[Math.floor(geometries.walls.length * 0.75)];
     const far = Math.min(12, Math.max(3, most * 1.25));
     const room = {
@@ -439,12 +448,15 @@ export function WalkIn({
     };
     walkable.current = room;
     // The camera into it now, wherever it was left (every move after keeps it there: the store's commit).
-    useDirector.getState().setCamera({}, true);
+    if (keptFor.current !== geometries.walls) {
+      keptFor.current = geometries.walls;
+      useDirector.getState().setCamera({}, true);
+    }
     return () => {
       if (walkable.current === room) walkable.current = null;
     };
   }, [geometries, map, span, x, y, z, placeScale, depth.ceiling, depth.url]);
-  useEffect(() => () => [geometries?.front, geometries?.back].forEach((g) => g?.dispose()), [geometries]);
+  useInsertionEffect(() => () => [geometries?.front, geometries?.back].forEach((g) => g?.dispose()), [geometries]);
   const materials = useMemo(() => {
     const front = material(0, true);
     // Behind everything, blurred: only seen through the cuts.
@@ -454,7 +466,7 @@ export function WalkIn({
     back.polygonOffsetUnits = 16;
     return { front, back };
   }, []);
-  useEffect(() => () => [materials.front, materials.back].forEach((m) => m.dispose()), [materials]);
+  useInsertionEffect(() => () => [materials.front, materials.back].forEach((m) => m.dispose()), [materials]);
   const invalidate = useThree((s) => s.invalidate);
   const [ex, ey, ez, locked] = [eye?.x ?? 0, eye?.y ?? 0, eye?.z ?? 0, eye ? 1 : 0];
   // Uniforms change in place through the mesh (three.js materials are mutable, React state isn't).

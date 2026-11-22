@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { listModels } from "@/lib/models/resolve";
+import { modelById } from "@/lib/models/catalog";
 import { comfyQuote } from "@/lib/engines/comfy-quote";
 import { ASPECTS } from "@/lib/shot";
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid request" }, { status: 400 });
   const { id, settings } = parsed.data;
   if (!id.startsWith("comfy:")) return Response.json({ cost: null });
-  const builtin = (await listModels()).find((m) => m.id === id);
-  const cost = await comfyQuote(id.slice("comfy:".length), builtin?.family ?? "comfy-custom", { ...settings, aspect: settings.aspect as (typeof ASPECTS)[number]["id"] });
+  // Only the catalog's family is needed: the live model list reads every machine.
+  const cost = await comfyQuote(id.slice("comfy:".length), modelById(id)?.family ?? "comfy-custom", { ...settings, aspect: settings.aspect as (typeof ASPECTS)[number]["id"] });
   return Response.json({ cost }, { headers: { "Cache-Control": "no-store" } });
 }

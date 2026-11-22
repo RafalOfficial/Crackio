@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Eraser, Film, ImagePlus, LoaderCircle, MousePointerClick, Palette, Pause, Play, Type, Upload, UserRound, X } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
+import { ChevronDown, Eraser, Film, ImagePlus, LoaderCircle, MousePointerClick, Palette, Pause, Play, Type, Upload, UserRound, X } from "lucide-react";
 import { ToolTile } from "@/components/ui/ToolTile";
 import { Button } from "@/components/ui/Button";
-import { Segmented, Switch } from "@/components/ui/Panel";
+import { Panel, Segmented, Switch } from "@/components/ui/Panel";
 import { Slider } from "@/components/ui/Slider";
 import { GenerationCard } from "@/components/generations/GenerationCard";
 import { GeneratingField } from "@/components/ui/GeneratingField";
@@ -17,6 +18,7 @@ import { aspectById } from "@/lib/shot";
 import { DEMO } from "@/lib/demo/config";
 import { DEMO_CREDITS_HINT, demoSwapCredits } from "@/lib/demo/estimate";
 import { cn } from "@/lib/cn";
+import { posterUrl, previewUrl } from "@/lib/media-url";
 
 const tool = toolBySlug("recast")!;
 /** How much of a clip one swap takes (LTX-2.5 Ripple carries an edit up to 10 s each way from the frame it's drawn on). */
@@ -101,14 +103,30 @@ async function outlineAt(frame: string, x: number, y: number, color: string, nam
   return data as { overlay: string; box: [number, number, number, number]; name?: string };
 }
 
-const lengthOf = (url: string) =>
+/** A clip's length from its header; the probe lets go of the file (and of a blob: address) once it knows. */
+const lengthOf = (url: string, done?: () => void) =>
   new Promise<number>((resolve) => {
     const v = document.createElement("video");
+    const end = (seconds: number) => {
+      v.onloadedmetadata = v.onerror = null;
+      v.removeAttribute("src");
+      v.load();
+      done?.();
+      resolve(seconds);
+    };
     v.preload = "metadata";
-    v.onloadedmetadata = () => resolve(v.duration || 0);
-    v.onerror = () => resolve(0);
+    v.onloadedmetadata = () => end(v.duration || 0);
+    v.onerror = () => end(0);
     v.src = url;
   });
+
+/** The same for a file being picked, read on this computer before it uploads. */
+function durationOf(file: File) {
+  const url = URL.createObjectURL(file);
+  return lengthOf(url, () => URL.revokeObjectURL(url));
+}
+
+const CHECKS: Record<Checker, string> = { auto: "Auto", local: "Your GPU", cloud: "Gemini" };
 
 const looksLikePerson = (p: Pick) => PERSON.test(p.name ?? "");
 
@@ -128,7 +146,8 @@ function changeOf(p: Pick) {
 
 /** Swap: drop any clip, click what changes (people, things, cars), pick what each becomes; motion, camera and sound stay. */
 export function SwapStudio() {
-  const { items } = useGenerations();
+  // Only the swaps: other takes (and every progress tick of another tool's job) don't redraw the page.
+  const takes = useGenerations(useShallow((s) => s.items.filter((g) => g.tool === "recast")));
   const [clip, setClip] = useState<Clip | null>(null);
   const [start, setStart] = useState(0);
   const [t, setT] = useState(0);
@@ -152,8 +171,18 @@ export function SwapStudio() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+  // Picks that moving "Use from" left outside the part used, kept a while so the move can be undone.
+  const [dropped, setDropped] = useState<{ picks: Pick[]; start: number; t: number } | null>(null);
+  // One outline call at a time: SAM 3.1 queues on the GPU anyway, and overlapping calls crossed the names.
+  const outlines = useRef<Promise<unknown>>(Promise.resolve());
+  // The picks as of this instant: a click that lands before the page has drawn the one before it still sees that one
+  // (its colour is taken, it counts toward the limit, a click beside it opens it).
+  const picksNow = useRef<Pick[]>([]);
+  useEffect(() => {
+    picksNow.current = picks;
+  }, [picks]);
   const results = useRef<HTMLDivElement>(null);
-  const takes = items.filter((g) => g.tool === "recast");
   const shown = takes.find((g) => g.id === viewing) ?? takes[0] ?? null;
   const used = clip ? Math.min(SPAN, Math.max(0.5, clip.duration - start)) : 0;
 
@@ -188,7 +217,8 @@ export function SwapStudio() {
     };
   }, [clip, t]);
 
-  function load(next: Clip) {
+  /** A new clip (or none): the last one's picks, background and frame go with it. */
+  function load(next: Clip | null) {
     setClip(next);
     setStart(0);
     setT(0);
@@ -196,27 +226,44 @@ export function SwapStudio() {
     setPicks([]);
     setActive(null);
     setBackground(null);
+    setDropped(null);
     setError(null);
   }
+
+  /** Runs `job` once the outline calls asked for before it are done. */
+  const queued = <T,>(job: () => Promise<T>): Promise<T> => {
+    const run = outlines.current.then(job);
+    outlines.current = run.catch(() => {});
+    return run;
+  };
 
   const patch = (id: string, p: Partial<Pick>) => setPicks((ps) => ps.map((x) => (x.id === id ? { ...x, ...p } : x)));
 
   async function click(x: number, y: number) {
     if (!frame) return;
-    // A click on something already picked on this frame opens it.
-    const hit = picks.find((p) => Math.abs(p.t - t) < 0.05 && p.box && x * 1000 >= p.box[0] && x * 1000 <= p.box[2] && y * 1000 >= p.box[1] && y * 1000 <= p.box[3]);
+    // A click on something already picked on this frame opens it; so does one right beside a pick that is still
+    // being outlined (it has no box yet), so a quick second click never makes a second pick of the same thing.
+    const now = picksNow.current;
+    const here = now.filter((p) => Math.abs(p.t - t) < 0.05);
+    const hit =
+      here.find((p) => p.box && x * 1000 >= p.box[0] && x * 1000 <= p.box[2] && y * 1000 >= p.box[1] && y * 1000 <= p.box[3]) ??
+      here.find((p) => !p.box && p.status === "outlining" && Math.hypot(p.x - x, p.y - y) < 0.03);
     if (hit) return setActive(hit.id);
-    if (picks.length >= MAX) return setError(`Up to ${MAX} things at a time: remove one first.`);
+    if (now.length >= MAX) return setError(`Up to ${MAX} things at a time: remove one first.`);
     setError(null);
-    const color = COLORS.find((c) => !picks.some((p) => p.color === c)) ?? COLORS[0];
+    const color = COLORS.find((c) => !now.some((p) => p.color === c)) ?? COLORS[0];
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-    setPicks((ps) => [...ps, { id, color, t, x, y, status: "outlining", to: "cast", words: "" }]);
+    setDropped(null);
+    const pick: Pick = { id, color, t, x, y, status: "outlining", to: "cast", words: "" };
+    picksNow.current = [...now, pick];
+    setPicks((ps) => [...ps, pick]);
     setActive(id);
     try {
-      const got = await outlineAt(frame.url, x, y, color, false);
+      const got = await queued(() => outlineAt(frame.url, x, y, color, false));
       patch(id, { overlay: got.overlay, box: got.box, status: "ready" });
-      // Named after it shows (the same outline again: ComfyUI keeps it), so the outline doesn't wait for words.
-      const named = await outlineAt(frame.url, x, y, color, true).catch(() => null);
+      // Named after it shows (the same outline again: ComfyUI keeps it), so the outline doesn't wait for words; queued
+      // behind any outline asked for meanwhile, so another pick's outline isn't held up by this one's name.
+      const named = await queued(() => outlineAt(frame.url, x, y, color, true)).catch(() => null);
       const name = named?.name?.trim();
       setPicks((ps) =>
         ps.map((p) => {
@@ -239,6 +286,26 @@ export function SwapStudio() {
   const ready = Boolean(clip) && anything && !waiting && !incomplete && (!needsConsent || consent) && !busy && (background === null || Boolean(background.trim()));
   // About what it takes on an RTX 5090: SAM 3.1, the redraws, then LTX-2.5 (Bulin 47, 15 s: 322 s of GPU).
   const minutes = Math.max(1, Math.round((30 + used * 21.5 * (resolution === "540p" ? 0.6 : 1) * (sharp ? 1.65 : 1) * (fast ? 0.55 : 1) + picks.length * 30) / 60));
+  const note = checkers ? checkerNote(checker, checkers) : null;
+  const settingsLine = [`Checks ${CHECKS[checker]}`, `${strictness.charAt(0).toUpperCase()}${strictness.slice(1)}`, fast && "Fast draft", lock && "Everyone else exact"].filter(Boolean).join(" · ");
+  // The button says what's still missing, as Templates' does.
+  const label = busy
+    ? "Starting"
+    : !clip
+      ? "Swap"
+      : waiting
+        ? "Outlining…"
+        : !anything
+          ? "Click what should change"
+          : incomplete
+            ? "Pick what each one becomes"
+            : background !== null && !background.trim()
+              ? "Describe the new background"
+              : needsConsent && !consent
+                ? "Tick the box above first"
+                : picks.length > 1
+                  ? `Swap ${picks.length} things`
+                  : "Swap";
 
   async function swap() {
     if (!clip || !ready) return;
@@ -265,8 +332,8 @@ export function SwapStudio() {
       });
       const data = (await res.json()) as { item?: Generation; error?: string; hint?: string };
       if (!res.ok || !data.item) throw new Error([data.error ?? "Couldn't start the swap.", data.hint].filter(Boolean).join(" "));
-      const store = useGenerationsStore.getState();
-      useGenerationsStore.setState({ items: [data.item, ...store.items] });
+      // In the list at once, and followed until it's done, so its progress shows while it renders.
+      useGenerationsStore.getState().track(data.item);
       setViewing(data.item.id);
       requestAnimationFrame(() => results.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (err) {
@@ -282,9 +349,7 @@ export function SwapStudio() {
         <ToolTile icon={tool.icon} hue={tool.hue} size={44} />
         <div>
           <h1 className="font-display text-[34px] sm:text-[40px]">{tool.name}</h1>
-          <p className="mt-1 max-w-[72ch] text-[14.5px] leading-relaxed text-fog">
-            Drop any clip and click what should change: a person, a product, a car. Each one becomes someone from your Cast, a picture, a colour or anything you describe, and the motion, camera and sound stay exactly as they were. Runs on your own GPU with LTX-2.5.
-          </p>
+          <p className="mt-1 max-w-[72ch] text-[14.5px] leading-relaxed text-fog">Click what should change in any clip: a person, a product, a car. Motion, camera and sound stay. Runs on your GPU with LTX-2.5.</p>
         </div>
       </header>
 
@@ -303,15 +368,25 @@ export function SwapStudio() {
               onClick={click}
               onTime={setT}
               onStart={(v) => {
+                // Clicks outside the part that's used would point at the wrong frame: they go, with an Undo.
+                const out = picks.some((p) => p.t < v || p.t > v + SPAN);
+                if (out) setDropped((d) => d ?? { picks, start, t });
                 setStart(v);
                 setT(v);
-                // Clicks outside the part that's used would point at the wrong frame.
-                setPicks((ps) => ps.filter((p) => p.t >= v && p.t <= v + SPAN));
+                if (out) setPicks((ps) => ps.filter((p) => p.t >= v && p.t <= v + SPAN));
               }}
-              onClear={() => setClip(null)}
+              dropped={dropped ? dropped.picks.length - picks.length : 0}
+              onUndo={() => {
+                if (!dropped) return;
+                setPicks(dropped.picks);
+                setStart(dropped.start);
+                setT(dropped.t);
+                setDropped(null);
+              }}
+              onClear={() => load(null)}
             />
           ) : (
-            <Pickup onClip={load} onError={setError} takes={items} />
+            <Pickup onClip={load} onError={setError} error={error} />
           )}
           <div ref={results} className="scroll-mt-6 space-y-8">
             {shown ? <Compare gen={shown} /> : null}
@@ -339,139 +414,158 @@ export function SwapStudio() {
           </div>
         </main>
 
-        <aside className="space-y-6 lg:sticky lg:top-6">
-          <Section title="What changes" hint={clip ? `${picks.length}/${MAX} · click in the frame` : undefined}>
-            {picks.length ? (
-              <div className="space-y-2.5">
-                {picks.map((p, i) => (
-                  <PickCard
-                    key={p.id}
-                    n={i + 1}
-                    pick={p}
-                    open={active === p.id}
-                    onOpen={() => setActive(active === p.id ? null : p.id)}
-                    onChange={(next) => patch(p.id, next)}
-                    onRemove={() => setPicks((ps) => ps.filter((x) => x.id !== p.id))}
+        <aside className="lg:sticky lg:top-6">
+          {/* The panel stays on screen beside the frame, its settings scrolling inside it and Swap always in view (four
+              open picks pushed the button below the fold on a MacBook), as Templates' panel works. */}
+          <Panel className="flex flex-col lg:max-h-[calc(100dvh-3rem)] lg:overflow-hidden">
+            <div className="space-y-6 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+              <Section title="What changes" hint={clip ? `${picks.length}/${MAX} · click in the frame` : undefined}>
+                {picks.length ? (
+                  <div className="space-y-2.5">
+                    {picks.map((p, i) => (
+                      <PickCard
+                        key={p.id}
+                        n={i + 1}
+                        pick={p}
+                        open={active === p.id}
+                        onOpen={() => setActive(active === p.id ? null : p.id)}
+                        onChange={(next) => patch(p.id, next)}
+                        onRemove={() => {
+                          setDropped(null);
+                          setPicks((ps) => ps.filter((x) => x.id !== p.id));
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[16px] bg-white/[0.03] p-4 text-[13px] leading-relaxed text-fog shadow-[inset_0_0_0_1px_var(--color-line)]">
+                    <p className="flex items-center gap-2 font-semibold text-paper">
+                      <MousePointerClick size={15} className="text-spike" /> {clip ? "Click anything in the frame" : "Start with a clip"}
+                    </p>
+                    <p className="mt-1.5">
+                      {clip ? "SAM 3.1 outlines what you click through the whole clip. Up to four, each in its own colour." : "Drop your own clip or try one of Crackio's. Then click who or what should change."}
+                    </p>
+                  </div>
+                )}
+              </Section>
+
+              <Section title="Background" hint="Optional">
+                <Segmented
+                  value={background === null ? "keep" : "new"}
+                  onChange={(v) => setBackground(v === "keep" ? null : (background ?? ""))}
+                  options={[
+                    { id: "keep", label: "Keep it" },
+                    { id: "new", label: "New background" },
+                  ]}
+                />
+                {background !== null ? (
+                  <input
+                    value={background}
+                    onChange={(e) => setBackground(e.target.value)}
+                    placeholder="a neon-lit Tokyo street at night"
+                    className="field-focus mt-2 block h-10 w-full rounded-[12px] bg-white/[0.04] px-3 text-[13px] text-paper outline-none placeholder:text-haze"
                   />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-[16px] bg-white/[0.03] p-4 text-[13px] leading-relaxed text-fog shadow-[inset_0_0_0_1px_var(--color-line)]">
-                <p className="flex items-center gap-2 font-semibold text-paper">
-                  <MousePointerClick size={15} className="text-spike" /> {clip ? "Click anything in the frame" : "Start with a clip"}
-                </p>
-                <p className="mt-1.5">
-                  {clip
-                    ? "SAM 3.1 outlines exactly what you clicked and follows it through the clip. Click up to four people or things; each gets its own colour here."
-                    : "Drop your own clip, or try one of Crackio's below. Then click who or what should change."}
-                </p>
-              </div>
-            )}
-          </Section>
+                ) : null}
+              </Section>
 
-          <Section title="Background" hint="Optional">
-            <Segmented
-              value={background === null ? "keep" : "new"}
-              onChange={(v) => setBackground(v === "keep" ? null : (background ?? ""))}
-              options={[
-                { id: "keep", label: "Keep it" },
-                { id: "new", label: "New background" },
-              ]}
-            />
-            {background !== null ? (
-              <input
-                value={background}
-                onChange={(e) => setBackground(e.target.value)}
-                placeholder="a neon-lit Tokyo street at night"
-                className="field-focus mt-2 block h-10 w-full rounded-[12px] bg-white/[0.04] px-3 text-[13px] text-paper outline-none placeholder:text-haze"
-              />
-            ) : null}
-          </Section>
+              <Section title="Quality">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Segmented
+                    value={resolution}
+                    onChange={setResolution}
+                    options={[
+                      { id: "540p", label: "540p" },
+                      { id: "720p", label: "720p" },
+                    ]}
+                  />
+                  <Switch checked={sharp} onChange={setSharp} label="Sharp 1080p" title="Each pass finished by LTX's ×2 upscaler: crisper, about twice as long, and fast hands can smear" />
+                </div>
+                {/* What most swaps never touch, folded under one line that still says how it's set. */}
+                <button
+                  type="button"
+                  onClick={() => setMore(!more)}
+                  aria-expanded={more}
+                  className="mt-3 flex w-full items-center justify-between gap-3 text-left text-[12.5px] text-fog hover:text-paper"
+                >
+                  <span className="min-w-0 truncate">More · {settingsLine}</span>
+                  <ChevronDown size={14} className={cn("shrink-0 transition-transform duration-200", more && "rotate-180")} />
+                </button>
+                {more ? (
+                  <div className="mt-2.5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <Switch checked={fast} onChange={setFast} label="Fast draft" title="Fewer steps and step reuse (EasyCache): about half the time, a little softer. Good for a first look." />
+                      <Switch
+                        checked={lock}
+                        onChange={setLock}
+                        label="Keep everyone else exact"
+                        title="LTX-2.5 always makes the whole frame, so the new one is never cut. On: everyone else is put back from your clip, so their clothes stay exactly as filmed (their edges can show a faint line)."
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <span className="text-[12.5px] text-fog" title="Every drawing is checked before it's used: is the character fully swapped in, is the pose kept. Your GPU: Crackio's own judge, free. Gemini: Gemini 3.5 Flash on your Comfy API key. Auto: your GPU where the judge is installed, else Gemini.">
+                        Checks
+                      </span>
+                      <Segmented
+                        value={checker}
+                        onChange={(v) => {
+                          setChecker(v);
+                          void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ swapChecker: v }) }).catch(() => {});
+                        }}
+                        options={[
+                          { id: "auto", label: "Auto" },
+                          { id: "local", label: "Your GPU" },
+                          { id: "cloud", label: "Gemini" },
+                        ]}
+                      />
+                    </div>
+                    {note ? <p className={cn("-mt-1.5 text-right text-[12px] leading-snug", note.ok ? "text-haze" : "text-[var(--color-spike)]")}>{note.text}</p> : null}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <span className="text-[12.5px] text-fog" title="How sure the checker must be before a drawing is kept. Lenient: an acceptable swap with small flaws is kept, so fewer redraws. Strict: anything doubtful is drawn again, slower and safer.">
+                        Strictness
+                      </span>
+                      <Segmented
+                        value={strictness}
+                        onChange={(v) => {
+                          setStrictness(v);
+                          void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ swapStrictness: v }) }).catch(() => {});
+                        }}
+                        options={[
+                          { id: "lenient", label: "Lenient" },
+                          { id: "normal", label: "Normal" },
+                          { id: "strict", label: "Strict" },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                ) : note && !note.ok ? (
+                  <p className="mt-1.5 text-[12px] leading-snug text-[var(--color-spike)]">{note.text}</p>
+                ) : null}
+              </Section>
+            </div>
 
-          <Section title="Quality">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Segmented
-                value={resolution}
-                onChange={setResolution}
-                options={[
-                  { id: "540p", label: "540p" },
-                  { id: "720p", label: "720p" },
-                ]}
-              />
-              <Switch checked={sharp} onChange={setSharp} label="Sharp 1080p" title="Each pass finished by LTX's ×2 upscaler: crisper, about twice as long, and fast hands can smear" />
+            <div className="space-y-2 border-t border-line p-4">
+              {/* Beside the button it unlocks. */}
+              {needsConsent ? (
+                <label className="flex cursor-pointer items-start gap-2.5 text-[12.5px] leading-snug text-fog">
+                  <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-[3px] size-4 shrink-0 accent-[var(--color-spike)]" />
+                  Everyone in these pictures agreed to this and is an adult.
+                </label>
+              ) : null}
+              <Button variant="primary" size="lg" className="w-full" disabled={!ready} onClick={swap}>
+                {busy ? <LoaderCircle size={16} className="animate-spin" /> : null}
+                {label}
+              </Button>
+              <p className="text-center text-[12px] leading-snug text-haze" title={DEMO ? DEMO_CREDITS_HINT : undefined}>
+                {error && clip ? (
+                  <span className="text-tally">{error}</span>
+                ) : !clip ? (
+                  DEMO ? `About ${demoSwapCredits()} credits · LTX-2.5 + Ripple` : "Free on your GPU · LTX-2.5 + Ripple"
+                ) : (
+                  `${used.toFixed(1)} s of clip · about ${minutes} min on an RTX 5090 · ${DEMO ? `about ${demoSwapCredits()} credits` : "free on your GPU"}`
+                )}
+              </p>
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <Switch checked={fast} onChange={setFast} label="Fast draft" title="Fewer steps and step reuse (EasyCache): about half the time, a little softer. Good for a first look." />
-              <Switch
-                checked={lock}
-                onChange={setLock}
-                label="Keep everyone else exact"
-                title="LTX-2.5 always makes the whole frame, so the new one is never cut. On: everyone else is put back from your clip, so their clothes stay exactly as filmed (their edges can show a faint line)."
-              />
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <span className="text-[12.5px] text-fog" title="Every drawing is checked before it's used: is the character fully swapped in, is the pose kept. Your GPU: Crackio's own judge, free. Gemini: Gemini 3.5 Flash on your Comfy API key. Auto: your GPU where the judge is installed, else Gemini.">
-                Checks
-              </span>
-              <Segmented
-                value={checker}
-                onChange={(v) => {
-                  setChecker(v);
-                  void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ swapChecker: v }) }).catch(() => {});
-                }}
-                options={[
-                  { id: "auto", label: "Auto" },
-                  { id: "local", label: "Your GPU" },
-                  { id: "cloud", label: "Gemini" },
-                ]}
-              />
-            </div>
-            {checkers ? <p className={cn("mt-1.5 text-right text-[12px] leading-snug", checkerNote(checker, checkers).ok ? "text-haze" : "text-[var(--color-spike)]")}>{checkerNote(checker, checkers).text}</p> : null}
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <span className="text-[12.5px] text-fog" title="How sure the checker must be before a drawing is kept. Lenient: an acceptable swap with small flaws is kept, so fewer redraws. Strict: anything doubtful is drawn again, slower and safer.">
-                Strictness
-              </span>
-              <Segmented
-                value={strictness}
-                onChange={(v) => {
-                  setStrictness(v);
-                  void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ swapStrictness: v }) }).catch(() => {});
-                }}
-                options={[
-                  { id: "lenient", label: "Lenient" },
-                  { id: "normal", label: "Normal" },
-                  { id: "strict", label: "Strict" },
-                ]}
-              />
-            </div>
-          </Section>
-
-          {needsConsent ? (
-            <label className="flex items-start gap-2.5 text-[12.5px] leading-snug text-fog">
-              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-[3px] size-4 shrink-0 accent-[var(--color-spike)]" />
-              Everyone in these pictures agreed to this and is an adult.
-            </label>
-          ) : null}
-
-          <div>
-            <Button variant="primary" size="lg" className="w-full" disabled={!ready} onClick={swap}>
-              {busy ? <LoaderCircle size={16} className="animate-spin" /> : null}
-              {busy ? "Starting" : picks.length > 1 ? `Swap ${picks.length} things` : "Swap"}
-            </Button>
-            <p className="mt-2 text-center text-[12px] leading-snug text-haze" title={DEMO ? DEMO_CREDITS_HINT : undefined}>
-              {error ? (
-                <span className="text-tally">{error}</span>
-              ) : !clip ? (
-                DEMO ? `About ${demoSwapCredits()} credits · LTX-2.5 + Ripple` : "Free on your GPU · LTX-2.5 + Ripple"
-              ) : waiting ? (
-                "Outlining…"
-              ) : incomplete ? (
-                "Pick what each one becomes"
-              ) : (
-                `${used.toFixed(1)} s of clip · about ${minutes} min on an RTX 5090 · ${DEMO ? `about ${demoSwapCredits()} credits` : "free on your GPU"}`
-              )}
-            </p>
-          </div>
+          </Panel>
         </aside>
       </div>
     </div>
@@ -480,11 +574,12 @@ export function SwapStudio() {
 
 /* ------------------------------------------------------------------ clip */
 
-function Pickup({ onClip, onError, takes }: { onClip: (c: Clip) => void; onError: (e: string | null) => void; takes: Generation[] }) {
+function Pickup({ onClip, onError, error }: { onClip: (c: Clip) => void; onError: (e: string | null) => void; error: string | null }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
-  const recent = takes.filter((g) => g.status === "done" && g.params?.kind === "video" && g.outputs[0]?.url?.endsWith(".mp4")).slice(0, 8);
+  // Your latest clips, followed on their own: a job running elsewhere doesn't redraw the presets.
+  const recent = useGenerations(useShallow((s) => s.items.filter((g) => g.status === "done" && g.params?.kind === "video" && g.outputs[0]?.url?.endsWith(".mp4")).slice(0, 8)));
 
   async function pick(file?: File) {
     if (!file) return;
@@ -492,7 +587,7 @@ function Pickup({ onClip, onError, takes }: { onClip: (c: Clip) => void; onError
     setBusy(true);
     onError(null);
     try {
-      const duration = await lengthOf(URL.createObjectURL(file));
+      const duration = await durationOf(file);
       const up = await upload(file);
       onClip({ url: up.url, name: file.name, duration });
     } catch (err) {
@@ -512,7 +607,8 @@ function Pickup({ onClip, onError, takes }: { onClip: (c: Clip) => void; onError
           e.preventDefault();
           setOver(true);
         }}
-        onDragLeave={() => setOver(false)}
+        // Crossing the button's own text isn't leaving it (the highlight used to flicker).
+        onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setOver(false)}
         onDrop={(e) => {
           e.preventDefault();
           setOver(false);
@@ -537,6 +633,12 @@ function Pickup({ onClip, onError, takes }: { onClip: (c: Clip) => void; onError
           e.target.value = "";
         }}
       />
+      {/* Right under the drop zone it's about. */}
+      {error ? (
+        <p role="alert" className="-mt-5 text-center text-[13px] text-tally">
+          {error}
+        </p>
+      ) : null}
 
       <section>
         <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -554,17 +656,30 @@ function Pickup({ onClip, onError, takes }: { onClip: (c: Clip) => void; onError
         <section>
           <h2 className="label mb-2">Or one of your clips</h2>
           <div className="scrollbar-none flex gap-2.5 overflow-x-auto pb-1">
-            {recent.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                onClick={async () => onClip({ url: g.outputs[0].url, name: g.prompt || "Your clip", duration: (await lengthOf(g.outputs[0].url)) || 5 })}
-                className="press group relative h-36 shrink-0 overflow-hidden rounded-[14px] bg-black shadow-[inset_0_0_0_1px_var(--color-line)]"
-                title={g.prompt}
-              >
-                <video src={g.outputs[0].url} muted playsInline preload="metadata" className="h-full w-auto object-cover opacity-90 transition-opacity group-hover:opacity-100" />
-              </button>
-            ))}
+            {recent.map((g) => {
+              const o = g.outputs[0];
+              // 640: the width the server makes ahead for every clip (a smaller one isn't there on first look).
+              const still = posterUrl(o.url, 640);
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={async () => onClip({ url: o.url, name: g.prompt || "Your clip", duration: o.duration || (await lengthOf(o.url)) || 5 })}
+                  className="press group relative h-36 shrink-0 overflow-hidden rounded-[14px] bg-black shadow-[inset_0_0_0_1px_var(--color-line)]"
+                  style={{ aspectRatio: o.width && o.height ? `${o.width} / ${o.height}` : "9 / 16" }}
+                  title={g.prompt}
+                  aria-label={`Use ${g.prompt || "this clip"}`}
+                >
+                  {/* Its opening frame as a light still, not the whole clip. */}
+                  {still ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={still} alt="" loading="lazy" decoding="async" className="size-full object-cover opacity-90 transition-opacity group-hover:opacity-100" />
+                  ) : (
+                    <video src={o.url} muted playsInline preload="metadata" className="size-full object-cover opacity-90 transition-opacity group-hover:opacity-100" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -575,17 +690,27 @@ function Pickup({ onClip, onError, takes }: { onClip: (c: Clip) => void; onError
 /** A preset: its clip's first frame; on hover, a swap Crackio made on it (or the clip itself). */
 function PresetCard({ preset, onPick }: { preset: SwapPreset; onPick: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
+  const dwell = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hover, setHover] = useState(false);
+  useEffect(
+    () => () => {
+      if (dwell.current) clearTimeout(dwell.current);
+    },
+    [],
+  );
   return (
     <button
       type="button"
       onClick={onPick}
       onPointerEnter={() => {
         setHover(true);
-        void video.current?.play().catch(() => {});
+        // A moment's rest first: sweeping the pointer across the grid doesn't start eight downloads.
+        dwell.current = setTimeout(() => void video.current?.play().catch(() => {}), 140);
       }}
       onPointerLeave={() => {
         setHover(false);
+        if (dwell.current) clearTimeout(dwell.current);
+        dwell.current = null;
         const v = video.current;
         if (!v) return;
         v.pause();
@@ -595,9 +720,9 @@ function PresetCard({ preset, onPick }: { preset: SwapPreset; onPick: () => void
     >
       <div className="relative aspect-[9/14] overflow-hidden bg-black">
         <video ref={video} src={preset.example?.clip ?? preset.clip} poster={preset.poster} muted loop playsInline preload="none" className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
-        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-sm">{preset.seconds} s</span>
+        <span className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-0.5 text-[10.5px] font-semibold text-white">{preset.seconds} s</span>
         {preset.example ? (
-          <span className={cn("absolute inset-x-2 bottom-2 truncate rounded-full bg-black/65 px-2.5 py-1 text-center text-[11px] font-semibold text-white backdrop-blur-sm transition-opacity", hover ? "opacity-100" : "opacity-0")}>
+          <span className={cn("absolute inset-x-2 bottom-2 truncate rounded-full bg-black/65 px-2.5 py-1 text-center text-[11px] font-semibold text-white transition-opacity", hover ? "opacity-100" : "opacity-0")}>
             Swapped: {preset.example.caption}
           </span>
         ) : null}
@@ -622,6 +747,8 @@ function Stage({
   onClick,
   onTime,
   onStart,
+  dropped,
+  onUndo,
   onClear,
 }: {
   clip: Clip;
@@ -635,6 +762,9 @@ function Stage({
   onClick: (x: number, y: number) => void;
   onTime: (t: number) => void;
   onStart: (v: number) => void;
+  /** How many picks the last move of "Use from" left out, for its Undo. */
+  dropped: number;
+  onUndo: () => void;
   onClear: () => void;
 }) {
   const img = useRef<HTMLImageElement>(null);
@@ -662,6 +792,8 @@ function Stage({
               alt="The frame you pick on"
               draggable={false}
               onClick={(e) => {
+                // The second click of a double-click isn't another pick.
+                if (e.detail > 1) return;
                 const r = img.current?.getBoundingClientRect();
                 if (!r) return;
                 onClick(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)));
@@ -705,6 +837,14 @@ function Stage({
           format={(v) => `${v.toFixed(1)} s`}
         />
         {long ? <Slider label="Use from" value={start} min={0} max={Math.max(0.1, clip.duration - SPAN)} step={0.1} onChange={onStart} format={(v) => `${v.toFixed(1)}–${Math.min(clip.duration, v + SPAN).toFixed(1)} s`} /> : null}
+        {dropped > 0 ? (
+          <p role="status" className="flex items-center justify-between gap-3 rounded-[12px] bg-white/[0.04] px-3 py-2 text-[12.5px] text-fog">
+            <span>{dropped === 1 ? "A pick was outside the part used, so it's gone." : `${dropped} picks were outside the part used, so they're gone.`}</span>
+            <button type="button" onClick={onUndo} className="shrink-0 font-semibold text-paper hover:underline">
+              Undo
+            </button>
+          </p>
+        ) : null}
       </div>
     </section>
   );
@@ -837,7 +977,7 @@ function CastChoice({ pick, onChange }: { pick: Pick; onChange: (p: Partial<Pick
           style={pick.cast === c.id ? ({ "--tw-ring-color": pick.color } as CSSProperties) : undefined}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={(c.portrait ?? c.photos[0])!} alt="" className="aspect-square w-full object-cover" />
+          <img src={previewUrl((c.portrait ?? c.photos[0])!, 640)} alt="" loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
           <span className="block truncate px-1.5 py-1 text-[10.5px] font-semibold text-fog group-hover:text-paper">{c.name}</span>
         </button>
       ))}
@@ -881,7 +1021,7 @@ function PictureChoice({ pick, onChange }: { pick: Pick; onChange: (p: Partial<P
             <LoaderCircle size={16} className="animate-spin" />
           ) : pick.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={pick.image} alt="" className="size-full object-cover" />
+            <img src={previewUrl(pick.image, 640)} alt="" className="size-full object-cover" />
           ) : (
             <ImagePlus size={17} />
           )}

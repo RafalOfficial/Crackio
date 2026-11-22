@@ -2,47 +2,58 @@ import "server-only";
 import type { ConnectionStatus } from "./types";
 import { getSettings } from "@/lib/server/settings";
 import { verifyKey } from "./verify";
-import { comfyTargets } from "@/lib/server/comfy-targets";
+import { comfyTargets, type ComfyTarget } from "@/lib/server/comfy-targets";
+import { machineLook } from "@/lib/server/machine-probe";
+import { epoch } from "@/lib/server/epoch";
 import { demoFull, demoOn } from "@/lib/demo/config";
 
 export function comfyLocalUrl() {
   return (process.env.COMFYUI_URL || "http://127.0.0.1:8188").replace(/\/$/, "");
 }
 
-const localGlobal = globalThis as unknown as { __crackioComfyLocal?: { at: number; status: ConnectionStatus } };
+const localGlobal = globalThis as unknown as {
+  __crackioComfyLocal?: { at: number; key: string; status: ConnectionStatus };
+  __crackioComfyLocalPending?: { key: string; value: Promise<ConnectionStatus> };
+};
 
-/** One ComfyUI's answer: its version and GPU, or null. */
-async function askComfy(url: string, token: string | undefined) {
-  try {
-    const remote = !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(url);
-    const res = await fetch(`${url}/system_stats`, {
-      signal: AbortSignal.timeout(remote ? 4000 : 700),
-      cache: "no-store",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (!res.ok) return null;
-    const stats = (await res.json()) as { system?: { comfyui_version?: string }; devices?: { name?: string }[] };
-    let gpu = stats.devices?.[0]?.name?.replace(/^cuda:\d+\s*/, "").replace(/\s*:\s*\w+$/, "") ?? "GPU";
-    // PyTorch calls every Mac's GPU "mps": Crackio's bridge knows the chip ("Apple M2").
-    if (/^(mps|xpu|cpu)$/i.test(gpu)) {
-      const info = await fetch(`${url}/crackio/info`, { signal: AbortSignal.timeout(remote ? 4000 : 1500), cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : undefined })
-        .then((r) => (r.ok ? (r.json() as Promise<{ gpus?: { name?: string }[] }>) : null))
-        .catch(() => null);
-      gpu = info?.gpus?.[0]?.name || gpu;
-    }
-    return { gpu, version: stats.system?.comfyui_version ? ` v${stats.system.comfyui_version}` : "" };
-  } catch {
-    return null;
-  }
+/** One ComfyUI's answer, from the shared look at it (lib/server/machine-probe): its version and GPU, or null. */
+async function askComfy(t: ComfyTarget) {
+  const { stats, bridge } = await machineLook(t);
+  if (!stats) return null;
+  let gpu = stats.devices?.[0]?.name?.replace(/^cuda:\d+\s*/, "").replace(/\s*:\s*\w+$/, "") ?? "GPU";
+  // PyTorch calls every Mac's GPU "mps": Crackio's bridge knows the chip ("Apple M2").
+  if (/^(mps|xpu|cpu)$/i.test(gpu)) gpu = bridge?.gpus?.[0]?.name || gpu;
+  return { gpu, version: stats.system?.comfyui_version ? ` v${stats.system.comfyui_version}` : "" };
 }
 
 /** Connected when any ComfyUI Crackio knows answers (COMFYUI_URL's, the one it installed, machines added on Local). */
 async function detectComfyLocal(): Promise<ConnectionStatus> {
   const targets = await comfyTargets();
-  const url = targets[0].url;
-  // Every model list asks; a rented box is a few hundred ms away, so the answer is kept briefly.
+  // Every model list asks: the answer is kept while the machines are the same ones and none came online or went away
+  // (the epoch). It used to be kept only while its text named the main address, which never matched when only another
+  // ComfyUI answered (this computer's own on 8189), so every list asked every machine again.
+  const key = `${targets.map((t) => `${t.id}=${t.url}`).join("|")}#${epoch()}`;
   const hit = localGlobal.__crackioComfyLocal;
-  if (hit && Date.now() - hit.at < (hit.status.state === "connected" ? 20_000 : 5_000) && hit.status.detail.includes(url)) return hit.status;
+  if (hit && hit.key === key && Date.now() - hit.at < (hit.status.state === "connected" ? 20_000 : 5_000)) return hit.status;
+  const pending = localGlobal.__crackioComfyLocalPending;
+  if (pending?.key === key) return pending.value;
+  const value = lookAtComfyLocal(targets, key);
+  localGlobal.__crackioComfyLocalPending = { key, value };
+  void value
+    .catch(() => undefined)
+    .finally(() => {
+      if (localGlobal.__crackioComfyLocalPending?.value === value) localGlobal.__crackioComfyLocalPending = undefined;
+    });
+  return value;
+}
+
+async function lookAtComfyLocal(all: ComfyTarget[], key: string): Promise<ConnectionStatus> {
+  const url = all[0].url;
+  // Billed machines (Comfy Cloud, RunPod Serverless) aren't your ComfyUI and have their own rows: one is asked only when
+  // it's the machine chosen under Run on, where every job goes. Then the open models on it are ready to pick, with no
+  // GPU of your own switched on (asking costs nothing: RunPod's health check and the worker's last file list).
+  const runOn = (await getSettings()).runOn;
+  const targets = all.filter((t) => !t.metered || t.id === runOn);
   const base = {
     id: "comfy-local",
     name: "ComfyUI (local)",
@@ -53,28 +64,32 @@ async function detectComfyLocal(): Promise<ConnectionStatus> {
   // All at once; once one has answered, the others get a moment more, not their full timeout (a stopped box takes 4 s).
   const got: (Awaited<ReturnType<typeof askComfy>> | undefined)[] = targets.map(() => undefined);
   await new Promise<void>((resolve) => {
+    if (!targets.length) return resolve();
     let done = 0;
     let grace: ReturnType<typeof setTimeout> | null = null;
     targets.forEach((t, i) =>
-      void askComfy(t.url, t.token).then((a) => {
+      void askComfy(t).then((a) => {
         got[i] = a;
         if (++done === targets.length) resolve();
         else if (a && !grace) grace = setTimeout(resolve, 700);
       }),
     );
   });
-  // Billed machines (Comfy Cloud, RunPod Serverless) aren't your ComfyUI: they have their own rows in Connections.
-  const up = targets.map((t, i) => ({ t, a: got[i] })).filter((x) => x.a && !x.t.metered);
+  const up = targets.map((t, i) => ({ t, a: got[i] })).filter((x) => x.a);
   const status: ConnectionStatus = up.length
     ? {
         ...base,
         state: "connected",
         detail: up
-          .map(({ t, a }) => `Running at ${t.url}${a!.version} on ${t.cloud ? `a rented ${a!.gpu.replace(/^NVIDIA (GeForce )?/i, "")} (${({ vast: "vast.ai", runpod: "RunPod" } as Record<string, string>)[t.cloud.provider] ?? "cloud"})` : a!.gpu}.`)
+          .map(({ t, a }) =>
+            t.metered
+              ? `Jobs run on ${t.label} (chosen under Run on), billed per job.`
+              : `Running at ${t.url}${a!.version} on ${t.cloud ? `a rented ${a!.gpu.replace(/^NVIDIA (GeForce )?/i, "")} (${({ vast: "vast.ai", runpod: "RunPod" } as Record<string, string>)[t.cloud.provider] ?? "cloud"})` : a!.gpu}.`,
+          )
           .join(" "),
       }
     : { ...base, state: "missing", detail: `Nothing is answering at ${url}.` };
-  localGlobal.__crackioComfyLocal = { at: Date.now(), status };
+  localGlobal.__crackioComfyLocal = { at: Date.now(), key, status };
   return status;
 }
 

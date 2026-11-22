@@ -21,7 +21,7 @@ export function GetStarted() {
       body: "Set this computer up for its graphics card, connect a rented GPU, or add a Comfy key for hosted models.",
       done: usable.length > 0,
       href: "/settings",
-      cta: "Open Connections",
+      cta: "Open Settings",
     },
     {
       title: "Make your first shot",

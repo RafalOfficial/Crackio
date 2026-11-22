@@ -34,6 +34,11 @@ Storage (storage.py): the model folders with their sizes and drives, unfinished 
 a folder chosen in Crackio's Settings → Storage that every download goes to (<it>/<model folder>, looked in first), and
 this machine's id (GET /crackio/info), which stays the same when a rented box reconnects at another address.
 
+LoRA training (train.py, 1.11): "Crackio Training Data" keeps a set of pictures as latents and text conditioning,
+"Crackio Train LoRA" trains a LoRA from them in segments that pick up where the last one stopped (checkpoints, a time
+budget, pause and resume), on the model ComfyUI's own loaders load; routes under /crackio/train follow it, stop it, list
+and read model files, and move a trained LoRA in or out.
+
 compat.py fills gaps in the Python ComfyUI runs on before any job does: os.memfd_create for Pythons built without it
 (conda's, as on vast.ai), which ComfyUI's memory manager needs for every Qwen-Image 2.1 job.
 
@@ -49,8 +54,10 @@ import hashlib
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -63,7 +70,7 @@ import folder_paths
 from aiohttp import web
 from server import PromptServer
 
-VERSION = "1.10.3"
+VERSION = "1.14.4"
 WORKERS = 16
 CHUNK = 64 * 1024 * 1024
 HOSTS = ("huggingface.co", "hf.co", "github.com", "objects.githubusercontent.com", "modelscope.cn", "civitai.com")
@@ -97,8 +104,20 @@ except Exception as e:  # and Lip Sync
     lipsync = None
     print(f"[crackio_bridge] Lip Sync node not loaded: {e}")
 
-NODE_CLASS_MAPPINGS = {**pool.NODE_CLASS_MAPPINGS, **small.NODE_CLASS_MAPPINGS, **mac.NODE_CLASS_MAPPINGS, **(lfm3.NODE_CLASS_MAPPINGS if lfm3 else {}), **(voice.NODE_CLASS_MAPPINGS if voice else {}), **(lipsync.NODE_CLASS_MAPPINGS if lipsync else {})}
-NODE_DISPLAY_NAME_MAPPINGS = {**pool.NODE_DISPLAY_NAME_MAPPINGS, **small.NODE_DISPLAY_NAME_MAPPINGS, **mac.NODE_DISPLAY_NAME_MAPPINGS, **(lfm3.NODE_DISPLAY_NAME_MAPPINGS if lfm3 else {}), **(voice.NODE_DISPLAY_NAME_MAPPINGS if voice else {}), **(lipsync.NODE_DISPLAY_NAME_MAPPINGS if lipsync else {})}
+try:
+    from . import video
+except Exception as e:  # the Director's video re-shoot (needs a ComfyUI with LTX and MoGe in core)
+    video = None
+    print(f"[crackio_bridge] Video re-shoot nodes not loaded: {e}")
+
+try:
+    from . import train
+except Exception as e:  # LoRA training (needs a ComfyUI recent enough to load a model for training)
+    train = None
+    print(f"[crackio_bridge] LoRA training not loaded: {e}")
+
+NODE_CLASS_MAPPINGS = {**pool.NODE_CLASS_MAPPINGS, **small.NODE_CLASS_MAPPINGS, **mac.NODE_CLASS_MAPPINGS, **(lfm3.NODE_CLASS_MAPPINGS if lfm3 else {}), **(voice.NODE_CLASS_MAPPINGS if voice else {}), **(lipsync.NODE_CLASS_MAPPINGS if lipsync else {}), **(video.NODE_CLASS_MAPPINGS if video else {}), **(train.NODE_CLASS_MAPPINGS if train else {})}
+NODE_DISPLAY_NAME_MAPPINGS = {**pool.NODE_DISPLAY_NAME_MAPPINGS, **small.NODE_DISPLAY_NAME_MAPPINGS, **mac.NODE_DISPLAY_NAME_MAPPINGS, **(lfm3.NODE_DISPLAY_NAME_MAPPINGS if lfm3 else {}), **(voice.NODE_DISPLAY_NAME_MAPPINGS if voice else {}), **(lipsync.NODE_DISPLAY_NAME_MAPPINGS if lipsync else {}), **(video.NODE_DISPLAY_NAME_MAPPINGS if video else {}), **(train.NODE_DISPLAY_NAME_MAPPINGS if train else {})}
 mac.start()
 
 # Custom nodes Crackio's recipes use, by the name Crackio asks for: where they come from, and a node that proves
@@ -116,6 +135,15 @@ KNOWN_NODES = {
         "proof": "FlashVSR_SM_Model",
         "packages": ["diffusers", "loguru", "imageio", "imageio-ffmpeg", "ftfy", "opencv-python-headless", "einops", "safetensors"],
         "kernels": ["operators/flashvsr_attn"],
+    },
+    # nomadoor's Panorama Stickers (MIT), the Crackio challenge winner's, at the commit Crackio's Director was built on:
+    # its Panorama Studio renders the photo's MoGe-3 world from the Director's Camera for a moved-camera shot. It imports
+    # only what ComfyUI has (torch, numpy, PIL, av, aiohttp), so nothing is installed beside it.
+    "ComfyUI-Panorama-Stickers": {
+        "repo": "https://github.com/nomadoor/ComfyUI-Panorama-Stickers",
+        "commit": "6db991a7ef077170ce51a2f32e29737678285183",
+        "proof": "PanoramaStudio",
+        "packages": [],
     },
 }
 
@@ -208,6 +236,49 @@ def _gpus():
     return out
 
 
+def _ram_total():
+    """The RAM this ComfyUI can use: the machine's, or its container's own limit where that's lower (a rented pod with
+    31 GB sits on a host with 125 GB, and is killed past its 31)."""
+    import psutil
+
+    total = psutil.virtual_memory().total
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open(path, encoding="utf-8") as f:
+                limit = int(f.read().strip())
+            if 0 < limit < total:
+                return limit
+        except Exception:  # noqa: BLE001  ("max", or no such file)
+            pass
+    return total
+
+
+def _save_relaunch():
+    """How this ComfyUI was started (its folder, command and environment), kept as a script in ~/.crackio on this
+    machine only. A rented box's image starts ComfyUI once: when it goes down mid-job (out of RAM, a GPU error), nothing
+    starts it again. Crackio runs this script over SSH to bring it back as it was. Not on Windows: there Crackio starts
+    its own ComfyUI."""
+    if os.name == "nt":
+        return
+    try:
+        args = list(sys.argv)
+        port = args[args.index("--port") + 1] if "--port" in args and args.index("--port") + 1 < len(args) else "8188"
+        folder = os.path.expanduser("~/.crackio")
+        os.makedirs(folder, exist_ok=True)
+        log = os.path.join(folder, f"comfyui-{port}.log")
+        lines = ["#!/bin/bash", "# Written by the Crackio bridge each time ComfyUI starts: starts it again the same way.", f"cd {shlex.quote(os.getcwd())} || exit 1"]
+        lines += [f"export {k}={shlex.quote(v)}" for k, v in os.environ.items() if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k)]
+        lines += [f"nohup {' '.join(shlex.quote(a) for a in [sys.executable] + args)} >> {shlex.quote(log)} 2>&1 &", "echo CRACKIO_RELAUNCHED $!"]
+        path = os.path.join(folder, f"relaunch-{port}.sh")
+        with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    except Exception as e:  # noqa: BLE001
+        print(f"[crackio] couldn't keep how ComfyUI was started: {e}")
+
+
+_save_relaunch()
+
+
 @PromptServer.instance.routes.get("/crackio/info")
 async def info(request):
     import psutil
@@ -228,7 +299,7 @@ async def info(request):
             "download_root": storage.root(),
             "os": {"system": platform.system(), "release": platform.release(), "machine": platform.machine()},
             "cpu": {"model": _cpu_model(), "threads": os.cpu_count()},
-            "ram_total": psutil.virtual_memory().total,
+            "ram_total": _ram_total(),
             "disk_free": free,
             "disk_total": total,
             "gpus": _gpus(),

@@ -44,8 +44,8 @@ export async function demoOwnCopy(owner: string, url: string): Promise<string> {
   const name = url.match(/^\/api\/media\/uploads\/([A-Za-z0-9_-]+\.[a-z0-9]+)$/)?.[1];
   if (!name || RANDOM.test(name)) return url;
   const copy = `${nanoid(12)}${path.extname(name)}`;
-  await fs.copyFile(path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, name), path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, copy));
-  const { size } = await fs.stat(path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, copy));
+  await fs.copyFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, name), path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, copy));
+  const { size } = await fs.stat(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, copy));
   noteUploads(owner, [{ url: `/api/media/uploads/${copy}`, bytes: size }]);
   return `/api/media/uploads/${copy}`;
 }

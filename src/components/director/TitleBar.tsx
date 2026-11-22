@@ -1,12 +1,24 @@
 "use client";
 
+import { ScrollRow } from "@/components/ui/ScrollRow";
 import { cn } from "@/lib/cn";
 
 /**
  * The bar across the top of the camera's screen (and of the takes and the take viewer in it): its buttons in plain
- * tinted groups. Glass buttons floating over the picture were hard to see on a bright shot (the user).
+ * tinted groups. Glass buttons floating over the picture were hard to see on a bright shot. `scroll`: when
+ * its tools don't all fit (a narrow window), the row scrolls sideways with arrows at its ends instead of cutting them
+ * off; where they fit, its spacers still push groups to the right.
  */
-export function TitleBar({ children, className }: { children: React.ReactNode; className?: string }) {
+export function TitleBar({ children, className, scroll }: { children: React.ReactNode; className?: string; scroll?: boolean }) {
+  if (scroll) {
+    return (
+      <div className={cn("flex h-14 shrink-0 items-center border-b border-white/[0.06] bg-white/[0.015]", className)}>
+        <ScrollRow className="min-w-0 flex-1" trackClassName="min-w-full gap-2 px-2">
+          {children}
+        </ScrollRow>
+      </div>
+    );
+  }
   return <div className={cn("flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.06] bg-white/[0.015] px-2", className)}>{children}</div>;
 }
 

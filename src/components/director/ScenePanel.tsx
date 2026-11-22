@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { MathUtils } from "three";
+import { MathUtils, Vector3 } from "three";
+import { useShallow } from "zustand/react/shallow";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Armchair,
@@ -9,6 +10,7 @@ import {
   Check,
   ChevronDown,
   Crosshair,
+  Expand,
   ImagePlus,
   LoaderCircle,
   Orbit,
@@ -36,12 +38,15 @@ import { MenuItem, Popover } from "@/components/ui/Popover";
 import { PlanView } from "./PlanView";
 import { EXAMPLE_CAST, EXAMPLE_PLACES } from "./examples";
 import { addFilesToCast, addFromCast, addPlacePhotoFile, addToCast, dismissPending, setPlaceFile, useIntake, type CastMember } from "./intake";
-import { buildAround, buildWorld, turnsFor, useAround, useWorld } from "./around";
+import { aboutTime, buildAround, buildWorld, loadTypical, stopWorld, useAround, useTypical, useWorld } from "./around";
 import { liftFromPlace, useLift } from "./lift";
+import { GROW_MODEL, growPlace, stopGrow, useGrow } from "./grow-place";
+import { useModelsStore } from "@/lib/hooks/use-models";
+import { useStageView } from "./stage/view";
 import { placeModel, usePlaceModel } from "./place-model";
 import { useShotModel } from "./shot-model";
 import { ModelPicker } from "@/components/models/ModelPicker";
-import { DIRECTOR_MODELS } from "./models";
+import { PLACE_CHOICES } from "./models";
 import { cn } from "@/lib/cn";
 
 export const KINDS: { id: ElementKind; label: string; icon: typeof UserRound }[] = [
@@ -98,6 +103,7 @@ function LocationSection() {
   const busy = useIntake((s) => s.placeBusy);
   const error = useIntake((s) => s.placeError);
   const [dragging, setDragging] = useState(false);
+  const v2 = useStageView((s) => s.v2);
 
   const pick = (file?: File) => {
     if (file) void setPlaceFile(file);
@@ -131,11 +137,13 @@ function LocationSection() {
         <>
           <div className="relative overflow-hidden rounded-card bg-apple shadow-[inset_0_0_0_1px_var(--color-line)]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={image.url} alt="Location" className="aspect-video w-full object-cover" />
+            <img src={previewUrl(image.url, 640)} alt="Location" decoding="async" className="aspect-video w-full object-cover" />
             <PlaceStatus url={image.url} ready={Boolean(image.view)} />
           </div>
           <LiftStatus />
           <WorldStrip />
+          {v2 ? <GrowButton /> : null}
+          {v2 ? <WorldButton /> : null}
           <YourPlaces />
           <PlaceMore>
             <PlaceModel />
@@ -218,43 +226,19 @@ function LocationSection() {
   );
 }
 
-/**
- * Build the rest of the place around the photo's spot: each side is filled from the ones next to it, so a landmark stays
- * where the photo has it and the camera can turn anywhere.
- */
-function AroundButton() {
-  const { busy, done, total, error } = useAround();
-  // After the photo's things are lifted out: the views carry on the photo without them.
-  const ready = useDirector((s) => Boolean(s.scene.place.image?.view && s.scene.place.lifted));
-  const covered = useDirector((s) => {
-    const image = s.scene.place.image;
-    return Boolean(image?.view) && (s.scene.place.more?.length ?? 0) >= turnsFor(image!.view!.fov, image!.width / image!.height).length;
-  });
-  if (!ready) return null;
-  return (
-    <div>
-      <button
-        type="button"
-        disabled={busy || covered}
-        onClick={() => void buildAround()}
-        className="press squircle flex w-full items-center gap-2 rounded-[12px] bg-white/[0.05] px-2.5 py-2 text-left text-[12.5px] font-semibold text-paper hover:bg-white/[0.08] disabled:opacity-60"
-        title="Fills in what the photo doesn't show, all around its spot, one side at a time from the sides next to it"
-      >
-        {busy ? <LoaderCircle size={14} className="shrink-0 animate-spin" /> : <Orbit size={14} className="shrink-0" />}
-        {busy ? `Building the place around you · ${done}/${total}` : covered ? "The place is built all around" : "Build the place all around (360°)"}
-      </button>
-      {error ? <p className="mt-1 text-[11.5px] text-tally">{error}</p> : null}
-    </div>
-  );
-}
-
 /** The place all around you once it's built: the 360 picture every way the camera turns sees. */
 function WorldStrip() {
   const world = useDirector((s) => s.scene.place.world);
   if (!world) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={world.url} alt="The place all around you" title="The place all around you: every way the camera turns" className="mt-2 h-12 w-full rounded-[10px] object-cover shadow-[inset_0_0_0_1px_var(--color-line)]" />
+    <img
+      src={previewUrl(world.url, 640)}
+      alt="The place all around you"
+      title="The place all around you: every way the camera turns"
+      decoding="async"
+      className="mt-2 h-12 w-full rounded-[10px] object-cover shadow-[inset_0_0_0_1px_var(--color-line)]"
+    />
   );
 }
 
@@ -270,7 +254,8 @@ function YourPlaces() {
     for (const g of takes) {
       const scene = g.params?.scene as Scene | undefined;
       const url = scene?.place.image?.url;
-      if (!url || !scene.place.world || seen.has(url)) continue;
+      // With or without its 360 world (Director v2 builds one only when asked).
+      if (!url || seen.has(url)) continue;
       seen.set(url, scene);
     }
     return [...seen.entries()].slice(0, 8);
@@ -319,23 +304,114 @@ function PlaceMore({ children }: { children: ReactNode }) {
   );
 }
 
-/** The place all around you drawn again (it's built on its own once the place is ready). */
+/**
+ * The place all around you as one 360 picture, by the place's model. Director v2 builds it only when you ask here: on
+ * its own it held the GPU for minutes after every new photo, and shots waited behind it; a shot from the photo's 3D set
+ * doesn't need it. The classic Director builds it by itself, and this draws it again. While it's drawn, Stop.
+ */
 function WorldButton() {
   const { busy, error } = useWorld();
-  const ready = useDirector((s) => Boolean(s.scene.place.image?.view && s.scene.place.lifted));
+  const v2 = useStageView((s) => s.v2);
+  const ready = useDirector((s) => Boolean(s.scene.place.image?.view && (s.scene.place.lifted || v2)));
   const world = useDirector((s) => s.scene.place.world);
+  const typical = useTypical((s) => s.world);
+  const growing = useGrow((s) => s.busy);
+  useEffect(loadTypical, []);
   if (!ready) return null;
+  // Director v2 with a world on: it can go again (the shots go back to the photo's own 3D set, open all around).
+  if (v2 && world && !busy) {
+    return (
+      <div className="mt-2">
+        <div className="squircle flex w-full items-center gap-2 rounded-[12px] bg-white/[0.05] py-1 pl-2.5 pr-1 text-[12.5px] font-semibold text-paper">
+          <Orbit size={14} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">World around it</span>
+          <button
+            type="button"
+            onClick={() => void buildWorld(true)}
+            title="Draw the world around the photo again"
+            className="press shrink-0 rounded-[9px] px-2 py-1 text-[11.5px] font-semibold text-haze hover:bg-white/[0.06] hover:text-paper"
+          >
+            Redraw
+          </button>
+          <button
+            type="button"
+            onClick={() => useDirector.getState().setPlaceWorld(null)}
+            title="Take the world away: the photo's 3D set alone, with nothing made up around it"
+            className="press shrink-0 rounded-[9px] px-2 py-1 text-[11.5px] font-semibold text-haze hover:bg-white/[0.06] hover:text-paper"
+          >
+            Remove
+          </button>
+        </div>
+        {error ? <p className="mt-1 text-[11.5px] text-tally">{error}</p> : null}
+      </div>
+    );
+  }
   return (
-    <div className="mb-1.5">
+    <div className={v2 ? "mt-2" : "mb-1.5"}>
       <button
         type="button"
-        disabled={busy}
-        onClick={() => void buildWorld(Boolean(world))}
-        className="press squircle flex w-full items-center gap-2 rounded-[12px] bg-white/[0.05] px-2.5 py-2 text-left text-[12.5px] font-semibold text-paper hover:bg-white/[0.08] disabled:opacity-60"
-        title="The place all around the photo's spot, drawn as one 360 picture, so every way the camera turns is the same world"
+        disabled={growing && !busy}
+        onClick={() => (busy ? stopWorld() : void buildWorld(Boolean(world)))}
+        className="press squircle flex w-full items-center gap-2 rounded-[12px] bg-white/[0.05] px-2.5 py-2 text-left text-[12.5px] font-semibold text-paper hover:bg-white/[0.08] disabled:opacity-50"
+        title={
+          busy
+            ? "Stop building the world around the photo (its job on the GPU stops too)"
+            : "The place all around the photo's spot, drawn as one 360 picture, so every way the camera turns is the same world. Optional: shots from the photo's 3D set don't need it."
+        }
       >
         {busy ? <LoaderCircle size={14} className="shrink-0 animate-spin" /> : <Orbit size={14} className="shrink-0" />}
-        {busy ? "Drawing the place all around you…" : world ? "Draw the place around you again" : "Build the place all around you (360°)"}
+        <span className="min-w-0 flex-1 truncate">{busy ? "Building the world around it…" : world ? "Draw the world around it again" : "Build the world around it (360°)"}</span>
+        {busy ? (
+          <span className="shrink-0 text-[11.5px] text-haze">Stop</span>
+        ) : !world && typical ? (
+          <span className="shrink-0 text-[11.5px] font-medium text-haze">{aboutTime(typical)}</span>
+        ) : null}
+      </button>
+      {error ? <p className="mt-1 text-[11.5px] text-tally">{error}</p> : null}
+    </div>
+  );
+}
+
+/** " · 0:42": how long a step has run, so a long wait (a cold GPU, the LoRA's first download) never looks stuck. */
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const s = Math.max(0, Math.floor((now - since) / 1000));
+  return <span className="font-medium text-haze tabular-nums">{` · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`}</span>;
+}
+
+/** Small extend (grow-place): the photo grown 1.5× each way around itself, a quick step short of the 360 world. */
+function GrowButton() {
+  const { busy, error, since } = useGrow();
+  const ready = useDirector((s) => Boolean(s.scene.place.image?.view));
+  const world = useWorld((s) => s.busy);
+  // It draws with FLUX 3 Klein (and its outpaint LoRA) on a GPU: with none that has it, it says so instead of trying.
+  const klein = useModelsStore((s) => s.models.find((m) => m.id === GROW_MODEL)?.available ?? false);
+  if (!ready) return null;
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        disabled={(world || !klein) && !busy}
+        onClick={() => (busy ? stopGrow() : void growPlace())}
+        className="press squircle flex w-full items-center gap-2 rounded-[12px] bg-white/[0.05] px-2.5 py-2 text-left text-[12.5px] font-semibold text-paper hover:bg-white/[0.08] disabled:opacity-50"
+        title={
+          busy
+            ? "Stop extending the photo (its job on the GPU stops too)"
+            : klein
+              ? "Grows the photo 1.5× each way around itself, so the Camera has more of the place to turn into. Undo takes it back."
+              : "Small extend draws with FLUX 3 Klein on your GPU: get it under Settings → Models (it needs about 9 GB of GPU memory)."
+        }
+      >
+        {busy ? <LoaderCircle size={14} className="shrink-0 animate-spin" /> : <Expand size={14} className="shrink-0" />}
+        <span className="min-w-0 flex-1 truncate">
+          {busy ? "Extending the photo" : "Small extend"}
+          {busy && since ? <Elapsed since={since} /> : null}
+        </span>
+        <span className="shrink-0 text-[11.5px] font-medium text-haze">{busy ? "Stop" : klein ? "1.5×" : "Needs FLUX 3 Klein"}</span>
       </button>
       {error ? <p className="mt-1 text-[11.5px] text-tally">{error}</p> : null}
     </div>
@@ -371,6 +447,10 @@ function LiftStatus() {
       </p>
     );
   }
+  // Director v2 never lifts: what's in the photo stays in it, in 3D (Stage3D PhotoSet), as the challenge winner's 3D
+  // World does. Lifted, the astronaut stood on set twice: his redrawn copy, and the photo's own where the erase failed.
+  if (useStageView.getState().v2) return null;
+  void waiting;
   return lifted ? <p className="mt-2 px-0.5 text-[12px] text-haze">{lifted === 1 ? "1 thing" : `${lifted} things`} from the photo stand on set now, drawn from your camera&apos;s angle.</p> : null;
 }
 
@@ -380,7 +460,7 @@ function PlaceModel() {
   const shot = useShotModel((s) => s.model);
   return (
     <div className="mt-2.5">
-      <ModelPicker kind="image" task="edit" only={DIRECTOR_MODELS} value={own ?? shot} onChange={(m) => usePlaceModel.setState({ model: m })} label="Place made with" className="w-full" />
+      <ModelPicker kind="image" task="edit" only={PLACE_CHOICES} value={own ?? shot} onChange={(m) => usePlaceModel.setState({ model: m })} label="Place made with" className="w-full" />
       {own && own !== shot ? (
         <button type="button" onClick={() => usePlaceModel.setState({ model: null })} className="press mt-1 px-0.5 text-[11.5px] text-haze hover:text-paper">
           Use the model you shoot with
@@ -474,12 +554,13 @@ function MorePhotos() {
       {more.map((p) => (
         <div key={p.url} className="mb-2 flex items-center gap-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={p.url} alt="" className="h-10 w-16 shrink-0 rounded-[8px] object-cover shadow-[inset_0_0_0_1px_var(--color-line)]" />
+          <img src={previewUrl(p.url, 160)} alt="" decoding="async" className="h-10 w-16 shrink-0 rounded-[8px] object-cover shadow-[inset_0_0_0_1px_var(--color-line)]" />
           <Slider
             className="min-w-0 flex-1"
             label={turnWord(p.turn)}
             value={p.turn}
             min={-180}
+            origin={0}
             max={180}
             step={5}
             onStart={checkpoint}
@@ -492,7 +573,7 @@ function MorePhotos() {
           </IconButton>
         </div>
       ))}
-      <WorldButton />
+      {useStageView.getState().v2 ? null : <WorldButton />}
       <button
         type="button"
         onClick={() => input.current?.click()}
@@ -518,8 +599,9 @@ function MorePhotos() {
 }
 
 /** "Building 3D…" while the depth map is made, a check when the set is ready, or what went wrong. */
-function PlaceStatus({ url, ready }: { url: string; ready: boolean }) {
-  const { error, retry } = useDepth(url);
+function PlaceStatus({ url, ready: viewed }: { url: string; ready: boolean }) {
+  const { depth, error, retry } = useDepth(url);
+  const ready = viewed && Boolean(depth);
   const models = useVision((s) => s.models);
   const busy = useVision((s) => s.busy > 0);
   const message = busy ? visionMessage(models) : null;
@@ -702,7 +784,7 @@ function CastSection() {
           {pending.map((p) => (
             <li key={p.id} className="flex items-center gap-2.5 rounded-[12px] p-1.5 pr-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.thumb} alt="" className="size-10 shrink-0 rounded-[9px] object-cover opacity-60" />
+              <img src={previewUrl(p.thumb, 96)} alt="" decoding="async" className="size-10 shrink-0 rounded-[9px] object-cover opacity-60" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-semibold">{p.name}</span>
                 {p.error ? (
@@ -748,15 +830,28 @@ function CastSection() {
   );
 }
 
+/** The Cast list for "From Cast", kept a minute: the Add menu fetched it again every time it opened. */
+let castList: { at: number; members: Promise<CastMember[]> } | null = null;
+function castMembers() {
+  if (!castList || Date.now() - castList.at > 60_000) {
+    const members = fetch("/api/director/cast", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { items?: CastMember[] }) => d.items ?? [])
+      .catch(() => {
+        castList = null;
+        return [] as CastMember[];
+      });
+    castList = { at: Date.now(), members };
+  }
+  return castList.members;
+}
+
 /** Cast members to put on set: people and pets look most like themselves from their Cast sheet. */
 function FromCast({ onPick }: { onPick: () => void }) {
   const [members, setMembers] = useState<CastMember[] | null>(null);
   useEffect(() => {
     let live = true;
-    void fetch("/api/director/cast", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: { items?: CastMember[] }) => live && setMembers(d.items ?? []))
-      .catch(() => live && setMembers([]));
+    void castMembers().then((m) => live && setMembers(m));
     return () => {
       live = false;
     };
@@ -778,7 +873,7 @@ function FromCast({ onPick }: { onPick: () => void }) {
             className="press squircle overflow-hidden rounded-[10px] shadow-[inset_0_0_0_1px_var(--color-line)] hover:brightness-110"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={m.portrait ?? m.sheet} alt={m.name} className="aspect-square w-full object-cover" />
+            <img src={m.portrait || m.sheet ? previewUrl((m.portrait || m.sheet)!, 160) : undefined} alt={m.name} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
           </button>
         ))}
       </div>
@@ -801,7 +896,7 @@ function CastRow({ el, color, selected, framed, onSelect }: { el: SceneElement; 
     >
       {el.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={el.image.url} alt="" className={cn("size-10 shrink-0 rounded-[9px] object-contain", el.image.cutout ? "checker" : "object-cover")} />
+        <img src={previewUrl(el.image.url, 96)} alt="" decoding="async" className={cn("size-10 shrink-0 rounded-[9px]", el.image.cutout ? "checker object-contain" : "object-cover")} />
       ) : (
         <span className="grid size-10 shrink-0 place-items-center rounded-[9px] bg-white/[0.05] text-haze">
           <Icon size={16} />
@@ -834,14 +929,14 @@ function CastRow({ el, color, selected, framed, onSelect }: { el: SceneElement; 
 
 function Inspector() {
   const el = useSelected();
-  const scene = useDirector((s) => s.scene);
+  const [cx, cy, cz] = useDirector(useShallow((s) => cameraPosition(s.scene.camera, focusPoint(s.scene)).toArray()));
+  const framedId = useDirector((s) => s.scene.camera.focusId ?? s.scene.elements[0]?.id ?? null);
   const { updateElement, checkpoint, focusOn, applyShotSize, removeElement } = useDirector.getState();
   const [more, setMore] = useState(false);
   if (!el) return null;
 
-  const camPos = cameraPosition(scene.camera, focusPoint(scene));
-  const toward = yawTowardCamera(el, camPos);
-  const framed = (scene.camera.focusId ?? scene.elements[0]?.id) === el.id;
+  const toward = yawTowardCamera(el, new Vector3(cx, cy, cz));
+  const framed = framedId === el.id;
 
   return (
     <motion.section key={el.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
@@ -859,7 +954,7 @@ function Inspector() {
           <input
             aria-label="Name"
             value={el.name}
-            onChange={(e) => updateElement(el.id, { name: e.target.value })}
+            onChange={(e) => updateElement(el.id, { name: e.target.value }, "typing")}
             className="squircle field-focus h-9 min-w-0 flex-1 rounded-[11px] bg-white/[0.04] px-3 text-[14px] font-semibold outline-none shadow-[inset_0_0_0_1px_var(--color-line)]"
           />
         </div>
@@ -888,7 +983,7 @@ function Inspector() {
           <input
             aria-label="Doing what"
             value={el.action ?? ""}
-            onChange={(e) => updateElement(el.id, { action: e.target.value })}
+            onChange={(e) => updateElement(el.id, { action: e.target.value }, "typing")}
             placeholder="Doing what? (walking toward the camera…)"
             className="squircle field-focus h-9 w-full rounded-[11px] bg-white/[0.04] px-3 text-[13px] outline-none shadow-[inset_0_0_0_1px_var(--color-line)] placeholder:text-haze"
           />
@@ -957,7 +1052,7 @@ function Inspector() {
                   <input
                     aria-label="Looks like"
                     value={el.look ?? ""}
-                    onChange={(e) => updateElement(el.id, { look: e.target.value })}
+                    onChange={(e) => updateElement(el.id, { look: e.target.value }, "typing")}
                     placeholder="Looks like (red coat, short silver hair…)"
                     className="squircle field-focus h-9 w-full rounded-[11px] bg-white/[0.04] px-3 text-[13px] outline-none shadow-[inset_0_0_0_1px_var(--color-line)] placeholder:text-haze"
                   />
@@ -1015,7 +1110,7 @@ function FacingDial({ yaw, cameraYaw, onChange, onStart }: { yaw: number; camera
     <svg
       ref={ref}
       viewBox="-30 -30 60 60"
-      className="size-[76px] shrink-0 cursor-grab touch-none active:cursor-grabbing"
+      className="size-[76px] shrink-0 cursor-grab touch-none rounded-full outline-none focus-visible:shadow-[0_0_0_2px_var(--color-spike)] active:cursor-grabbing"
       onPointerDown={(e) => {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
         onStart();
@@ -1024,8 +1119,20 @@ function FacingDial({ yaw, cameraYaw, onChange, onStart }: { yaw: number; camera
       onPointerMove={(e) => {
         if (e.buttons) setFromEvent(e);
       }}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 15 : 5;
+        const turn = e.key === "ArrowRight" || e.key === "ArrowUp" ? step : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -step : 0;
+        if (!turn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onStart();
+        onChange(Math.round(((((yaw + turn + 180) % 360) + 360) % 360) - 180));
+      }}
+      tabIndex={0}
       role="slider"
       aria-label="Facing direction"
+      aria-valuemin={0}
+      aria-valuemax={359}
       aria-valuenow={Math.round(((yaw % 360) + 360) % 360)}
     >
       <circle r={27} fill="rgb(255 255 255 / 0.04)" stroke="rgb(255 255 255 / 0.1)" />

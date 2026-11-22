@@ -24,6 +24,40 @@ const write = (key: string, value: string) => {
   }
 };
 
+/**
+ * Your machines as this page needs them: names, addresses and whether each answers (api/local's light form, a few KB, not
+ * the installed files and estimates the model library reads). Every 15 s, one look at a time, none while the tab is in
+ * the background.
+ */
+function useMachines() {
+  const [status, setStatus] = useState<LocalStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/local?lite=1", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus((await res.json()) as LocalStatus);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    let gone = false;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      if (document.visibilityState !== "hidden") await load();
+      if (!gone) t = setTimeout(tick, 15_000);
+    };
+    t = setTimeout(tick, 0);
+    return () => {
+      gone = true;
+      clearTimeout(t);
+    };
+  }, [load]);
+  return { status, error };
+}
+
 /** A machine's card title: its GPU, short. */
 const gpuOf = (m: Machine | undefined) => (m?.gpus[0]?.name ?? "").replace(/^NVIDIA\s+(GeForce\s+)?/i, "").replace(/^Apple\s+/i, "") || null;
 
@@ -39,8 +73,7 @@ export function ComfyView() {
   // A Library item's graph to open (?recipe=<its id>&step=N, from its "How it was made"), on whichever machine is open.
   const recipe = params.get("recipe") ?? undefined;
   const step = params.get("step") ?? undefined;
-  const [status, setStatus] = useState<LocalStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { status, error } = useMachines();
   const [picked, setPicked] = useState<string | null>(asked ?? null);
   const [relay, setRelay] = useState<{ machine: string; port: number } | null>(null);
   const [relayError, setRelayError] = useState<string | null>(null);
@@ -48,26 +81,6 @@ export function ComfyView() {
   const [follow, setFollow] = useState(!recipe);
   const [frameKey, setFrameKey] = useState(0);
   const frame = useRef<HTMLIFrameElement>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/local", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setStatus((await res.json()) as LocalStatus);
-      setError(null);
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(() => void load(), 0);
-    const id = setInterval(load, 15_000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, [load]);
 
   const targets = useMemo(() => status?.targets ?? [], [status]);
   const online = useMemo(() => targets.filter((t) => t.connected), [targets]);
@@ -142,7 +155,7 @@ export function ComfyView() {
       </header>
 
       {online.length > 1 || (online.length === 1 && status && status.targets.some((t) => !t.connected && !t.implicit)) ? (
-        <div className="mt-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Machines">
+        <div className="mt-4 flex flex-wrap gap-1.5" role="group" aria-label="Machines">
           {(status?.targets ?? [])
             .filter((t) => t.connected || !t.implicit)
             .map((t) => {
@@ -152,8 +165,8 @@ export function ComfyView() {
               return (
                 <button
                   key={t.id}
-                  role="tab"
-                  aria-selected={on}
+                  type="button"
+                  aria-pressed={on}
                   disabled={!t.connected}
                   onClick={() => pick(t.id)}
                   className={cn(
@@ -180,9 +193,7 @@ export function ComfyView() {
 
       <div className="surface squircle mt-4 min-h-[420px] flex-1 overflow-hidden rounded-panel">
         {!status && !error ? (
-          <div className="grid h-full place-items-center text-haze">
-            <LoaderCircle size={20} className="animate-spin" />
-          </div>
+          <Waiting>Looking at your machines…</Waiting>
         ) : error && !status ? (
           <Empty icon={<TriangleAlert size={18} />} title="Couldn't read your machines" body={error} />
         ) : !current ? (
@@ -204,9 +215,7 @@ export function ComfyView() {
         ) : src ? (
           <iframe key={`${src}#${frameKey}`} ref={frame} src={src} title={`ComfyUI on ${current.label}`} className="size-full border-0 bg-[#202020]" allow="clipboard-read; clipboard-write; fullscreen" />
         ) : (
-          <div className="grid h-full place-items-center text-haze">
-            <LoaderCircle size={20} className="animate-spin" />
-          </div>
+          <Waiting>Opening ComfyUI on {current.source === "installed" ? "this computer" : current.label}…</Waiting>
         )}
       </div>
     </div>
@@ -221,6 +230,17 @@ function frameUrl(port: number, follow: boolean, job?: string, kept?: { recipe: 
     ...(kept ? { crackio_recipe: kept.recipe, ...(kept.step ? { crackio_step: kept.step } : {}) } : {}),
   });
   return `${window.location.protocol}//${window.location.hostname}:${port}/?${q}`;
+}
+
+function Waiting({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid h-full place-items-center text-haze" role="status">
+      <p className="flex items-center gap-2.5 text-[13px]">
+        <LoaderCircle size={18} className="animate-spin" />
+        {children}
+      </p>
+    </div>
+  );
 }
 
 function Empty({ icon, title, body }: { icon: React.ReactNode; title: string; body: React.ReactNode }) {

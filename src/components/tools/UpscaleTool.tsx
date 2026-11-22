@@ -40,7 +40,19 @@ function factorFor(id: string | null, caps: Caps | null, wanted: number): number
 
 export function UpscaleTool() {
   const tool = toolBySlug("upscale")!;
-  const [mode, setMode] = useState<Mode>("upscale");
+  const [imageMode, setImageMode] = useState<Exclude<Mode, "video">>("upscale");
+  const [video, setVideo] = useState(false);
+  const [videoSeen, setVideoSeen] = useState(false);
+  const mode: Mode = video ? "video" : imageMode;
+  const setMode = (m: Mode) => {
+    if (m === "video") {
+      setVideo(true);
+      setVideoSeen(true);
+      return;
+    }
+    setVideo(false);
+    setImageMode(m);
+  };
   const [scale, setScale] = useState<number>(2);
   const [creativity, setCreativity] = useState(0);
   const [flavor, setFlavor] = useState<(typeof FLAVORS)[number]["id"]>("photo");
@@ -62,22 +74,27 @@ export function UpscaleTool() {
   );
 
   // Clips have their own section: a clip in, the upscalers that take one, the size it ends at.
-  if (mode === "video") return <VideoUpscale tool={tool} modeSwitch={modeSwitch} />;
-
   return (
+    <>
+      {videoSeen ? (
+        <div hidden={!video}>
+          <VideoUpscale tool={tool} modeSwitch={modeSwitch} />
+        </div>
+      ) : null}
+      <div hidden={video}>
     <EditToolShell
       tool={tool}
-      kind={mode}
+      kind={imageMode}
       allowTakes={false}
-      hint={mode === "upscale" ? "Any image. Small or soft ones gain the most." : "Any image. Crackio extends the scene around it."}
+      hint={imageMode === "upscale" ? "Any image. Small or soft ones gain the most." : "Any image. Crackio extends the scene around it."}
       actionLabel={({ id, caps }) => {
-        if (mode !== "upscale") return `Reframe to ${target}`;
+        if (imageMode !== "upscale") return `Reframe to ${target}`;
         const s = factorFor(id, caps, scale);
         return s ? `Upscale ${s}×` : "Upscale";
       }}
-      upscaleBy={({ id, caps }) => (mode === "upscale" ? (factorFor(id, caps, scale) ?? scale) : null)}
+      upscaleBy={({ id, caps }) => (imageMode === "upscale" ? (factorFor(id, caps, scale) ?? scale) : null)}
       compile={(_, { id, caps }) =>
-        mode === "upscale"
+        imageMode === "upscale"
           ? {
               prompt: "",
               summary: `Upscale${factorFor(id, caps, scale) ? ` ${factorFor(id, caps, scale)}×` : ""}${creativity > 0 ? ` · creativity ${Math.round(creativity * 100)}%` : ""}`,
@@ -97,7 +114,7 @@ export function UpscaleTool() {
         <>
           {modeSwitch}
 
-          {mode === "upscale" ? (
+          {imageMode === "upscale" ? (
             <>
               <ControlSection title="Size" hint={custom && !factors?.length ? "Set by the model" : undefined}>
                 {custom && !factors?.length ? (
@@ -182,7 +199,7 @@ export function UpscaleTool() {
                   onChange={(e) => setFill(e.target.value)}
                   rows={2}
                   placeholder="more of the beach and sky"
-                  className="w-full resize-none rounded-[12px] bg-white/[0.02] px-3 py-2.5 text-[13.5px] outline-none shadow-[inset_0_0_0_1px_var(--color-line)] placeholder:text-haze focus:shadow-[inset_0_0_0_1px_var(--color-line-strong)]"
+                  className="field-focus w-full resize-none rounded-[12px] bg-white/[0.02] px-3 py-2.5 text-[13.5px] outline-none shadow-[inset_0_0_0_1px_var(--color-line)] placeholder:text-haze focus:shadow-[inset_0_0_0_1px_var(--color-line-strong)]"
                 />
               </ControlSection>
             </>
@@ -191,5 +208,7 @@ export function UpscaleTool() {
         );
       }}
     />
+      </div>
+    </>
   );
 }

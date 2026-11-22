@@ -49,12 +49,11 @@ next-env.d.ts
 .playwright-mcp/
 
 
-# research notes and reference screenshots (local only)
+# local notes
 /.research/
 
 
-# reference ads (not ours to publish), and any other clip left at the top level
-/hfield-*.mp4
+# clips left at the top level
 /*.mp4
 
 # Claude Code's local lock files

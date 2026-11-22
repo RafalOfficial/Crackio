@@ -79,7 +79,7 @@ export const TOOLS: Tool[] = ([
     name: "Relight",
     summary: "Move the light around your subject until it looks right.",
     description:
-      "Drag a light across a sphere to set its direction, then dial softness, color temperature and strength. Your subject stays the same; only the light changes.",
+      "Pick a light setup or drag the light around your subject, then set its height, softness and color, or a time of day. Your subject stays the same; only the light changes.",
     hue: "var(--color-tool-relight)",
     icon: Sun,
     media: "/assets/tool-relight.webp",
@@ -91,7 +91,7 @@ export const TOOLS: Tool[] = ([
     name: "Cast",
     summary: "Characters that look like themselves in every shot.",
     description:
-      "Upload one to three photos of a person, pet or mascot. Crackio builds a reference sheet you can call into any tool with @name.",
+      "Add one to four photos, or a description, of a person, pet, character or object. Crackio builds a reference sheet you can call into any tool with @name.",
     hue: "var(--color-tool-cast)",
     icon: Users,
     media: "/assets/tool-cast.webp",

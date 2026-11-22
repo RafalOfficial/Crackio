@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import type { ReactNode } from "react";
-import { Plus, TriangleAlert } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { LoaderCircle, Plus, TriangleAlert } from "lucide-react";
 import { AppIcon } from "@/components/ui/ToolTile";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import type { Kit, SetupMachine, SetupSnapshot } from "@/lib/setup/types";
 import { machineTone, machineWords, type Tone } from "./words";
@@ -194,13 +195,84 @@ export function ProblemCard({
   );
 }
 
-/** A thin progress line (bytes or percent), blue like the lamp of something at work. */
+/** A thin progress line (bytes or percent), blue like the lamp of something at work. It grows by transform, not width. */
 export function Progress({ received, total, className }: { received: number; total: number; className?: string }) {
-  const pct = total > 0 ? Math.max(2, Math.min(100, (received / total) * 100)) : 0;
+  const part = total > 0 ? Math.max(0.02, Math.min(1, received / total)) : 0;
   return (
     <span className={cn("block h-1 overflow-hidden rounded-full bg-white/[0.07]", className)}>
-      <span className="block h-full rounded-full bg-daylight transition-[width] duration-700 ease-out" style={{ width: `${pct}%` }} />
+      <span className="block h-full origin-left rounded-full bg-daylight transition-transform duration-700 ease-out" style={{ transform: `scaleX(${part})` }} />
     </span>
+  );
+}
+
+/**
+ * A button for something that can't be undone (a key, a machine, gigabytes of models): the first click asks in place,
+ * "Keep" or the action again saying what it does, and the question goes away by itself after a few seconds. The same
+ * two steps as Storage's model list and a rented box's Stop.
+ */
+export function ConfirmButton({
+  children,
+  confirm,
+  onConfirm,
+  busy = false,
+  disabled = false,
+  look = "button",
+  className,
+}: {
+  children: ReactNode;
+  /** The second step's words, saying what happens: "Forget MacBook Air", "Remove · frees 12 GB". */
+  confirm: ReactNode;
+  onConfirm: () => void | Promise<unknown>;
+  busy?: boolean;
+  disabled?: boolean;
+  /** "text": a plain link-like word inside a sentence or a row, instead of a small button. */
+  look?: "button" | "text";
+  className?: string;
+}) {
+  const [asking, setAsking] = useState(false);
+  useEffect(() => {
+    if (!asking) return;
+    const t = setTimeout(() => setAsking(false), 6000);
+    return () => clearTimeout(t);
+  }, [asking]);
+  const go = () => {
+    setAsking(false);
+    void onConfirm();
+  };
+  const spinner = busy ? <LoaderCircle size={look === "text" ? 12 : 14} className="animate-spin" /> : null;
+  if (look === "text") {
+    return asking ? (
+      <span className="inline-flex items-center gap-2.5" role="group" aria-label="Are you sure?">
+        <button type="button" autoFocus onClick={() => setAsking(false)} className="font-semibold text-fog hover:text-paper">
+          Keep
+        </button>
+        <button type="button" onClick={go} disabled={disabled} className="inline-flex items-center gap-1 font-semibold text-tally hover:underline">
+          {spinner}
+          {confirm}
+        </button>
+      </span>
+    ) : (
+      <button type="button" onClick={() => setAsking(true)} disabled={disabled} className={cn("inline-flex items-center gap-1", className)}>
+        {spinner}
+        {children}
+      </button>
+    );
+  }
+  return asking ? (
+    <span className="inline-flex items-center gap-1.5" role="group" aria-label="Are you sure?">
+      <Button variant="ghost" size="sm" autoFocus onClick={() => setAsking(false)}>
+        Keep
+      </Button>
+      <Button variant="outline" size="sm" onClick={go} disabled={disabled}>
+        {spinner}
+        {confirm}
+      </Button>
+    </span>
+  ) : (
+    <Button variant="ghost" size="sm" onClick={() => setAsking(true)} disabled={disabled} className={className}>
+      {spinner}
+      {children}
+    </Button>
   );
 }
 

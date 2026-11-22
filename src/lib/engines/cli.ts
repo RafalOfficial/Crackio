@@ -69,12 +69,12 @@ export function runCli(
 }
 
 export async function withTempFile<T>(content: string, fn: (file: string) => Promise<T>) {
-  const file = path.join(os.tmpdir(), `crackio-${nanoid(8)}.txt`);
-  await fs.writeFile(file, content, "utf8");
+  const file = path.join(/*turbopackIgnore: true*/ os.tmpdir(), `crackio-${nanoid(8)}.txt`);
+  await fs.writeFile(/*turbopackIgnore: true*/ file, content, "utf8");
   try {
     return await fn(file);
   } finally {
-    await fs.rm(file, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ file, { force: true });
   }
 }
 

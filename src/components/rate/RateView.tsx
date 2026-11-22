@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CornerDownLeft, LoaderCircle, Undo2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { previewUrl } from "@/lib/media-url";
 
 /**
  * A/B rating: two results side by side, your pick with one key. Each pick teaches Crackio's own models your taste
@@ -80,7 +81,8 @@ export function RateView({ task = "swap" }: { task?: "swap" | "chat" }) {
         })
         .catch((e: Error) => setError(e.message));
     void load();
-    const timer = setInterval(load, 30_000);
+    // Not while the tab is in the background: the next look when it's back finds the same pairs.
+    const timer = setInterval(() => document.visibilityState !== "hidden" && void load(), 30_000);
     return () => {
       stop = true;
       clearInterval(timer);
@@ -337,11 +339,11 @@ export function RateView({ task = "swap" }: { task?: "swap" | "chat" }) {
         <>
           <section className="flex flex-wrap items-center gap-4 rounded-panel border border-line bg-flat p-3">
             <figure className="flex items-center gap-3">
-              <img src={img(pair.frame)} alt="The original frame" className="h-24 w-auto rounded-chip object-contain" />
+              <img src={previewUrl(img(pair.frame), 480)} alt="The original frame" className="h-24 w-auto rounded-chip object-contain" />
               <figcaption className="text-[13px] text-fog">Before</figcaption>
             </figure>
             <figure className="flex items-center gap-3">
-              <img src={img(pair.character)} alt={`The ${noun(pair.noun)}`} className="h-24 w-auto rounded-chip object-contain" />
+              <img src={previewUrl(img(pair.character), 480)} alt={`The ${noun(pair.noun)}`} className="h-24 w-auto rounded-chip object-contain" />
               <figcaption className="text-[13px] text-fog">Should become</figcaption>
             </figure>
             {pair.ask === "good" ? (

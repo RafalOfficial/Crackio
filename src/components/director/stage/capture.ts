@@ -34,8 +34,15 @@ export type CaptureResult = {
   depth: Blob;
   /** The place alone through the camera, as in the blocking frame (unknown parts gray), with no subjects. */
   plate: Blob;
-  /** The camera view as you see it (the place, each subject's own picture from this side, their shadows), sharp and ungraded. */
+  /**
+   * The camera view as you see it (the place, each subject's own picture from this side, their shadows), sharp and
+   * ungraded, with what no picture shows flat LOOK_KEY gray: the picture a kept shot edits.
+   */
   look: Blob;
+  /** The place alone in the Camera's view (Director v2's photo in 3D, the world around, gaps gray), no cast; null without the 3D photo. */
+  set: Blob | null;
+  /** The cast's own pictures in the camera view, white on black (behind what of the place covers them). */
+  cuts: Blob;
   /** Each subject's visible pixels in its own flat color (`ids`), everything else black: who covers whom. */
   ids: Blob;
   /**
@@ -48,26 +55,44 @@ export type CaptureResult = {
 };
 
 type CaptureFn = (width: number, height: number) => Promise<CaptureResult>;
-let registered: CaptureFn | null = null;
+type PlateFn = (camera: PerspectiveCamera, width: number, height: number) => Promise<Blob>;
 
-export const registerCapture = (fn: CaptureFn | null) => {
-  registered = fn;
-};
+/**
+ * The stages that can be captured, newest last: the Director's page and Storyboard's Director can both be mounted (one
+ * of them hidden), and with one slot whichever went away last left Shoot with no stage ("The stage isn't ready yet.").
+ * Each registers itself and takes back only its own; the one shown (mounted or shown last) is used.
+ */
+const captures: CaptureFn[] = [];
+const plates: PlateFn[] = [];
 
-export async function captureShot(width: number, height: number) {
-  if (!registered) throw new Error("The stage isn't ready yet.");
-  return registered(width, height);
+function keep<T>(list: T[], fn: T) {
+  list.push(fn);
+  return () => {
+    const i = list.lastIndexOf(fn);
+    if (i >= 0) list.splice(i, 1);
+  };
 }
 
-type PlateFn = (camera: PerspectiveCamera, width: number, height: number) => Promise<Blob>;
-let plateFn: PlateFn | null = null;
-export const registerPlateCapture = (fn: PlateFn | null) => {
-  plateFn = fn;
-};
+/** Register a stage's capture; the function returned takes it back. */
+export const registerCapture = (fn: CaptureFn) => keep(captures, fn);
+
+export async function captureShot(width: number, height: number) {
+  // Shoot pressed while the stage is still coming up (a big world loading, the page just opened) waits for it, up to
+  // 20 s: it used to fail at once with "The stage isn't ready yet." (the A40 test, Shoot 5 s after opening a set).
+  for (let waited = 0; !captures.length && waited < 20_000; waited += 250) await new Promise((r) => setTimeout(r, 250));
+  const fn = captures.at(-1);
+  if (!fn) throw new Error("The stage isn't ready yet.");
+  return fn(width, height);
+}
+
+/** Register a stage's plate capture; the function returned takes it back. */
+export const registerPlateCapture = (fn: PlateFn) => keep(plates, fn);
+
 /** The place alone as a camera sees it (the model's view: unknown parts gray, no stand-ins), from any camera. */
 export async function capturePlateFrom(camera: PerspectiveCamera, width: number, height: number) {
-  if (!plateFn) throw new Error("The stage isn't ready yet.");
-  return plateFn(camera, width, height);
+  const fn = plates.at(-1);
+  if (!fn) throw new Error("The stage isn't ready yet.");
+  return fn(camera, width, height);
 }
 
 export function makePlateCapture(gl: WebGLRenderer, scene: ThreeScene, look: () => ShotLook): PlateFn {
@@ -91,6 +116,39 @@ export function makePlateCapture(gl: WebGLRenderer, scene: ThreeScene, look: () 
       restore();
       renderer.dispose();
       out.dispose();
+    }
+  };
+}
+
+/**
+ * One frame of the shot exactly as the camera view shows it (lens blur and grade), as RGBA rows bottom-up (WebGL's
+ * order): Director v2's "Save preview" records the timeline with it. One pass, its buffers kept between frames.
+ */
+type GrabFn = (width: number, height: number) => Uint8Array;
+const grabs: GrabFn[] = [];
+export const registerFrameGrab = (fn: GrabFn) => keep(grabs, fn);
+export function grabFrame(width: number, height: number) {
+  const fn = grabs.at(-1);
+  if (!fn) throw new Error("The stage isn't ready yet.");
+  return fn(width, height);
+}
+export function makeFrameGrab(gl: WebGLRenderer, scene: ThreeScene, shotCamera: (aspect: number) => PerspectiveCamera, look: () => ShotLook): GrabFn {
+  let held: { renderer: ShotRenderer; out: WebGLRenderTarget; key: string } | null = null;
+  return (width, height) => {
+    const key = `${width}x${height}`;
+    if (held?.key !== key) {
+      held?.renderer.dispose();
+      held?.out.dispose();
+      held = { renderer: new ShotRenderer(width, height), out: new WebGLRenderTarget(width, height), key };
+    }
+    const cam = shotCamera(width / height);
+    cam.layers.set(0);
+    const restore = showView(scene, "camera");
+    try {
+      held.renderer.render(gl, scene, cam, look(), held.out);
+      return read(gl, held.out, width, height);
+    } finally {
+      restore();
     }
   };
 }
@@ -119,6 +177,12 @@ export const ID_COLORS: [number, number, number][] = [
 ];
 /** "Nothing known here": the backdrop of the model's view and the location's unknown parts. */
 export const UNKNOWN_GRAY = new Color("#8a8a8a");
+/**
+ * "Nothing known here" in the kept shot's camera view (`look`): the challenge winner's neutral gray for the parts no
+ * picture shows (Panorama Stickers' renders for Qwen-Image 2.1), which the model is told to fill (server/director-real
+ * counts it to know).
+ */
+export const LOOK_KEY = new Color("#949494");
 
 /** Pictures of the place the surround (Stage3D) has on screen: a view built around the spot counts once it's there. */
 export const loadedViews = new Set<string>();
@@ -127,7 +191,36 @@ export const loadedViews = new Set<string>();
  * Show one view of the set: "camera" (what you see while you work) or "model" (the blocking frame). Returns a
  * function that puts everything back, so the live preview and the capture can both switch for one render.
  */
-export function showView(scene: ThreeScene, view: "camera" | "model") {
+/** The empty stage's own floors (one per view): never swapped by showStandIns. */
+export const STAGE_FLOOR = "crackioStageFloor";
+
+/**
+ * Director v2's Set tab: every subject as its stand-in, a body that reads from any side (their photo cut-outs are flat
+ * cards that stretch into streaks seen from beside), with the place as it looks. Undone by the function returned.
+ */
+export function showStandIns(scene: ThreeScene) {
+  const flipped: Object3D[] = [];
+  scene.traverse((o) => {
+    if (o.userData[STAGE_FLOOR]) return;
+    if (o.userData[VIEW_NORMAL] || o.userData[VIEW_MODEL]) {
+      const want = Boolean(o.userData[VIEW_MODEL]);
+      if (o.visible !== want) {
+        o.visible = want;
+        flipped.push(o);
+      }
+    }
+  });
+  return () => {
+    for (const o of flipped) o.visible = !o.visible;
+  };
+}
+
+/**
+ * "look" is the kept shot's camera view: everything as you see it (the place, each subject's own picture), with what no
+ * picture shows (past a world's top, the stretched ground in front of a photo, a walk-in's guesses) left flat LOOK_KEY
+ * gray for the model to fill, and no stage fog over the real pixels.
+ */
+export function showView(scene: ThreeScene, view: "camera" | "model" | "look") {
   const flipped: Object3D[] = [];
   const uniforms: { u: { value: number }; was: number }[] = [];
   scene.traverse((o) => {
@@ -142,7 +235,7 @@ export function showView(scene: ThreeScene, view: "camera" | "model") {
       const u = (o.material as ShaderMaterial).uniforms?.unknown as { value: number } | undefined;
       if (u) {
         uniforms.push({ u, was: u.value });
-        u.value = view === "model" ? 1 : 0;
+        u.value = view === "camera" ? 0 : 1;
       }
     }
   });
@@ -151,6 +244,9 @@ export function showView(scene: ThreeScene, view: "camera" | "model") {
   if (view === "model") {
     scene.background = UNKNOWN_GRAY;
     if (fog) scene.fog = new Fog(UNKNOWN_GRAY, (fog as Fog).near ?? 14, (fog as Fog).far ?? 46);
+  } else if (view === "look") {
+    scene.background = LOOK_KEY;
+    scene.fog = null;
   }
   return () => {
     for (const o of flipped) o.visible = !o.visible;
@@ -181,6 +277,18 @@ const depthFragment = /* glsl */ `
     if (uHasMap && texture2D(uMap, vUv).a < 0.5) discard;
     float inv = (1.0 / max(vDepth, 0.001) - 1.0 / uFar) / (1.0 / uNear - 1.0 / uFar);
     gl_FragColor = vec4(vec3(clamp(inv, 0.0, 1.0)), 1.0);
+  }
+`;
+
+/** The cast's pictures white (cut-outs keep their outlines), everything else black. */
+const flatFragment = /* glsl */ `
+  uniform float uWhite;
+  uniform sampler2D uMap;
+  uniform bool uHasMap;
+  varying vec2 vUv;
+  void main() {
+    if (uHasMap && texture2D(uMap, vUv).a < 0.5) discard;
+    gl_FragColor = vec4(vec3(uWhite), 1.0);
   }
 `;
 
@@ -254,11 +362,37 @@ export function makeCapture(
     const guide = shot("camera");
     const blocking = shot("model");
     const sharpLook = (() => {
-      const restore = showView(scene, "camera");
+      const restore = showView(scene, "look");
       try {
         renderer.render(gl, scene, cam, blockingLook(look()), out);
         return read(gl, out, width, height);
       } finally {
+        restore();
+      }
+    })();
+    // Director v2's place alone in the camera view (its photo in 3D, the world around it, gaps gray), the cast's pictures
+    // and their shadows left out: what a re-shoot from a new angle gets (server/director-real). The A40 test: with the
+    // world around it the re-shot astronaut came out whole; with only gray around it, black space and his tears kept.
+    const setOnly = (() => {
+      let photoSet = false;
+      scene.traverse((o) => {
+        const u = o.userData[PLACE_SET] && o instanceof Mesh ? ((o.material as ShaderMaterial).uniforms?.photoSet as { value: number } | undefined) : undefined;
+        if (u && u.value > 0.5) photoSet = true;
+      });
+      if (!photoSet) return null;
+      const restore = showView(scene, "look");
+      const cast: Object3D[] = [];
+      scene.traverse((o) => {
+        if (o.userData[SUBJECT] && o.visible) {
+          o.visible = false;
+          cast.push(o);
+        }
+      });
+      try {
+        renderer.render(gl, scene, cam, blockingLook(look()), out);
+        return read(gl, out, width, height);
+      } finally {
+        for (const o of cast) o.visible = true;
         restore();
       }
     })();
@@ -366,6 +500,57 @@ export function makeCapture(
       return pixels;
     })();
 
+    // The cast's own pictures as the camera view shows them, white on black, behind whatever of the place covers them:
+    // where a kept shot re-shot from a new angle puts them back (server/director-real).
+    const cuts = (() => {
+      const restore = showView(scene, "look");
+      const swapped: { mesh: Mesh; material: Material | Material[] }[] = [];
+      const hiddenNow: Object3D[] = [];
+      scene.traverse((o) => {
+        if (!(o instanceof Mesh) || !o.visible || !o.layers.isEnabled(0)) return;
+        const placeUnknown = o.userData[PLACE_SET] ? ((o.material as ShaderMaterial).uniforms?.unknown as { value: number } | undefined) : undefined;
+        if (placeUnknown) {
+          placeUnknown.value = 2;
+          return;
+        }
+        if (o.userData[NO_DEPTH]) {
+          o.visible = false;
+          hiddenNow.push(o);
+          return;
+        }
+        const src = (Array.isArray(o.material) ? o.material[0] : o.material) as Material & { map?: Texture | null };
+        const cutout = (src.userData.cutoutMap as Texture | undefined) ?? (src.transparent || src.alphaTest > 0 ? src.map : null);
+        swapped.push({ mesh: o, material: o.material });
+        o.material = new ShaderMaterial({
+          vertexShader: depthVertex,
+          fragmentShader: flatFragment,
+          uniforms: { uWhite: { value: o.userData[SUBJECT] ? 1 : 0 }, uMap: { value: cutout ?? null }, uHasMap: { value: Boolean(cutout) } },
+          side: src.side,
+        });
+      });
+      const prev = { background: scene.background, fog: scene.fog, clear: gl.getClearColor(new Color()), alpha: gl.getClearAlpha() };
+      scene.background = null;
+      scene.fog = null;
+      const rt = new WebGLRenderTarget(width, height, { samples: 4 });
+      gl.setRenderTarget(rt);
+      gl.setClearColor(0x000000, 1);
+      gl.clear();
+      gl.render(scene, cam);
+      gl.setRenderTarget(null);
+      gl.setClearColor(prev.clear, prev.alpha);
+      const pixels = read(gl, rt, width, height);
+      rt.dispose();
+      for (const { mesh, material } of swapped) {
+        (mesh.material as Material).dispose();
+        mesh.material = material;
+      }
+      for (const o of hiddenNow) o.visible = true;
+      scene.background = prev.background;
+      scene.fog = prev.fog;
+      restore();
+      return pixels;
+    })();
+
     // Depth pass of the blocking set: every mesh draws its inverse depth, cutouts keep their silhouettes.
     const restore = showView(scene, "model");
     const { near, far } = depthRange(scene, cam.position);
@@ -419,14 +604,16 @@ export function makeCapture(
     scene.fog = prevFog;
     restore();
 
-    const [guideBlob, blockingBlob, depthBlob, plateBlob, idsBlob, lookBlob] = await Promise.all([
+    const [guideBlob, blockingBlob, depthBlob, plateBlob, idsBlob, lookBlob, setBlob, cutsBlob] = await Promise.all([
       toBlob(guide, width, height),
       toBlob(blocking, width, height),
       toBlob(depth, width, height),
       toBlob(plate, width, height),
       toBlob(ids, width, height),
       toBlob(sharpLook, width, height),
+      setOnly ? toBlob(setOnly, width, height) : Promise.resolve(null),
+      toBlob(cuts, width, height),
     ]);
-    return { guide: guideBlob, blocking: blockingBlob, depth: depthBlob, plate: plateBlob, ids: idsBlob, look: lookBlob, boxes, width, height };
+    return { guide: guideBlob, blocking: blockingBlob, depth: depthBlob, plate: plateBlob, ids: idsBlob, look: lookBlob, set: setBlob, cuts: cutsBlob, boxes, width, height };
   };
 }

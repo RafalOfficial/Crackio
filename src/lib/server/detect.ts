@@ -19,7 +19,7 @@ import { getSettings } from "./settings";
 export type Box = [number, number, number, number];
 export type Thing = { id: string; label: string; detail: string; box: Box };
 
-const CACHE = path.join(DATA_DIR, "cache", "detect");
+const CACHE = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "detect");
 /** Bump when the prompts or the reading change, so pictures are looked at again. */
 const VERSION = 2;
 const GEMINI = "comfy:google/gemini-3.5-flash";
@@ -63,16 +63,16 @@ Boxes hug the visible pixels, in 0-1000 coordinates of this crop (x0, x1 from th
 Answer with JSON only: {"whole": [x0, y0, x1, y1], "parts": [{"label": "one to three words", "detail": "a short description, e.g. orange beak", "box": [x0, y0, x1, y1]}]}`;
 
 async function cached<T>(key: string, make: () => Promise<T | null>): Promise<T | null> {
-  const file = path.join(CACHE, `${createHash("sha1").update(`${VERSION}:${key}`).digest("hex")}.json`);
+  const file = path.join(/*turbopackIgnore: true*/ CACHE, `${createHash("sha1").update(`${VERSION}:${key}`).digest("hex")}.json`);
   try {
-    return JSON.parse(await fs.readFile(file, "utf8")) as T;
+    return JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ file, "utf8")) as T;
   } catch {
     /* not looked at yet */
   }
   const out = await make();
   if (out !== null) {
-    await fs.mkdir(CACHE, { recursive: true });
-    await fs.writeFile(file, JSON.stringify(out)).catch(() => {});
+    await fs.mkdir(/*turbopackIgnore: true*/ CACHE, { recursive: true });
+    await fs.writeFile(/*turbopackIgnore: true*/ file, JSON.stringify(out)).catch(() => {});
   }
   return out;
 }
@@ -121,7 +121,13 @@ function readThings(list: unknown, idPrefix: string, max: number): Thing[] {
     if (!box || !label) continue;
     const detail = typeof raw.detail === "string" && raw.detail.trim() ? raw.detail.trim().slice(0, 120) : label;
     // The same thing twice (same name, nearly the same box) is one thing.
-    if (out.some((t) => t.label.toLowerCase() === label.toLowerCase() && overlap(t.box, box) > 0.8)) continue;
+    const named = out.filter((t) => t.label.toLowerCase() === label.toLowerCase());
+    if (named.some((t) => overlap(t.box, box) > 0.8)) continue;
+    // A model that loops writes one thing over and over, in the same words, with a box that creeps along ("flower pot:
+    // silver pot with pink tulips on shelf" came back 14 times). The same words on boxes that overlap are one thing,
+    // and a list keeps four of a kind at most (three pots on a shelf are real; fourteen are a loop).
+    const twins = named.filter((t) => t.detail.toLowerCase() === detail.toLowerCase());
+    if (twins.some((t) => overlap(t.box, box) > 0.3) || twins.length >= 4) continue;
     out.push({ id: `${idPrefix}${out.length + 1}`, label, detail, box });
     if (out.length >= max) break;
   }
@@ -133,7 +139,7 @@ function readThings(list: unknown, idPrefix: string, max: number): Thing[] {
  * is complete (Crackio's own eyes write them one by one; another model answers all at once).
  */
 export async function detectThings(file: string, signal?: AbortSignal, onThings?: (things: Thing[]) => void): Promise<{ things: Thing[] } | null> {
-  const bytes = await fs.readFile(file);
+  const bytes = await fs.readFile(/*turbopackIgnore: true*/ file);
   const prefer = await eyes();
   return cached(keyFor(`things:${createHash("sha1").update(bytes).digest("hex")}`, prefer), async () => {
     let shown = 0;
@@ -183,7 +189,7 @@ function cropAround(box: Box, width: number, height: number) {
  * picture's coordinates; and the thing's own box, tightened from the close look.
  */
 export async function detectParts(file: string, parent: { id: string; label: string; detail: string; box: Box }, signal?: AbortSignal): Promise<{ box: Box; parts: Thing[] } | null> {
-  const bytes = await fs.readFile(file);
+  const bytes = await fs.readFile(/*turbopackIgnore: true*/ file);
   const prefer = await eyes();
   const key = keyFor(`parts:${createHash("sha1").update(bytes).digest("hex")}:${parent.box.map(Math.round).join(",")}:${parent.label.toLowerCase()}`, prefer);
   return cached(key, async () => {
@@ -197,9 +203,9 @@ export async function detectParts(file: string, parent: { id: string; label: str
     const long = Math.max(crop.width, crop.height);
     const target = Math.min(1536, Math.max(1024, long));
     const data = await img.extract(crop).resize({ width: crop.width >= crop.height ? target : undefined, height: crop.height > crop.width ? target : undefined, kernel: "lanczos3" }).jpeg({ quality: 92 }).toBuffer();
-    await fs.mkdir(CACHE, { recursive: true });
-    const tmp = path.join(CACHE, `crop-${createHash("sha1").update(key).digest("hex")}.jpg`);
-    await fs.writeFile(tmp, data);
+    await fs.mkdir(/*turbopackIgnore: true*/ CACHE, { recursive: true });
+    const tmp = path.join(/*turbopackIgnore: true*/ CACHE, `crop-${createHash("sha1").update(key).digest("hex")}.jpg`);
+    await fs.writeFile(/*turbopackIgnore: true*/ tmp, data);
     try {
       const answer = await askText({
         instructions: PARTS(parent.label, parent.detail),
@@ -231,7 +237,7 @@ export async function detectParts(file: string, parent: { id: string; label: str
         .filter((p) => area(p.box) < area(box) * 0.92);
       return { box, parts };
     } finally {
-      await fs.rm(tmp, { force: true }).catch(() => {});
+      await fs.rm(/*turbopackIgnore: true*/ tmp, { force: true }).catch(() => {});
     }
   });
 }

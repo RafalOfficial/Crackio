@@ -7,18 +7,19 @@ import { ArrowUpRight, Cpu, HardDrive, Layers, LoaderCircle, MemoryStick, Puzzle
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { SetupComfy } from "@/components/local/SetupComfy";
 import { ConnectCloud } from "@/components/local/ConnectCloud";
-import { AddMachine } from "@/components/local/LocalView";
+import { AddMachine } from "@/components/local/AddMachine";
 import { useSetup, useSetupStore, announce } from "@/lib/hooks/use-setup";
 import { setRunOn } from "@/lib/hooks/use-run-on";
 import { reloadLocal } from "@/lib/hooks/use-local";
 import type { SetupMachine, SetupSnapshot } from "@/lib/setup/types";
 import { cn } from "@/lib/cn";
-import { Heading, KitMark, Lamp, Loading, MachineStrip, ProblemCard, Tape, Verdict } from "./parts";
+import { ConfirmButton, Heading, KitMark, Lamp, Loading, MachineStrip, ProblemCard, Tape, Verdict } from "./parts";
 import { KITS } from "@/lib/setup/kits";
 import { bytesText, countReady, gbText, machineTone, machineWords, pickMachine } from "./words";
 import { useLive } from "@/lib/hooks/use-live";
 import { LiveMeters } from "./LiveMeters";
 import { CostPanel, CreditLine, StartBox } from "./CloudMoney";
+import { COMFY_FLOOR, comfyOlder } from "@/lib/local/comfy-floor";
 
 /**
  * Settings → Machines: every computer Crackio runs on, one at a time: what it is, whether it answers, its helper, where
@@ -161,11 +162,24 @@ function MachineDetail({ m, snap }: { m: SetupMachine; snap: SetupSnapshot }) {
                 </Button>
               ) : null}
               {m.kind !== "this-computer" ? (
-                <Button variant="ghost" size="sm" onClick={() => void forget()} disabled={Boolean(busy)}>
+                <ConfirmButton confirm={`Forget ${m.label}`} onConfirm={forget} disabled={Boolean(busy)} busy={busy === "forget"}>
                   Forget it
-                </Button>
+                </ConfirmButton>
               ) : null}
             </>
+          }
+        />
+      ) : null}
+      {m.online && m.kind === "rented" && comfyOlder(m.comfy.version) && m.cloud?.instance && m.cloud.provider !== "other" ? (
+        <ProblemCard
+          tone="needs"
+          title={`Its ComfyUI ${m.comfy.version} is too old for FLUX 3 Klein and MOSS-Image`}
+          why={`Crackio's models need ComfyUI ${COMFY_FLOOR} or newer. Connecting it again updates ComfyUI to its latest release and restarts it, in a few minutes.`}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void reconnect()} disabled={Boolean(busy)}>
+              {busy === "reconnect" ? <LoaderCircle size={14} className="animate-spin" /> : null}
+              Update ComfyUI
+            </Button>
           }
         />
       ) : null}
@@ -238,15 +252,22 @@ function MachineDetail({ m, snap }: { m: SetupMachine; snap: SetupSnapshot }) {
       {m.kind === "this-computer" ? (
         <section className="space-y-3">
           <Heading title="ComfyUI on this computer" note="Crackio installed it for this graphics card. Start, stop, share it on your network, or repair it." />
-          <SetupComfy onChange={() => void useSetupStore.getState().reload(true)} />
+          <SetupComfy bare onChange={() => void useSetupStore.getState().reload(true)} />
         </section>
       ) : null}
       {m.kind !== "this-computer" && !m.metered ? (
         <p className="text-[12.5px] text-haze">
           Not using it any more?{" "}
-          <button type="button" onClick={() => void forget()} className="font-semibold text-fog underline-offset-2 hover:text-paper hover:underline">
+          <ConfirmButton
+            look="text"
+            confirm={`Yes, forget ${m.label}`}
+            onConfirm={forget}
+            disabled={Boolean(busy)}
+            busy={busy === "forget"}
+            className="font-semibold text-fog underline-offset-2 hover:text-paper hover:underline"
+          >
             Forget {m.label}
-          </button>
+          </ConfirmButton>
           {m.kind === "rented" ? " (stopping it above only pauses it: give it back at your cloud to stop paying for its disk)." : "."}
         </p>
       ) : null}
@@ -277,15 +298,15 @@ function AddComputer({ snap }: { snap: SetupSnapshot }) {
     <div className="mt-8 space-y-8">
       <section className="space-y-3">
         <Heading title="This computer" note={here?.comfy.installed ? `It runs ComfyUI already${here.gpu ? `, on its ${here.gpu.name}` : ""}.` : "Crackio installs ComfyUI for its graphics card: Python, PyTorch for the card, ComfyUI and Crackio's helper."} />
-        <SetupComfy onChange={refresh} />
+        <SetupComfy bare onChange={refresh} />
       </section>
       <section className="space-y-3">
         <Heading title="A rented GPU" note="Paste the SSH command or link your cloud gives you, or let your vast.ai or RunPod key bring every box you rent. About a minute and a half." />
-        <ConnectCloud onConnected={refresh} />
+        <ConnectCloud bare onConnected={refresh} />
       </section>
       <section className="space-y-3">
         <Heading title="A computer on your network" note="A Mac or PC on the same network running ComfyUI started with --listen. Crackio sets tools up on it too." />
-        <AddMachine onAdded={refresh} />
+        <AddMachine onAdded={refresh} bare />
       </section>
       <section className="space-y-3">
         <Heading title="Pay per job" note="RunPod Serverless endpoints start a GPU for each job and bill it; Comfy Cloud runs hosted models on your Comfy key." />

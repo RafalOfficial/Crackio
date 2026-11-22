@@ -40,11 +40,11 @@ export function recentTakes(): Promise<Take[]> {
 async function readTakes(): Promise<Take[]> {
   // Not traced by Turbopack: tracing data/ makes the dev server rebuild (and reload open pages) on every database write.
   const dir = path.join(/*turbopackIgnore: true*/ DATA_DIR, "recipes");
-  const files = (await fs.readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith(".json"));
+  const files = (await fs.readdir(/*turbopackIgnore: true*/ dir).catch(() => [] as string[])).filter((f) => f.endsWith(".json"));
   const out: Take[] = [];
   for (const f of files) {
     try {
-      const j = JSON.parse(await fs.readFile(path.join(/*turbopackIgnore: true*/ dir, f), "utf8")) as {
+      const j = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, f), "utf8")) as {
         model?: string;
         tool?: string;
         createdAt?: number;

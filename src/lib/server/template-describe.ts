@@ -13,7 +13,7 @@ import type { SlotKind } from "@/lib/templates/types";
  * get it beside the photo, so the swap matches it; Grok's clip editor, which takes words only, gets
  * nothing else. Read once per photo.
  */
-const DIR = path.join(DATA_DIR, "cache", "templates", "describe");
+const DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "templates", "describe");
 /** Bump when the instructions change. */
 const VERSION = 3;
 
@@ -62,7 +62,7 @@ ${SHAPE}`,
 
 async function cached(file: string) {
   try {
-    return JSON.parse(await fs.readFile(file, "utf8")) as { version: number; description: PhotoDescription };
+    return JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ file, "utf8")) as { version: number; description: PhotoDescription };
   } catch {
     return null;
   }
@@ -70,9 +70,9 @@ async function cached(file: string) {
 
 /** The description of a photo for a slot of this kind (cached by the photo's bytes). */
 export async function describePhoto(photo: string, kind: SlotKind): Promise<PhotoDescription | null> {
-  const bytes = await fs.readFile(photo);
+  const bytes = await fs.readFile(/*turbopackIgnore: true*/ photo);
   const key = createHash("sha1").update(bytes).update(`|${kind}|${VERSION}`).digest("hex");
-  const file = path.join(DIR, `${key}.json`);
+  const file = path.join(/*turbopackIgnore: true*/ DIR, `${key}.json`);
   const hit = await cached(file);
   if (hit?.version === VERSION) return hit.description;
 
@@ -93,7 +93,7 @@ export async function describePhoto(photo: string, kind: SlotKind): Promise<Phot
   const tidy = (s: unknown, n: number) => (typeof s === "string" ? s.replace(/\s+/g, " ").trim().replace(/\.$/, "").slice(0, n) : "");
   const description: PhotoDescription = { noun: tidy(raw.noun, 80) || "the subject", look: tidy(raw.look, 900), traits: tidy(raw.traits, 300), wearing: tidy(raw.wearing, 400) };
   if (!description.look) return null;
-  await fs.mkdir(DIR, { recursive: true });
-  await fs.writeFile(file, JSON.stringify({ version: VERSION, description }));
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ file, JSON.stringify({ version: VERSION, description }));
   return description;
 }

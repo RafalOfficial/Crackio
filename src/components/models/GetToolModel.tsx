@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Download, LoaderCircle, Square, TriangleAlert, X } from "lucide-react";
+import { useTopPills } from "@/components/settings/SetupHint";
+import { cn } from "@/lib/cn";
 import { DEMO } from "@/lib/demo/config";
-import { LOCAL_MODELS } from "@/lib/local/catalog";
 import { prefetchLocal, reloadLocal, useLocalStore, useLocalWatch } from "@/lib/hooks/use-local";
 import { useModelsStore } from "@/lib/hooks/use-models";
 import { formatSeconds, mainGpu, shortGpuName } from "@/lib/local/fit";
@@ -53,10 +55,14 @@ function readOff(): string[] {
 /**
  * A tool's own open model (Angles: Qwen Angles) offered on the GPU its jobs go to, while it isn't there: a rented box
  * starts without it, and nothing downloads unless you ask. One click fetches the files that machine lacks (a model that
- * shares them with one already there costs only the rest), the bar shows how far, and once it's in, the tool runs on it.
+ * shares them with one already there costs only the rest), the line along the pill shows how far, and once it's in, the
+ * tool runs on it. A pop-up like every set-up prompt: a pill floating at the top of the page (under Settings' one when
+ * that's up), never a card that pushes the tool's panel down.
  */
 export function GetToolModel({ id, why, onReady }: { id: string; why: string; onReady: (id: string) => void }) {
-  const model = useMemo(() => LOCAL_MODELS.find((m) => m.crackio === id) ?? null, [id]);
+  // From the catalog the model library reads (loaded with your machines below), not a copy of it in the page's code.
+  const catalog = useLocalStore((s) => s.catalog);
+  const model = useMemo(() => catalog?.find((m) => m.crackio === id) ?? null, [catalog, id]);
   const status = useLocalStore((s) => s.status);
   const [off, setOff] = useState(readOff);
   const [working, setWorking] = useState(false);
@@ -64,6 +70,16 @@ export function GetToolModel({ id, why, onReady }: { id: string; why: string; on
   // The machine a download was started on from here: the tool switches to the model once it's in.
   const started = useRef<string | null>(null);
   useEffect(() => prefetchLocal(), []);
+  // Only while the tool is on screen: Next keeps visited pages alive but hidden, and the pill lives outside the page.
+  const [onScreen, setOnScreen] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setOnScreen(true), 0);
+    return () => {
+      clearTimeout(t);
+      setOnScreen(false);
+    };
+  }, []);
+  const under = useTopPills((s) => s.setup);
 
   const spot = status && model ? spotFor(status, model) : null;
   const state = spot ? installState(spot.row.fit.variant, spot.target) : null;
@@ -80,7 +96,7 @@ export function GetToolModel({ id, why, onReady }: { id: string; why: string; on
       .then(() => onReady(id));
   }, [model, status, id, onReady]);
 
-  if (DEMO || !model || !spot || !state || state.installed) return null;
+  if (DEMO || !onScreen || !model || !spot || !state || state.installed) return null;
   const key = `${id}@${spot.target.id}`;
   const downloading = state.active.length > 0;
   if (off.includes(key) && !downloading) return null;
@@ -108,68 +124,70 @@ export function GetToolModel({ id, why, onReady }: { id: string; why: string; on
     }
   }
 
-  return (
-    <div className="squircle relative rounded-[16px] bg-spike/[0.06] p-3 shadow-[inset_0_0_0_1px_rgb(255_91_46/0.28)]">
-      {downloading ? null : (
-        <button
-          type="button"
-          onClick={notNow}
-          aria-label="Not now"
-          title="Not now"
-          className="press absolute right-2 top-2 grid size-7 place-items-center rounded-[9px] text-haze hover:bg-white/[0.06] hover:text-paper"
-        >
-          <X size={14} />
-        </button>
-      )}
-      <p className="pr-8 text-[13.5px] font-semibold leading-snug text-paper">
-        {downloading ? `Getting ${model.name} on your ${spot.gpu}` : `${model.name} isn’t on your ${spot.gpu} yet`}
-      </p>
-      <p className="mt-1 text-[12.5px] leading-relaxed text-fog">{why}</p>
-      <p className="mt-1 text-[11.5px] text-haze">
-        {[spot.row.fit.seconds !== null ? `~${formatSeconds(spot.row.fit.seconds)} a picture there` : "", model.licence.commercial === "no" ? "Non-commercial licence" : ""].filter(Boolean).join(" · ")}
-      </p>
-      <div className="mt-2.5">
+  const part = Math.max(0.02, Math.min(1, state.done / Math.max(1, state.total)));
+  const facts = [why, spot.row.fit.seconds !== null ? `~${formatSeconds(spot.row.fit.seconds)} a picture there` : "", model.licence.commercial === "no" ? "Non-commercial licence" : ""].filter(Boolean).join(" · ");
+  return createPortal(
+    <div className={cn("pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4", under ? "top-[7.25rem] lg:top-[64px]" : "top-16 lg:top-4")} role="status">
+      <div className="pointer-events-auto relative flex max-w-[680px] items-center gap-3 overflow-hidden rounded-[22px] bg-[#1d1a22]/95 py-1.5 pl-4 pr-1.5 text-[13px] text-fog shadow-[0_12px_40px_rgb(0_0_0/0.45),inset_0_0_0_1px_rgb(255_255_255/0.08)]">
+        {failed ? <TriangleAlert size={14} className="shrink-0 text-tally" /> : <Download size={14} className="shrink-0 text-spike" />}
+        <span className="min-w-0 py-0.5">
+          <span className={cn("block truncate", failed ? "text-tally" : "text-fog")} title={failed ?? undefined}>
+            {failed ? (
+              failed
+            ) : downloading ? (
+              <>
+                Getting <span className="font-semibold text-paper">{model.name}</span> on your {spot.gpu}
+                <span className="tabular text-haze"> · {state.checking ? "checking the files…" : `${gb(state.done / 1024 ** 3)} of ${gb(state.total / 1024 ** 3)}`}</span>
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-paper">{model.name}</span> isn&rsquo;t on your {spot.gpu} yet
+              </>
+            )}
+          </span>
+          {facts ? (
+            <span className="block truncate text-[11.5px] text-haze" title={facts}>
+              {facts}
+            </span>
+          ) : null}
+        </span>
         {downloading ? (
-          <>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.12]">
-              <div className="h-full rounded-full bg-spike transition-[width] duration-700" style={{ width: `${Math.max(2, (state.done / Math.max(1, state.total)) * 100)}%` }} />
-            </div>
-            <div className="mt-1.5 flex items-center justify-between gap-2">
-              <span className="truncate text-[11.5px] text-fog">{state.checking ? "Checking the files…" : `${gb(state.done / 1024 ** 3)} of ${gb(state.total / 1024 ** 3)}`}</span>
-              <button
-                type="button"
-                onClick={() =>
-                  void stopDownloads(
-                    state.active.map((d) => d.id),
-                    spot.target.id,
-                  ).then(() => reloadLocal())
-                }
-                className="press inline-flex h-7 items-center gap-1 rounded-full bg-white/[0.12] px-2.5 text-[11px] font-semibold text-paper hover:bg-white/[0.18]"
-              >
-                <Square size={10} /> Stop
-              </button>
-            </div>
-          </>
+          <button
+            type="button"
+            onClick={() =>
+              void stopDownloads(
+                state.active.map((d) => d.id),
+                spot.target.id,
+              ).then(() => reloadLocal())
+            }
+            className="press inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-white/[0.1] px-3 text-[12px] font-semibold text-paper hover:bg-white/[0.16]"
+          >
+            <Square size={10} /> Stop
+          </button>
         ) : roomy ? (
           <button
             type="button"
             onClick={() => void get()}
             disabled={working}
-            className="lip press inline-flex h-8 items-center gap-1.5 rounded-full bg-spike px-3 text-[12px] font-bold text-spike-ink [--lip:var(--color-spike-lip)] hover:bg-spike-hi disabled:opacity-70"
+            className="press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-spike px-3.5 text-[12.5px] font-bold text-spike-ink hover:bg-spike-hi disabled:opacity-70"
           >
             {working ? <LoaderCircle size={13} className="animate-spin" /> : <Download size={13} strokeWidth={2.6} />} {failed ? "Try again" : "Get it"} · {gb(state.missingGb)}
           </button>
         ) : (
-          <p className="text-[12px] text-tungsten">
-            Needs {gb(state.missingGb)} free on the {spot.gpu}; it has {gb(spot.diskGb)}.
-          </p>
+          <span className="shrink-0 text-[12px] text-tungsten">
+            Needs {gb(state.missingGb)} free; it has {gb(spot.diskGb)}
+          </span>
         )}
+        {downloading ? null : (
+          <button type="button" onClick={notNow} aria-label="Not now" title="Not now" className="press grid size-7 shrink-0 place-items-center rounded-full text-haze hover:bg-white/[0.06] hover:text-paper">
+            <X size={14} />
+          </button>
+        )}
+        {downloading ? (
+          <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[2px] origin-left bg-spike transition-transform duration-700 ease-out" style={{ transform: `scaleX(${part})` }} />
+        ) : null}
       </div>
-      {failed ? (
-        <p className="mt-1.5 flex items-start gap-1 text-[11.5px] text-tally">
-          <TriangleAlert size={12} className="mt-px shrink-0" /> {failed}
-        </p>
-      ) : null}
-    </div>
+    </div>,
+    document.body,
   );
 }

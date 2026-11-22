@@ -153,7 +153,7 @@ prompts and to check Swap's drawings.
   - Lips only (1.10.3): `area` `lips` takes only HuMo's lips and the mouth's opening (a narrow margin round them) and lays them onto LatentSync's frames, whose skin and jaw already move with the new words. On some smooth faces HuMo draws stubble-like texture above the lip whatever its prompt or settings; LatentSync's skin there is clean. Sync came out higher too. `mouth` is the old area.
   - The colour pull (both nodes, 1.10.3) leaves out ring pixels that show different things in the drawing and the clip, and caps its shift. A head turning into her hair used to turn the whole mouth dark grey, with blue teeth.
   - Files, all in ComfyUI's own folders: `humo_17B_fp8_e4m3fn` (Comfy-Org/HuMo, Apache-2.0), `whisper_large_v3_fp16`, `umt5_xxl_fp8_e4m3fn_scaled` and `wan_2.1_vae`.
-  - `humo_17B_mxfp8_crackio` is used instead where it's there. It's Crackio's MXFP8 build of Comfy-Org's fp16 HuMo: every Linear weight in MXFP8, the rest fp16. It gives the same pictures, and draws 1.7x faster on an RTX 5090, whose tensor cores do MXFP8 natively.
+  - `humo_17B_mxfp8_crackio` is used instead where it's there. It's Crackio's MXFP8 build of Comfy-Org's fp16 HuMo: every Linear weight in MXFP8, the rest fp16. It gives the same pictures, and draws 1.7x faster on an RTX 5090, whose tensor cores do MXFP8 natively. It's on Hugging Face as [TR4F/crackio-humo-17b-mxfp8](https://huggingface.co/TR4F/crackio-humo-17b-mxfp8) (Apache-2.0, with its conversion script), and Settings offers it on RTX 50 cards.
   - `GET /crackio/lipsync` says which of them are here (`best`, and `best_fast` for the MXFP8 build).
 - **Crackio Audio Edit (HuMo)** edits a clip to new speech without a mask, FlowAlign-style (experimental).
 

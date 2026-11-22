@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { ChartColumn, ChevronLeft, Boxes, HardDrive, KeyRound, Layers, LayoutGrid, Server, SlidersHorizontal, Stethoscope, type LucideIcon } from "lucide-react";
+import { Bot, ChartColumn, ChevronLeft, Boxes, HardDrive, KeyRound, Layers, LayoutGrid, Radar, Server, SlidersHorizontal, Sparkles, Stethoscope, type LucideIcon } from "lucide-react";
 import { useSetup } from "@/lib/hooks/use-setup";
 import { DEMO } from "@/lib/demo/config";
 import { cn } from "@/lib/cn";
@@ -13,7 +13,7 @@ import { findProblems } from "./problems";
 import type { SetupSnapshot } from "@/lib/setup/types";
 
 /**
- * Settings: one place for every machine, tool, model, key and preference. A rail of sections on the left (with a live
+ * Settings: one place for every machine, tool, model, LoRA, key and preference. A rail of sections on the left (with a live
  * fact beside each, so the rail itself reads as a health check); on phones the rail is Settings' home list and each
  * section opens as its own page with a way back.
  */
@@ -37,7 +37,9 @@ const SECTIONS: Section[] = [
       return m ? `${countReady(m)} ready` : null;
     },
   },
+  { href: "/settings/rent", label: "Rent", icon: Radar },
   { href: "/settings/models", label: "Models", icon: Layers },
+  { href: "/settings/loras", label: "LoRAs", icon: Sparkles },
   {
     href: "/settings/storage",
     label: "Storage",
@@ -51,6 +53,7 @@ const SECTIONS: Section[] = [
   },
   { href: "/settings/usage", label: "Usage", icon: ChartColumn },
   { href: "/settings/accounts", label: "Accounts", icon: KeyRound },
+  { href: "/settings/agents", label: "Agents", icon: Bot },
   { href: "/settings/preferences", label: "Preferences", icon: SlidersHorizontal },
 ];
 

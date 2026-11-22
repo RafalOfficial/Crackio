@@ -1,6 +1,6 @@
 import "server-only";
 import { EngineError } from "@/lib/engines/types";
-import { launch } from "./render";
+import { launch, within } from "./render";
 
 /**
  * Sound made from code, the way a motion designer scores a piece with a synth: the agent writes Web
@@ -178,9 +178,13 @@ export async function renderSound({ code, duration, signal }: { code: string; du
     // Nothing leaves the page: sound is pure code.
     await page.route("**/*", (route) => route.abort());
     await page.setContent(PAGE);
-    const r = await page
-      .evaluate(async ([c, d]) => (window as unknown as { __render: (c: string, d: number, sr: number) => Promise<{ wav: string; peak: number; rms: number }> }).__render(c as string, d as number, 48000), [code, duration] as const)
-      .catch((err: unknown) => {
+    // Code that never finishes (an endless loop) fails the step instead of holding the turn.
+    const r = await within(
+      page.evaluate(async ([c, d]) => (window as unknown as { __render: (c: string, d: number, sr: number) => Promise<{ wav: string; peak: number; rms: number }> }).__render(c as string, d as number, 48000), [code, duration] as const),
+      120_000 + duration * 2000,
+      `The sound code ran for over ${Math.round(120 + duration * 2)} s: an endless loop, or a promise that never settles?`,
+    ).catch((err: unknown) => {
+        if (err instanceof EngineError) throw err;
         if (signal.aborted) throw new EngineError("Cancelled.");
         throw new EngineError(`The sound code failed: ${(err instanceof Error ? err.message : String(err)).replace(/^page\.evaluate:\s*/, "").slice(0, 400)}`);
       });

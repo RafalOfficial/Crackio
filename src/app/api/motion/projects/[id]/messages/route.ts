@@ -3,6 +3,7 @@ import { z } from "zod";
 import { saveGeneration } from "@/lib/server/db";
 import { runner } from "@/lib/server/runner";
 import { getProject, updateProject } from "@/lib/motion/store";
+import { validProjectId } from "@/lib/motion/workspace";
 import type { Generation } from "@/lib/generations/types";
 
 const Body = z.object({
@@ -27,7 +28,7 @@ const Body = z.object({
 /** Add your message and start the agent on it, in the background. */
 export async function POST(request: Request, ctx: RouteContext<"/api/motion/projects/[id]/messages">) {
   const { id } = await ctx.params;
-  if (!(await getProject(id))) return Response.json({ error: "Project not found" }, { status: 404 });
+  if (!validProjectId(id) || !(await getProject(id))) return Response.json({ error: "Project not found" }, { status: 404 });
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid message" }, { status: 400 });
   const body = parsed.data;

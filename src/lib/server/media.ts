@@ -59,7 +59,13 @@ export const MIME: Record<string, string> = {
 
 /** Resolve a URL Crackio handed out back to a file on disk. Returns null for anything else. */
 export function urlToPath(url: string): string | null {
-  const clean = decodeURIComponent(url.split("?")[0]);
+  let clean: string;
+  try {
+    clean = decodeURIComponent(url.split("?")[0]);
+  } catch {
+    // A broken escape ("%E0%A4%A") isn't one of Crackio's addresses (and used to end as an empty 500).
+    return null;
+  }
   const within = (root: string, rel: string) => {
     const p = path.resolve(/*turbopackIgnore: true*/ root, rel);
     return p.startsWith(root + path.sep) ? p : null;
@@ -75,12 +81,12 @@ export function urlToPath(url: string): string | null {
 export const mediaFiles = (urls: string[]) => urls.map(urlToPath).filter((p): p is string => Boolean(p));
 
 export async function saveOutputs(generationId: string, outputs: EngineOutput[]): Promise<MediaRef[]> {
-  await fs.mkdir(MEDIA_DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ MEDIA_DIR, { recursive: true });
   const saved = await Promise.all(
     outputs.map(async (out, i) => {
       const ext = EXT[out.mime] ?? "bin";
       const file = `${generationId}-${i}.${ext}`;
-      await fs.writeFile(path.join(/*turbopackIgnore: true*/ MEDIA_DIR, file), out.data);
+      await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ MEDIA_DIR, file), out.data);
       const kind = out.mime.startsWith("video/") ? "video" : out.mime.startsWith("audio/") ? "audio" : "image";
       let { width, height } = out;
       if (kind === "audio") {
@@ -111,21 +117,21 @@ export async function saveOutputs(generationId: string, outputs: EngineOutput[])
 
 /** Store an uploaded video, sound or text file as-is (Motion cuts, mixes and reads them). */
 export async function saveFileUpload<K extends "video" | "audio" | "file">(data: Buffer, ext: string, kind: K) {
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ UPLOADS_DIR, { recursive: true });
   const file = `${nanoid(12)}.${ext.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin"}`;
-  await fs.writeFile(path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, file), data);
+  await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, file), data);
   return { url: `/api/media/uploads/${file}`, kind };
 }
 
 /** Store an uploaded image, normalized (EXIF-rotated, capped at 2560px). */
 export async function saveUpload(data: Buffer) {
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ UPLOADS_DIR, { recursive: true });
   const img = sharp(data, { failOn: "none" }).rotate();
   const meta = await img.metadata();
   const hasAlpha = Boolean(meta.hasAlpha);
   const resized = img.resize({ width: 2560, height: 2560, fit: "inside", withoutEnlargement: true });
   const out = hasAlpha ? await resized.png().toBuffer({ resolveWithObject: true }) : await resized.jpeg({ quality: 92 }).toBuffer({ resolveWithObject: true });
   const file = `${nanoid(12)}.${hasAlpha ? "png" : "jpg"}`;
-  await fs.writeFile(path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, file), out.data);
+  await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, file), out.data);
   return { url: `/api/media/uploads/${file}`, width: out.info.width, height: out.info.height, hasAlpha };
 }

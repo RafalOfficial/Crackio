@@ -47,9 +47,10 @@ const shortName = (m: RunOnMachine, all: RunOnMachine[]) => (m.gpu && !all.some(
 export function RunOnMenu({ machines, runOn, onPicked, className }: { machines: RunOnMachine[]; runOn: string; onPicked?: () => void; className?: string }) {
   const shown = listedMachines(machines, runOn);
   const fastest = shown.filter((m) => m.hasModel && m.online && m.seconds !== null).sort((a, b) => a.seconds! - b.seconds!)[0];
-  async function pick(id: string) {
-    await setRunOn(id);
+  // The menu closes at once; the pick is saved behind it, and every time line looks again when it lands.
+  function pick(id: string) {
     onPicked?.();
+    void setRunOn(id).catch(() => undefined);
   }
   return (
     <div role="menu" aria-label="Run on" className={cn("space-y-0.5", className)}>

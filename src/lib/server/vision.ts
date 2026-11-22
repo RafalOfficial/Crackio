@@ -19,7 +19,7 @@ import { DATA_DIR, UPLOADS_DIR } from "./paths";
  * Weights are downloaded once into data/models (or CRACKIO_MODELS_DIR), pinned to a revision
  * and checked against their SHA-256. On Windows they run on the GPU through DirectML.
  */
-const MODELS_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.CRACKIO_MODELS_DIR || path.join(DATA_DIR, "models"));
+const MODELS_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.CRACKIO_MODELS_DIR || path.join(/*turbopackIgnore: true*/ DATA_DIR, "models"));
 const CACHE_DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "vision");
 
 export type VisionModelId = "depth" | "cutout" | "geometry";
@@ -82,7 +82,7 @@ export async function visionOnDisk(): Promise<Record<VisionModelId, { present: b
 }
 
 async function exists(file: string) {
-  return fs.stat(file).then(
+  return fs.stat(/*turbopackIgnore: true*/ file).then(
     (s) => s.isFile() && s.size > 0,
     () => false,
   );
@@ -90,7 +90,7 @@ async function exists(file: string) {
 
 async function sha256(file: string) {
   const hash = createHash("sha256");
-  const handle = await fs.open(file);
+  const handle = await fs.open(/*turbopackIgnore: true*/ file);
   try {
     for await (const chunk of handle.createReadStream()) hash.update(chunk as Buffer);
   } finally {
@@ -103,7 +103,7 @@ async function download(id: VisionModelId) {
   const m = MODELS[id];
   const target = path.join(/*turbopackIgnore: true*/ MODELS_DIR, m.file);
   if (await exists(target)) return target;
-  await fs.mkdir(MODELS_DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ MODELS_DIR, { recursive: true });
   const status = state.status[id];
   Object.assign(status, { state: "downloading", received: 0, total: m.bytes, error: undefined });
   const res = await fetch(m.url);
@@ -114,15 +114,15 @@ async function download(id: VisionModelId) {
   try {
     await pipeline(body, createWriteStream(partial));
   } catch (err) {
-    await fs.rm(partial, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ partial, { force: true });
     const full = /ENOSPC/.test(String(err));
     throw new Error(full ? "The disk is full, so the 3D tools couldn't be downloaded. Free some space and try again." : `Downloading the ${id} model failed.`);
   }
   if ((await sha256(partial)) !== m.sha256) {
-    await fs.rm(partial, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ partial, { force: true });
     throw new Error(`The downloaded ${id} model didn't match its checksum.`);
   }
-  await fs.rename(partial, target);
+  await fs.rename(/*turbopackIgnore: true*/ partial, target);
   return target;
 }
 
@@ -200,7 +200,7 @@ async function imageTensor(file: string, width: number, height: number) {
 }
 
 async function cacheKey(file: string, task: string) {
-  const s = await fs.stat(file);
+  const s = await fs.stat(/*turbopackIgnore: true*/ file);
   return createHash("sha1").update(`${PIPELINE_VERSION}|${task}|${file}|${s.size}|${s.mtimeMs}`).digest("hex").slice(0, 20);
 }
 
@@ -213,7 +213,7 @@ export type DepthResult = { width: number; height: number; /** Little-endian uin
 export async function estimateDepth(file: string): Promise<DepthResult> {
   const key = await cacheKey(file, "depth");
   const cached = path.join(/*turbopackIgnore: true*/ CACHE_DIR, `${key}.depth`);
-  const hit = await fs.readFile(cached).catch(() => null);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ cached).catch(() => null);
   if (hit) return decodeDepth(hit);
 
   const meta = await sharp(file, { failOn: "none" }).metadata();
@@ -239,8 +239,8 @@ export async function estimateDepth(file: string): Promise<DepthResult> {
     const v = Math.min(1, Math.max(0, (raw[i] - lo) / span));
     buf.writeUInt16LE(Math.round(v * 65535), 8 + i * 2);
   }
-  await fs.mkdir(CACHE_DIR, { recursive: true });
-  await fs.writeFile(cached, buf).catch(() => undefined);
+  await fs.mkdir(/*turbopackIgnore: true*/ CACHE_DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ cached, buf).catch(() => undefined);
   return decodeDepth(buf);
 }
 
@@ -330,7 +330,7 @@ function focalShift(points: Float32Array, valid: Uint8Array, width: number, heig
 export async function estimateGeometry(file: string): Promise<GeometryResult> {
   const key = await cacheKey(file, "geometry");
   const cached = path.join(/*turbopackIgnore: true*/ CACHE_DIR, `${key}.geometry`);
-  const hit = await fs.readFile(cached).catch(() => null);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ cached).catch(() => null);
   if (hit) return decodeGeometry(hit);
 
   const meta = await sharp(file, { failOn: "none" }).metadata();
@@ -400,8 +400,8 @@ export async function estimateGeometry(file: string): Promise<GeometryResult> {
     const disparity = (near / d - near / far) / (1 - near / far);
     buf.writeUInt16LE(Math.round(Math.min(1, Math.max(0, disparity)) * 65535), 24 + k * 2);
   }
-  await fs.mkdir(CACHE_DIR, { recursive: true });
-  await fs.writeFile(cached, buf).catch(() => undefined);
+  await fs.mkdir(/*turbopackIgnore: true*/ CACHE_DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ cached, buf).catch(() => undefined);
   return decodeGeometry(buf);
 }
 
@@ -426,7 +426,7 @@ export type MaskResult = { width: number; height: number; /** One byte per pixel
 export async function subjectMask(file: string): Promise<MaskResult> {
   const key = await cacheKey(file, "mask");
   const cached = path.join(/*turbopackIgnore: true*/ CACHE_DIR, `${key}.mask`);
-  const hit = await fs.readFile(cached).catch(() => null);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ cached).catch(() => null);
   if (hit) return decodeMask(hit);
 
   const S = 512;
@@ -445,8 +445,8 @@ export async function subjectMask(file: string): Promise<MaskResult> {
   }
   const share = covered / (S * S);
   if (share < 0.004 || share > 0.97) buf.fill(0, 8);
-  await fs.mkdir(CACHE_DIR, { recursive: true });
-  await fs.writeFile(cached, buf).catch(() => undefined);
+  await fs.mkdir(/*turbopackIgnore: true*/ CACHE_DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ cached, buf).catch(() => undefined);
   return decodeMask(buf);
 }
 
@@ -542,7 +542,7 @@ export async function cutout(file: string, sourceUrl: string): Promise<CutoutRes
   const cw = Math.min(W, maxX + pad + 1) - left;
   const ch = Math.min(H, maxY + pad + 1) - top;
   const rgb = await sharp(file, { failOn: "none" }).resize(W, H, { fit: "fill" }).removeAlpha().raw().toBuffer();
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ UPLOADS_DIR, { recursive: true });
   // Two passes: in one pipeline sharp crops before it joins the matte, which would misalign them.
   const rgba = await sharp(rgb, { raw: { width: W, height: H, channels: 3 } })
     .joinChannel(alpha, { raw: { width: W, height: H, channels: 1 } })

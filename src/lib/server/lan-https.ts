@@ -6,6 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { DATA_DIR } from "@/lib/server/paths";
+import { netAddresses } from "@/lib/server/net-addresses";
 
 /**
  * Crackio's secure address for the other devices on your network. Browsers only let a page use the microphone (and a
@@ -22,7 +23,7 @@ import { DATA_DIR } from "@/lib/server/paths";
  * CRACKIO_HTTPS_PORT picks the port.
  */
 
-const DIR = path.join(DATA_DIR, "certs");
+const DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "certs");
 const FILES = { caKey: "lan-ca.key", ca: "lan-ca.pem", key: "lan.key", cert: "lan.pem", meta: "lan.json", on: "lan-on" } as const;
 /** Apple refuses server certificates valid for more than 825 days. */
 const LEAF_DAYS = 800;
@@ -43,7 +44,7 @@ export function lanAllowed() {
 export async function lanWanted() {
   if (!lanAllowed()) return false;
   if (process.env.CRACKIO_LAN_HTTPS === "1") return true;
-  return fs.access(path.join(DIR, FILES.on)).then(
+  return fs.access(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.on)).then(
     () => true,
     () => false,
   );
@@ -60,7 +61,7 @@ export function lanHttpsPort() {
 }
 
 export async function lanCaPem() {
-  return fs.readFile(path.join(DIR, FILES.ca), "utf8").catch(() => null);
+  return fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.ca), "utf8").catch(() => null);
 }
 
 /* ------------------------------------------------------------------ DER, just enough for two certificates */
@@ -156,7 +157,7 @@ const privateV4 = (ip: string) => PRIVATE_V4.some(([net4, mask]) => v4(ip).every
 /** This computer's addresses on its networks, and its names. */
 function here() {
   const ips = new Set(["127.0.0.1"]);
-  for (const addrs of Object.values(os.networkInterfaces())) for (const a of addrs ?? []) if (a.family === "IPv4" && !a.internal && privateV4(a.address)) ips.add(a.address);
+  for (const a of netAddresses()) if (a.family === "IPv4" && !a.internal && privateV4(a.address)) ips.add(a.address);
   const host = os
     .hostname()
     .toLowerCase()
@@ -168,12 +169,12 @@ function here() {
 /* ------------------------------------------------------------------ the certificates */
 
 async function read(file: string) {
-  return fs.readFile(path.join(DIR, file), "utf8").catch(() => null);
+  return fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, file), "utf8").catch(() => null);
 }
 
 /** The authority (made once, kept) and a server certificate for this computer's current addresses (remade when they change). */
 async function certificates() {
-  await fs.mkdir(DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
   const { ips, names, host } = here();
   const now = Date.now();
   const day = 86_400_000;
@@ -201,10 +202,10 @@ async function certificates() {
       ],
     });
     caKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }) as string;
-    await fs.writeFile(path.join(DIR, FILES.caKey), caKeyPem, { mode: 0o600 });
-    await fs.writeFile(path.join(DIR, FILES.ca), caPem);
+    await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.caKey), caKeyPem, { mode: 0o600 });
+    await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.ca), caPem);
     meta = { ips: [], names: [], notAfter: new Date(0).toISOString(), permitted };
-    await fs.rm(path.join(DIR, FILES.cert), { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.cert), { force: true });
   }
 
   const allowed = names.filter((n) => meta!.permitted.some((p) => n === p || n.endsWith(`.${p}`)));
@@ -235,10 +236,10 @@ async function certificates() {
     const leaf = new crypto.X509Certificate(certPem);
     if (!leaf.verify(ca.publicKey) || !leaf.checkIssued(ca)) throw new Error("The new certificate didn't check out against Crackio's authority.");
     keyPem = privateKey.export({ type: "pkcs8", format: "pem" }) as string;
-    await fs.writeFile(path.join(DIR, FILES.key), keyPem, { mode: 0o600 });
-    await fs.writeFile(path.join(DIR, FILES.cert), certPem);
+    await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.key), keyPem, { mode: 0o600 });
+    await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.cert), certPem);
     meta = { ...meta, ips, names: allowed, notAfter: to.toISOString() };
-    await fs.writeFile(path.join(DIR, FILES.meta), JSON.stringify(meta, null, 2));
+    await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.meta), JSON.stringify(meta, null, 2));
   }
   return { key: keyPem!, cert: `${certPem}${caPem}`, ips, names: allowed };
 }
@@ -252,8 +253,8 @@ async function certificates() {
 export async function startLanHttps({ turnOn = false }: { turnOn?: boolean } = {}): Promise<LanHttps | null> {
   if (!lanAllowed()) return null;
   if (turnOn) {
-    await fs.mkdir(DIR, { recursive: true });
-    await fs.writeFile(path.join(DIR, FILES.on), `turned on ${new Date().toISOString()}\n`);
+    await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+    await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, FILES.on), `turned on ${new Date().toISOString()}\n`);
   } else if (!(await lanWanted())) return null;
   const was = state.__crackioLan;
   if (was?.starting) await was.starting;

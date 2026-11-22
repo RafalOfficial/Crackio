@@ -1,4 +1,5 @@
 import { comfyTargets, withTarget } from "@/lib/server/comfy-targets";
+import { machineLook } from "@/lib/server/machine-probe";
 
 /**
  * The LoRA files your ComfyUIs can load (each one's models/loras, as its LoraLoaderModelOnly lists them): `{ files:
@@ -14,6 +15,9 @@ export async function GET() {
     const lists = await Promise.all(
       targets.map(async (t) => {
         try {
+          // A machine that's off adds none at once: asking its list waited out a 20 s timeout, and the Director said
+          // "Looking on your ComfyUI…" all that while.
+          if (!(await machineLook(t)).stats) return { machine: t.label, files: new Set<string>() };
           return { machine: t.label, files: await withTarget(t, () => loraFiles()) };
         } catch {
           return { machine: t.label, files: new Set<string>() };

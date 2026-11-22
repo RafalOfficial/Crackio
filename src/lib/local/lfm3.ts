@@ -2,7 +2,7 @@
  * LFM3-VL 2B (Liquid AI, LFM Open License v1.0: free, commercial use under US$10M a year in revenue) as Crackio's
  * bridge runs it (comfyui/crackio_bridge/lfm3.py, from models/lfm3): its two files, pinned to the Hugging Face revision
  * the bridge's bundled config and code (lfm3_vl/) match, and Crackio's own fine-tunes of it. It writes Talk's answers,
- * checks Swap's drawings (the judge) and finds things for Retouch. The bridge's lfm3_setup.py (1.9.2) says what a
+ * checks Swap's drawings (the judge), finds things for Retouch and writes your words out as full prompts (the enhancer). The bridge's lfm3_setup.py (1.9.2) says what a
  * machine has, and brings its transformers to the range below. Talk's set-up (server/voice/talk-setup) downloads it,
  * and the fine-tunes a tool asks for.
  */
@@ -27,18 +27,21 @@ export const LFM3_BYTES = LFM3_FILES.reduce((s, f) => s + f.bytes, 0);
 /**
  * Crackio's fine-tunes (LoRA), each beside the model under its bridge name. Their copies live in data/lfm3/runs/<run>.
  * Each is published in its own Hugging Face repo (`repo`), the file at its bridge name in the repo's root: their cards
- * differ and they ship on different days. An empty `repo` means that one isn't published yet (the user's call), so it
+ * differ and they ship on different days. An empty `repo` means that one isn't published yet, so it
  * doesn't download. `private`: the repo is private until the release, so the download takes the Hugging Face token from
  * Settings → Accounts; set it false once the repo is public. `revision` pins the upload's commit, as LFM3_REVISION
  * does for the model: a newer file pushed to the repo later doesn't reach this Crackio (it would fail the checksum
  * here). The checksum is checked on download only: a machine has one when the bridge lists its name, so a copy saved
  * before a re-save with new metadata still counts.
  */
-export type Lfm3LoraKey = "judge" | "retouch" | "chat";
+export type Lfm3LoraKey = "judge" | "retouch" | "chat" | "enhance";
 export type Lfm3Lora = { name: string; label: string; bytes: number; sha256: string; run: string; repo: string; revision: string; private: boolean };
 export const LFM3_LORAS: Record<Lfm3LoraKey, Lfm3Lora> = {
   judge: { name: "lfm3-vl-2b-lora-judge.safetensors", label: "Crackio's swap judge", bytes: 131_788_304, sha256: "c4a76a5ef91f60fcb4e20a954c93e4b5f447899302844abe1687040956b70edb", run: "judge-v9", repo: "TR4F/crackio-swap-judge", revision: "16c2c30dc8a620040fcdf8ac81be17bf967f45b7", private: false },
   retouch: { name: "lfm3-vl-2b-lora-retouch.safetensors", label: "Crackio's eyes for Retouch", bytes: 131_788_384, sha256: "66a588f0fcfc266331013fad8cf9618ca5224aa26e7863afb3d67b5f3d7ba33a", run: "retouch-v1", repo: "TR4F/crackio-retouch", revision: "22a0fe1215ff53ee65325284903b556e35d4ff76", private: false },
+  // The prompt enhancer (engines/enhance): trained on 6,041 request → prompt pairs to keep every detail of a request
+  // and invent nothing; it runs with the instructions it was trained with and no others.
+  enhance: { name: "lfm3-vl-2b-lora-enhance.safetensors", label: "Crackio's prompt enhancer", bytes: 131_788_272, sha256: "f7bbbf52b9c76656d0ee82f1b925243392318ed01e46a5bad7eea75bfd65d8a5", run: "enhance-v4", repo: "TR4F/crackio-prompt-enhancer", revision: "d210ce9b9aafd6ec7feb280dc387885fa0c01a50", private: false },
   chat: { name: "lfm3-vl-2b-lora-chat.safetensors", label: "Talk's chat voice", bytes: 131_788_312, sha256: "182746e8f22cbf77946943e84bf4dacc7b7584ab9d7066e1eab1c416f8efd7f0", run: "chat-v1b", repo: "TR4F/crackio-talk", revision: "55cff2c8724e72aa5e7e3107c77ea5b403f57294", private: false },
 };
 

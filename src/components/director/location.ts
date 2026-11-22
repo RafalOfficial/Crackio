@@ -1,13 +1,13 @@
 "use client";
 
-import { create } from "zustand";
 import { useDirector } from "@/lib/director/store";
 import { askForModel } from "@/lib/hooks/use-model-choice";
-import { placeModel } from "./place-model";
+import { placeModel, readyPlaceModel } from "./place-model";
 import { usePlaceSize } from "./shot-model";
+import { useLocation } from "./status";
 
-/** A place being made from words (server/location), or why it couldn't be. */
-export const useLocation = create<{ busy: boolean; error: string | null }>(() => ({ busy: false, error: null }));
+// The busy flag lives in status.ts (no three.js there); still importable from here.
+export { useLocation } from "./status";
 
 /**
  * A place from words: one wide picture by the place's model becomes the location like a photo of your own, and its 360
@@ -16,12 +16,13 @@ export const useLocation = create<{ busy: boolean; error: string | null }>(() =>
 export async function generateLocation(words: string) {
   const text = words.trim();
   if (!text || useLocation.getState().busy) return;
-  const model = placeModel();
-  if (model === "auto") {
-    if (!askForModel("image")) useLocation.setState({ error: "Choose the model that makes the place first." });
+  useLocation.setState({ busy: true, error: null, since: Date.now(), words: text });
+  const model = await readyPlaceModel();
+  if (!model) {
+    useLocation.setState({ busy: false, since: null });
+    if (!askForModel("image")) useLocation.setState({ error: "Making a place needs a picture model: set one up on a GPU in Settings, or pick Nano Banana or FLUX 3 on your Comfy key." });
     return;
   }
-  useLocation.setState({ busy: true, error: null });
   try {
     const res = await fetch("/api/director/location", {
       method: "POST",
@@ -39,6 +40,6 @@ export async function generateLocation(words: string) {
   } catch (err) {
     useLocation.setState({ error: (err as Error).message });
   } finally {
-    useLocation.setState({ busy: false });
+    useLocation.setState({ busy: false, since: null });
   }
 }

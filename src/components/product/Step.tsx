@@ -7,6 +7,17 @@ import { Check, ChevronDown, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
+ * The next step comes into view, smoothly, only when it isn't already in comfortable view: a pick whose next step is
+ * right below it doesn't scroll the page at all.
+ */
+export function bringIntoView(el?: HTMLElement | null) {
+  if (!el) return;
+  const top = el.getBoundingClientRect().top;
+  if (top >= 72 && top <= window.innerHeight * 0.5) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/**
  * One step of "Your shot": a row that says what's picked (with a picture of it), which opens to pick
  * something else. Only one is open at a time; picking moves on to the next on its own.
  */

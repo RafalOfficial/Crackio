@@ -2,17 +2,19 @@ import "server-only";
 import sharp from "sharp";
 import { lfm3LoraOf, lfm3Text, localText, routerText } from "./comfy-text";
 import { listModels } from "@/lib/models/resolve";
-import { AUTO_PREFERENCE, INTERNAL_TEXT, modelById, type ModelAvailability } from "@/lib/models/catalog";
+import { AUTO_PREFERENCE, ENHANCER_TEXT, INTERNAL_TEXT, modelById, type ModelAvailability } from "@/lib/models/catalog";
 import { getSettings } from "@/lib/server/settings";
 import { toDataUrl } from "./util";
 import type { EngineReference } from "./types";
 import { outside } from "@/lib/server/recipes";
+import { freeOnlyNow } from "@/lib/server/job-scope";
 
 /**
  * Crackio's "understand me" step: turn someone's own words (any language, any vocabulary)
- * into a precise English prompt, without inventing things they didn't ask for. It runs on the
- * prompt writer picked in Settings → Models (Auto: a hosted model on your Comfy key, else an open model on your own
- * ComfyUI's biggest GPU).
+ * into a precise English prompt, without inventing things they didn't ask for. Where Crackio's prompt enhancer is
+ * installed (Settings → Tools → Add-ons; engines/enhance) it writes them, unless that's turned off in Settings → Preferences; otherwise the
+ * prompt writer picked in Settings → Models does (Auto: a hosted model on your Comfy key, else an open model on your
+ * own ComfyUI's biggest GPU), with the instructions below.
  */
 export const REFINE_INSTRUCTIONS = `You write prompts for an image model. Rewrite the person's request below as one precise English image prompt.
 Rules:
@@ -54,7 +56,25 @@ type RefineInput = {
   odds?: { keys: string[]; got: (odds: Record<string, number>) => void };
   /** LFM3 only: the answer so far, as it's written (Retouch draws each thing as soon as it's complete). */
   onText?: (soFar: string) => void;
+  /** An open model on your own GPUs is asked on this machine first (a training run's own, which is known to be on). */
+  machine?: string;
+  /** Told the name of the model that answered ("Gemini 3.5 Flash"), for a caller that keeps who wrote something. */
+  answeredBy?: (name: string) => void;
+  /** Filled with each model that didn't answer and why ("Gemini 3.5 Flash: out of credits"), for a caller that must say so. */
+  failed?: string[];
 };
+
+/**
+ * Until when hosted models are left alone: a Comfy workspace that says it's out of credits says so to every model on
+ * it, and a set of thirty captions asked four hosted models each, all four refused, before any local model got a turn.
+ */
+const credits = globalThis as unknown as { __crackioNoComfyCreditsUntil?: number };
+const outOfCredits = () => (credits.__crackioNoComfyCreditsUntil ?? 0) > Date.now();
+function noted(input: RefineInput, m: { name: string; family: string }, err: unknown) {
+  const why = err instanceof Error ? err.message : String(err);
+  if (m.family === "comfy-text" && /out of credits|insufficient credit/i.test(why)) credits.__crackioNoComfyCreditsUntil = Date.now() + 5 * 60_000;
+  input.failed?.push(`${m.name}: ${why.split(/[ \t\r\n]+/).join(" ").slice(0, 160)}`);
+}
 
 function userMessage({ text, references = [], aspect }: RefineInput) {
   const refs = references.map((r, i) => `Image ${i + 1}: ${r.label ?? r.role ?? "reference"}`).join("\n");
@@ -63,8 +83,12 @@ function userMessage({ text, references = [], aspect }: RefineInput) {
 
 async function run(m: ModelAvailability, input: RefineInput): Promise<string> {
   const system = input.instructions ?? (input.kind === "video" ? VIDEO_INSTRUCTIONS : REFINE_INSTRUCTIONS);
-  // Careful thinking can take a while; past two minutes, the original words go through instead.
-  const signal = AbortSignal.any([input.signal ?? new AbortController().signal, AbortSignal.timeout(input.timeoutMs ?? 120_000)]);
+  // Careful thinking can take a while; past two minutes, the original words go through instead. An open model on your own
+  // GPU waits for the render it's in line behind (it goes to the front, but a running job isn't stopped): a minute was
+  // too short beside a 2-minute place build or a video (Director v2 on a rented A40: "Qwen on your GPU failed:
+  // Cancelled"), so it gets six.
+  const limit = m.family === "comfy-local-text" ? Math.max(input.timeoutMs ?? 120_000, 360_000) : (input.timeoutMs ?? 120_000);
+  const signal = AbortSignal.any([input.signal ?? new AbortController().signal, AbortSignal.timeout(limit)]);
   const edge = input.imageEdge ?? 512;
   switch (m.family) {
     case "comfy-text": {
@@ -76,13 +100,18 @@ async function run(m: ModelAvailability, input: RefineInput): Promise<string> {
       // A model that sees gets them all: LFM3-VL each at its own size, Qwen as one labelled contact sheet (comfy-text).
       const files = (input.references ?? []).filter((r): r is EngineReference => Boolean(r.path)).slice(0, 6);
       const images = await Promise.all(files.map(async (r) => Buffer.from((await toDataUrl(r, edge)).split(",")[1] ?? "", "base64")));
+      // The enhancer reads its own instructions, and the pictures as words (engines/enhance).
+      if (m.id === ENHANCER_TEXT) {
+        const { enhance } = await import("./enhance");
+        return enhance({ text: input.text, references: input.references, kind: input.kind, signal });
+      }
       if (m.model.startsWith("lfm3")) {
         // JPEG for the trip: a swap's PNG takes are about 1 MB each, three or four a check, often over a long link to a
         // rented GPU.
         const jpegs = await Promise.all(images.map((b) => sharp(b).jpeg({ quality: 90 }).toBuffer()));
         return lfm3Text({ system, prompt: userMessage(input), images: jpegs, lora: lfm3LoraOf(m.model), odds: input.odds, onText: input.onText, signal });
       }
-      return localText({ system, prompt: userMessage(input), images, signal });
+      return localText({ system, prompt: userMessage(input), images, signal, machine: input.machine });
     }
     default:
       throw new Error(`no text route for ${m.family}`);
@@ -109,10 +138,21 @@ function recentModels(): Promise<ModelAvailability[]> {
   return lists.known ? Promise.resolve(lists.known.models) : lists.fetching!;
 }
 
+/**
+ * A new look at which text models can answer, waited for. For work that mustn't be told "none" by an old list: a
+ * training run's captions start right after its machine came up or its model's files arrived, and the list every other
+ * question is answered from can be from before that (seen after a restart: a reader that was on went unasked for a
+ * minute and a half).
+ */
+export async function freshTextModels(): Promise<void> {
+  const fetching = listModels().then((models) => (lists.known = { at: Date.now(), models }).models);
+  await fetching.catch(() => null);
+}
+
 /** The model list and the machines with Crackio's LFM3 fine-tunes, fetched when the server starts (instrumentation). */
 export async function warmTextModels() {
   const { lfm3Machine } = await import("./comfy-text");
-  await Promise.all([recentModels(), lfm3Machine("none"), lfm3Machine("judge"), lfm3Machine("retouch")].map((p) => p.catch(() => null)));
+  await Promise.all([recentModels(), lfm3Machine("none"), lfm3Machine("judge"), lfm3Machine("retouch"), lfm3Machine("enhance")].map((p) => p.catch(() => null)));
 }
 
 /**
@@ -134,26 +174,42 @@ async function firstAnswer(input: RefineInput, shortest = 13): Promise<{ text: s
         if (out.length >= shortest) return { text: out, by: own.name };
       } catch (err) {
         if (input.signal?.aborted) return null;
+        noted(input, own, err);
         console.warn(`[text] ${own.name} failed, trying the next model: ${(err as Error).message}`);
       }
     }
   }
-  const models = (await recentModels()).filter((m) => m.kind === "text" && m.available);
+  // Work for an agent the user keeps to free paths: no model that costs Comfy credits answers (server/job-scope).
+  const free = freeOnlyNow();
+  const models = (await recentModels()).filter((m) => m.kind === "text" && m.available && !(free && m.family === "comfy-text"));
   const saved = (await getSettings()).models?.text;
   const order = [...(input.prefer ?? []), saved, ...AUTO_PREFERENCE.text, ...models.filter((m) => !INTERNAL_TEXT.has(m.id)).map((m) => m.id)];
   for (const id of order) {
     const m = models.find((x) => x.id === id);
     if (!m || seen.has(m.id)) continue;
     seen.add(m.id);
+    if (m.family === "comfy-text" && outOfCredits()) {
+      if (!input.failed?.some((f) => f.startsWith("Comfy's hosted models"))) input.failed?.push("Comfy's hosted models: your Comfy workspace is out of credits");
+      continue;
+    }
     try {
       const out = (await run(m, input)).replace(/^["“]|["”]$/g, "").trim();
       if (out.length >= shortest) return { text: out, by: m.name };
+      input.failed?.push(`${m.name}: it answered nothing`);
     } catch (err) {
       if (input.signal?.aborted) break;
+      noted(input, m, err);
       console.warn(`[text] ${m.name} failed, trying the next model: ${(err as Error).message}`);
     }
   }
   return null;
+}
+
+/** Whether Crackio's prompt enhancer writes prompts now: it's on a machine that answers, and not turned off in Preferences. */
+export async function enhancerReady(): Promise<boolean> {
+  if (((await getSettings()).promptEnhancer ?? "auto") === "off") return false;
+  const { lfm3Machine } = await import("./comfy-text");
+  return Boolean(await lfm3Machine("enhance").catch(() => null));
 }
 
 /** Returns the refined prompt, or the original text if no prompt writer is reachable. */
@@ -164,7 +220,9 @@ export async function refinePrompt(input: RefineInput): Promise<{ prompt: string
     "Your words written out as a full prompt",
     undefined,
     async () => {
-      const answer = await firstAnswer(input);
+      // Writing a prompt (not another job's instructions): Crackio's enhancer first, where it's installed and not turned off.
+      const own = !input.instructions && ((await getSettings()).promptEnhancer ?? "auto") !== "off";
+      const answer = await firstAnswer(own ? { ...input, prefer: [ENHANCER_TEXT, ...(input.prefer ?? [])] } : input);
       return answer ? { prompt: answer.text, by: answer.by } : { prompt: input.text, by: null };
     },
     (r, step) => void (step.detail = r.by ?? "no text model answered, so your words went as typed"),
@@ -180,6 +238,7 @@ export async function askText(input: RefineInput & { instructions: string }): Pr
     async () => {
       const answer = await firstAnswer({ effort: "low", ...input }, 1);
       by = answer?.by ?? null;
+      if (answer) input.answeredBy?.(answer.by);
       return answer?.text ?? null;
     },
     (_, step) => void (step.detail = `${by ?? "no text model"}: ${input.instructions.replace(/\s+/g, " ").slice(0, 120)}…`),

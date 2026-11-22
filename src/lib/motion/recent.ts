@@ -12,12 +12,12 @@ import type { MotionPlan } from "./playbook";
  */
 export type RecentPiece = { projectId: string; at: number; format?: string; look?: string; moves?: string[] };
 
-const FILE = () => path.join(DATA_DIR, "motion-recent.json");
+const FILE = () => path.join(/*turbopackIgnore: true*/ DATA_DIR, "motion-recent.json");
 const KEEP = 12;
 
 export async function recentPieces(except?: string): Promise<RecentPiece[]> {
   try {
-    const list = JSON.parse(await fs.readFile(FILE(), "utf8")) as RecentPiece[];
+    const list = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ FILE(), "utf8")) as RecentPiece[];
     return Array.isArray(list) ? list.filter((r) => r && r.projectId !== except).slice(0, KEEP) : [];
   } catch {
     return [];

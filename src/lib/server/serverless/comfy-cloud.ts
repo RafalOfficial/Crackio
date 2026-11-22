@@ -56,6 +56,9 @@ type State = {
   models: { at: number; files: Record<string, string[]> } | null;
   nodes: { at: number; modules: Record<string, string | null> } | null;
   version: string | null;
+  /** Comfy Cloud's own /system_stats, its last answer (null when it didn't), and the look on its way. */
+  stats?: { at: number; value: { system?: { comfyui_version?: string } } | null };
+  statsLook?: Promise<{ system?: { comfyui_version?: string } } | null>;
   sockets: Set<net.Socket>;
   server?: http.Server;
   port?: number;
@@ -174,9 +177,7 @@ async function systemStats(s: State, res: http.ServerResponse) {
   if (comfyCloudBlocked()) return send(res, 503, { error: s.blocked!.reason });
   // Online when Comfy Cloud answers. Named "Comfy Cloud", not by the card it runs jobs on: it's Comfy's servers, paid with
   // your Comfy plan, and a GPU's name here read as one of your own.
-  const stats = (await fetch(`${CLOUD}/api/system_stats`, { signal: AbortSignal.timeout(10_000), cache: "no-store" })
-    .then((r) => (r.ok ? r.json() : null))
-    .catch(() => null)) as { system?: { comfyui_version?: string } } | null;
+  const stats = await cloudStats(s);
   if (!stats) return send(res, 503, { error: "Comfy Cloud doesn't answer." });
   s.version = stats.system?.comfyui_version?.replace(/^v/, "") ?? s.version;
   const vram = 96 * 1024 ** 3;
@@ -184,6 +185,25 @@ async function systemStats(s: State, res: http.ServerResponse) {
     system: { os: "posix", ram_total: 192 * 1024 ** 3, ram_free: 192 * 1024 ** 3, comfyui_version: s.version ?? "", python_version: "", pytorch_version: "", embedded_python: false, argv: [] },
     devices: [{ name: "cuda:0 Comfy Cloud : cloud", type: "cuda", index: 0, vram_total: vram, vram_free: vram, torch_vram_total: 0, torch_vram_free: 0 }],
   });
+}
+
+/**
+ * Comfy Cloud's own /system_stats. Every look at every machine asks this shim, and each answer was an internet round trip:
+ * kept a minute while it answers (answered at once while a new look runs after that), 10 s when it didn't.
+ */
+function cloudStats(s: State): Promise<{ system?: { comfyui_version?: string } } | null> {
+  const hit = s.stats;
+  const age = hit ? Date.now() - hit.at : Infinity;
+  if (hit && age < (hit.value ? 60_000 : 10_000)) return Promise.resolve(hit.value);
+  s.statsLook ??= fetch(`${CLOUD}/api/system_stats`, { signal: AbortSignal.timeout(10_000), cache: "no-store" })
+    .then((r) => (r.ok ? (r.json() as Promise<{ system?: { comfyui_version?: string } }>) : null))
+    .catch(() => null)
+    .then((value) => {
+      s.stats = { at: Date.now(), value };
+      s.statsLook = undefined;
+      return value;
+    });
+  return hit?.value && age < 10 * 60_000 ? Promise.resolve(hit.value) : s.statsLook;
 }
 
 /** Which node classes Comfy Cloud has and their modules (its /api/object_info, with your key), kept an hour. */

@@ -269,7 +269,7 @@ function fromCues(raw: string): Span[] {
 export async function fetchTranscript(info: SourceInfo, signal: AbortSignal): Promise<{ transcript: Transcript | null; why?: string }> {
   if (!info.captions) return { transcript: null, why: "the site has no captions for it" };
   const yt = await tool();
-  const tmp = await fs.mkdtemp(path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-captions-"));
+  const tmp = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-captions-"));
   try {
     const { lang, auto } = info.captions;
     const r = await runYtdlp(
@@ -277,9 +277,9 @@ export async function fetchTranscript(info: SourceInfo, signal: AbortSignal): Pr
       [...baseArgs(yt), "--skip-download", auto ? "--write-auto-subs" : "--write-subs", "--sub-langs", lang, "--sub-format", "json3/vtt/srt/best", "-o", path.join(/*turbopackIgnore: true*/ tmp, "subs.%(ext)s"), "--", info.url],
       { timeoutMs: 90_000, signal },
     );
-    const got = (await fs.readdir(tmp)).find((f) => f.startsWith("subs.") && /\.(json3|vtt|srt)$/.test(f));
+    const got = (await fs.readdir(/*turbopackIgnore: true*/ tmp)).find((f) => f.startsWith("subs.") && /\.(json3|vtt|srt)$/.test(f));
     if (!got) return { transcript: null, why: r.code === 0 ? "its captions came in a format Crackio can't read" : friendly(lastError(r), info.url) };
-    const raw = await fs.readFile(path.join(/*turbopackIgnore: true*/ tmp, got), "utf8");
+    const raw = await fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ tmp, got), "utf8");
     const parsed = got.endsWith(".json3") ? fromJson3(raw) : { lines: fromCues(raw), words: undefined };
     if (!parsed.lines.length) return { transcript: null, why: "its captions are empty" };
     return {
@@ -294,7 +294,7 @@ export async function fetchTranscript(info: SourceInfo, signal: AbortSignal): Pr
       },
     };
   } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ tmp, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -316,7 +316,7 @@ export async function fetchMedia(o: {
 }): Promise<string> {
   const yt = await tool();
   const work = path.join(/*turbopackIgnore: true*/ o.dir, `.download-${nanoid(6)}`);
-  await fs.mkdir(work, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ work, { recursive: true });
   const what = o.get === "audio" ? "the sound" : "the video";
   const started = Date.now();
   let lastPercent = "";
@@ -349,22 +349,22 @@ export async function fetchMedia(o: {
       },
     });
     if (o.signal.aborted) throw new ToolError("Cancelled.");
-    const got = (await fs.readdir(work)).find((f) => f.startsWith("media.") && !/\.(part|ytdl|temp|json|vtt|srt|json3)$/i.test(f) && !/\.f\d+\./.test(f));
+    const got = (await fs.readdir(/*turbopackIgnore: true*/ work)).find((f) => f.startsWith("media.") && !/\.(part|ytdl|temp|json|vtt|srt|json3)$/i.test(f) && !/\.f\d+\./.test(f));
     if (r.code !== 0 || !got) throw new ToolError(`The download failed: ${friendly(lastError(r), o.url)}`);
     const ext = path.extname(got).slice(1).toLowerCase();
     const name = await uniqueName(o.dir, `${o.stem}.${ext}`);
-    await fs.rename(path.join(/*turbopackIgnore: true*/ work, got), path.join(/*turbopackIgnore: true*/ o.dir, name));
+    await fs.rename(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ work, got), path.join(/*turbopackIgnore: true*/ o.dir, name));
     return name;
   } finally {
     clearInterval(tick);
-    await fs.rm(work, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ work, { recursive: true, force: true }).catch(() => {});
   }
 }
 
 /* ---------------------------------------------------------------- reading a transcript */
 
 export async function readTranscript(file: string): Promise<Transcript> {
-  const t = JSON.parse(await fs.readFile(file, "utf8").catch(() => "null")) as Transcript | null;
+  const t = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ file, "utf8").catch(() => "null")) as Transcript | null;
   if (!t || !Array.isArray(t.lines)) throw new ToolError(`${path.basename(file)} isn't a transcript. Transcripts come from download, saved as NAME.transcript.json.`);
   return t;
 }

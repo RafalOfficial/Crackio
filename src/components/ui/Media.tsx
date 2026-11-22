@@ -88,7 +88,8 @@ function Thumb({ url, alt, className }: { url: string; alt: string; className?: 
       ref={ref}
       src={`${previewUrl(url, CLIP_WIDTH)}#t=0.1`}
       poster={posterUrl(url, CLIP_WIDTH)}
-      className={cn("bg-black", className)}
+      // Graphite like the cards around it while the opening frame arrives (black read as "broken").
+      className={cn("bg-apple", className)}
       playsInline
       loop
       muted

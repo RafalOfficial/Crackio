@@ -7,6 +7,7 @@ import { TEMPLATES } from "@/lib/templates/library";
 import { heatOf, inSeason, swapLabel } from "@/lib/templates/meta";
 import { previewUrl } from "@/lib/media-url";
 import { useNow } from "@/lib/hooks/use-now";
+import { ScrollRow } from "@/components/ui/ScrollRow";
 
 /** Crackio's own templates, the liveliest first, a row of tall cards; each clip plays on hover only. */
 export function TemplatesRow() {
@@ -28,10 +29,11 @@ export function TemplatesRow() {
           All {TEMPLATES.length} <ArrowRight size={14} />
         </Link>
       </div>
-      <ul className="scrollbar-none -mx-1 mt-5 flex gap-3 overflow-x-auto px-1 pb-1">
+      {/* Past the edge, more fade in with an arrow to the end (ScrollRow), so the row reads as one you can scroll. */}
+      <ScrollRow className="-mx-1 mt-5" trackClassName="items-stretch gap-3 px-1 pb-1">
         {hottest.map((t) => {
           return (
-            <li key={t.id} className="w-[46vw] shrink-0 sm:w-[30vw] md:w-[22vw] lg:w-[15.5vw] xl:w-[13vw] 2xl:w-[200px]">
+            <div key={t.id} className="w-[46vw] shrink-0 sm:w-[30vw] md:w-[22vw] lg:w-[15.5vw] xl:w-[13vw] 2xl:w-[200px]">
               <Link href={`/templates/${t.id}`} className="group block" title={t.trend.note}>
                 <div className="relative aspect-[9/16] overflow-hidden rounded-[16px] bg-apple">
                   {/* eslint-disable-next-line @next/next/no-img-element -- a plain still under the hover clip */}
@@ -50,10 +52,10 @@ export function TemplatesRow() {
                   </div>
                 </div>
               </Link>
-            </li>
+            </div>
           );
         })}
-      </ul>
+      </ScrollRow>
     </section>
   );
 }

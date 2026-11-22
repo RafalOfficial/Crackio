@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, type CSSProperties } from "react";
 import { ArrowUpRight, LoaderCircle } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -95,9 +96,10 @@ function useToolAction(kitId: KitId, status: ToolStatus, { m, live }: Ctx) {
   return { action, go, busy, error, job };
 }
 
-export function ToolBoard({ rows, ctx, focus }: { rows: { kit: Kit; status: ToolStatus }[]; ctx: Ctx; focus?: string | null }) {
-  // ?tool= (from Overview's "Set up", a pill's "Details") opens that tool's drawer.
-  const [open, setOpen] = useState<KitId | null>(focus && kitById(focus) ? (focus as KitId) : null);
+export function ToolBoard({ rows, ctx, focus, model }: { rows: { kit: Kit; status: ToolStatus }[]; ctx: Ctx; focus?: string | null; model?: string | null }) {
+  // ?tool= (from Overview's "Set up", a pill's "Details") opens that tool's drawer; ?model= picks that model in it.
+  const asked = focus && kitById(focus) ? (focus as KitId) : null;
+  const [open, setOpen] = useState<KitId | null>(asked);
   return (
     <>
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
@@ -105,7 +107,7 @@ export function ToolBoard({ rows, ctx, focus }: { rows: { kit: Kit; status: Tool
           <ToolCard key={kit.id} kit={kit} status={status} ctx={ctx} onOpen={() => setOpen(kit.id)} />
         ))}
       </ul>
-      <ToolSheet kitId={open} ctx={ctx} onClose={() => setOpen(null)} />
+      <ToolSheet kitId={open} ctx={ctx} onClose={() => setOpen(null)} pick={open === asked ? model : null} />
     </>
   );
 }
@@ -127,13 +129,12 @@ function ToolCard({ kit, status, ctx, onOpen }: { kit: Kit; status: ToolStatus; 
     <li className="group relative">
       <div className={cn("squircle relative flex h-full flex-col overflow-hidden rounded-[20px] bg-apple transition-[box-shadow,transform] duration-300", !lit && "shadow-[inset_0_0_0_1px_var(--color-line)]")} style={lit ? glow(kit.hue) : undefined}>
         <button type="button" onClick={onOpen} className="relative block aspect-[16/10] w-full overflow-hidden text-left" aria-label={`${kit.name}: ${words.label}. Details`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={kit.media}
             alt=""
-            loading="lazy"
-            decoding="async"
-            className={cn("h-full w-full object-cover transition-[filter,opacity,transform] duration-500", lit ? "" : "opacity-45 grayscale-[0.9] group-hover:opacity-75 group-hover:grayscale-[0.3]")}
+            fill
+            sizes="(min-width: 1536px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className={cn("object-cover transition-[filter,opacity,transform] duration-500", lit ? "" : "opacity-45 grayscale-[0.9] group-hover:opacity-75 group-hover:grayscale-[0.3]")}
           />
           <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-apple via-apple/25 to-transparent" />
           <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[11.5px] font-semibold text-paper shadow-[inset_0_0_0_1px_rgb(255_255_255/0.1)]">
@@ -148,7 +149,7 @@ function ToolCard({ kit, status, ctx, onOpen }: { kit: Kit; status: ToolStatus; 
             <span className="block font-display text-[19px] uppercase leading-none tracking-[0.005em] text-paper">{kit.name}</span>
             <span className="mt-1.5 line-clamp-2 block min-h-[2.6em] text-[12.5px] leading-snug text-haze">
               {status.state === "installing" && step ? `${step.label}: ${step.detail}` : words.why}
-              {status.state === "missing" && required.some(hasChoice) ? <span className="text-fog"> · or pick another</span> : null}
+              {status.state === "missing" && required.some((r) => hasChoice(r, ctx.m)) ? <span className="text-fog"> · or pick another</span> : null}
               {elsewhere ? ` · runs on ${elsewhere.label}` : ""}
               {status.state === "unsupported" && !elsewhere && status.cloud ? " · works on your Comfy key" : ""}
             </span>

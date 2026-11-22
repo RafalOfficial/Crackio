@@ -74,11 +74,16 @@ export function DemoSignIn() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="CRK-XXXX-XXXX"
+            aria-label="Access code"
             autoComplete="off"
             spellCheck={false}
-            className="h-12 rounded-[14px] bg-white/[0.06] px-4 font-mono text-[15px] uppercase tracking-[0.08em] text-paper outline-none placeholder:text-haze focus:bg-white/[0.09]"
+            className="field-focus h-12 rounded-[14px] bg-white/[0.06] px-4 font-mono text-[15px] uppercase tracking-[0.08em] text-paper outline-none placeholder:text-haze focus:bg-white/[0.09]"
           />
-          {error ? <p className="text-[13px] text-tally">{error}</p> : null}
+          {error ? (
+            <p role="alert" className="text-[13px] text-tally">
+              {error}
+            </p>
+          ) : null}
           <Button type="submit" variant="primary" size="lg" disabled={busy || code.trim().length < 4}>
             {busy ? "Checking…" : "Start"}
           </Button>

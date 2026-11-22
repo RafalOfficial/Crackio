@@ -2,6 +2,7 @@ import "server-only";
 import fs from "node:fs/promises";
 import type { CloudGpu } from "@/lib/local/types";
 import { writeFileAtomic } from "./atomic-write";
+import { bumpEpoch } from "./epoch";
 import { SETTINGS_FILE } from "./paths";
 
 export type Settings = {
@@ -30,7 +31,7 @@ export type Settings = {
   swapChecker?: "auto" | "local" | "cloud";
   /**
    * How sure Crackio's judge must be before a swap keeps a drawing (server/swap-checker): "lenient" keeps acceptable
-   * swaps with small flaws (the user's own standard), "strict" redraws anything doubtful. Missing means lenient.
+   * swaps with small flaws, "strict" redraws anything doubtful. Missing means lenient.
    */
   swapStrictness?: "strict" | "normal" | "lenient";
   /**
@@ -39,6 +40,12 @@ export type Settings = {
    * "auto", your GPU where the eyes are installed, else Gemini. Missing means auto.
    */
   retouchEyes?: "auto" | "local" | "cloud";
+  /**
+   * Who writes your words out as a full prompt (engines/refine): "auto", Crackio's prompt enhancer (LFM3-VL 2B with
+   * its enhance LoRA) on your GPU where it's installed, else the prompt writer picked under Models; "off", always the
+   * prompt writer under Models. Missing means auto.
+   */
+  promptEnhancer?: "auto" | "off";
   /** Engine used when a tool doesn't pin one. "auto" picks the first connected engine. */
   defaultEngine: string;
   onboarding: { connected?: boolean; directed?: boolean; cast?: boolean };
@@ -64,7 +71,7 @@ export type Settings = {
    */
   cloudAutoConnect?: boolean;
   /**
-   * Rented boxes that stop themselves once idle, by "vast:58824818" (Settings → Machines): after `minutes` with their GPU
+   * Rented boxes that stop themselves once idle, by "vast:12345678" (Settings → Machines): after `minutes` with their GPU
    * load under `load` % (10 when missing) and nothing else running there; `then` "delete" deletes the box instead (for a
    * one-time box). A bare number is the minutes (from before `load`).
    */
@@ -84,9 +91,30 @@ export type Settings = {
 
 const DEFAULTS: Settings = { keys: {}, models: {}, defaultEngine: "auto", onboarding: {} };
 
+const cached = globalThis as unknown as { __crackioSettingsRead?: { at: number; mtimeMs: number; value: Settings }; __crackioSettingsWritten?: number };
+
+/**
+ * The settings, read from disk at most once a second while the file is unchanged (one request asked for them a dozen
+ * times: the machine list, keys, Run on), and afresh after every write. Each caller gets its own copy to change.
+ */
 export async function getSettings(): Promise<Settings> {
+  const hit = cached.__crackioSettingsRead;
+  if (hit && Date.now() - hit.at < 1000) return structuredClone(hit.value);
+  // Writes counted: a read that started before one doesn't put the old settings back in the cache.
+  const written = cached.__crackioSettingsWritten ?? 0;
+  const mtimeMs = (await fs.stat(/*turbopackIgnore: true*/ SETTINGS_FILE).catch(() => null))?.mtimeMs ?? -1;
+  if (hit && hit.mtimeMs === mtimeMs && written === (cached.__crackioSettingsWritten ?? 0)) {
+    hit.at = Date.now();
+    return structuredClone(hit.value);
+  }
+  const value = await readSettings();
+  if (written === (cached.__crackioSettingsWritten ?? 0)) cached.__crackioSettingsRead = { at: Date.now(), mtimeMs, value };
+  return structuredClone(value);
+}
+
+async function readSettings(): Promise<Settings> {
   try {
-    const raw = JSON.parse(await fs.readFile(SETTINGS_FILE, "utf8")) as Partial<Settings>;
+    const raw = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ SETTINGS_FILE, "utf8")) as Partial<Settings>;
     return { ...DEFAULTS, ...raw, keys: { ...raw.keys }, models: { ...raw.models }, onboarding: { ...raw.onboarding } };
   } catch {
     return structuredClone(DEFAULTS);
@@ -101,8 +129,12 @@ const queue = globalThis as unknown as { __crackioSettingsWrites?: Promise<unkno
 
 export function updateSettings(patch: (s: Settings) => Settings): Promise<Settings> {
   const run = (queue.__crackioSettingsWrites ?? Promise.resolve()).then(async () => {
-    const next = patch(await getSettings());
+    const next = patch(await readSettings());
     await writeFileAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2), { mode: 0o600 });
+    cached.__crackioSettingsWritten = (cached.__crackioSettingsWritten ?? 0) + 1;
+    cached.__crackioSettingsRead = undefined;
+    // Defaults, keys, Run on and machines all shape the model lists and machine looks made from now on.
+    bumpEpoch();
     return next;
   });
   queue.__crackioSettingsWrites = run.catch(() => undefined);

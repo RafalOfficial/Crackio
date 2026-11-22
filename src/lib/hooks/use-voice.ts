@@ -18,6 +18,11 @@ type VoiceState = {
   added: (v: VoiceCard) => void;
 };
 
+/** One look at the machines at a time: a second ask while one is out gets the same answer. */
+let machinesOut: Promise<void> | null = null;
+/** The same list again keeps its objects, so the pages that follow it don't redraw. */
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   // Crackio's own voices are part of the app: there from the first frame, so the page never names the wrong one.
   ready: READY_VOICES,
@@ -29,20 +34,27 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     try {
       const res = await fetch("/api/voice/voices", { cache: "no-store" });
       const data = (await res.json()) as { ready: VoiceCard[]; yours: VoiceCard[] };
-      set({ ready: data.ready ?? [], yours: data.yours ?? [], loaded: true });
+      const ready = data.ready ?? [];
+      const yours = data.yours ?? [];
+      const s = get();
+      if (!s.loaded || !same(ready, s.ready) || !same(yours, s.yours)) set({ ready, yours, loaded: true });
     } catch {
       set({ loaded: true });
     }
   },
-  loadMachines: async (fresh = false) => {
-    try {
-      const res = await fetch(`/api/voice/machines${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
-      const data = (await res.json()) as { machines: VoiceMachine[] };
-      set({ machines: data.machines ?? [], machinesLoaded: true });
-    } catch {
-      set({ machinesLoaded: true });
-    }
-  },
+  loadMachines: (fresh = false) =>
+    (machinesOut ??= (async () => {
+      try {
+        const res = await fetch(`/api/voice/machines${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
+        const data = (await res.json()) as { machines?: VoiceMachine[] };
+        const machines = Array.isArray(data.machines) ? data.machines : [];
+        if (!get().machinesLoaded || !same(machines, get().machines)) set({ machines, machinesLoaded: true });
+      } catch {
+        if (!get().machinesLoaded) set({ machinesLoaded: true });
+      } finally {
+        machinesOut = null;
+      }
+    })()),
   removeVoice: async (id) => {
     set({ yours: get().yours.filter((v) => v.id !== id) });
     await fetch(`/api/voice/voices/${id}`, { method: "DELETE" });
@@ -57,15 +69,17 @@ export const voiceOf = (id: string | null | undefined) => {
 
 /** Loads voices and machines once, and watches the machines while something installs there. */
 export function useVoiceSetup() {
-  const loaded = useVoiceStore((s) => s.loaded);
   const busy = useVoiceStore((s) => s.machines.some((m) => m.downloads.length > 0 || m.installing || m.setup?.state === "running" || m.check?.state === "running" || m.check?.state === "switching" || m.brainSetup?.state === "running"));
+  // On arrival (and each return to the page): the voices unless they're in, and one fresh look at the machines.
+  // (It used to look twice, once more when the voices landed.)
   useEffect(() => {
-    if (!loaded) void useVoiceStore.getState().loadVoices();
+    if (!useVoiceStore.getState().loaded) void useVoiceStore.getState().loadVoices();
     void useVoiceStore.getState().loadMachines(true);
-  }, [loaded]);
+  }, []);
   useEffect(() => {
     if (!busy) return;
-    const t = setInterval(() => void useVoiceStore.getState().loadMachines(true), 2500);
+    // While something installs; not while the tab is in the background.
+    const t = setInterval(() => !document.hidden && void useVoiceStore.getState().loadMachines(true), 2500);
     return () => clearInterval(t);
   }, [busy]);
   // And now and then while the page is shown: a ComfyUI that starts or stops, a setup begun from another tab.

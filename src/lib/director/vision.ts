@@ -21,7 +21,8 @@ async function refresh() {
   try {
     const res = await fetch("/api/vision", { cache: "no-store" });
     const data = (await res.json()) as { models: VisionStore["models"] };
-    useVision.setState({ models: data.models });
+    // Polled every 0.7 s while anything runs: an answer that says the same keeps the same object, so nothing redraws.
+    if (JSON.stringify(data.models) !== JSON.stringify(useVision.getState().models)) useVision.setState({ models: data.models });
   } catch {
     /* the next tick tries again */
   }
@@ -50,6 +51,14 @@ async function call<T>(task: "depth" | "geometry" | "cutout" | "mask" | "read", 
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(data.error ?? "The 3D tools didn't answer.");
   return data;
+}
+
+/** Base64 to bytes with a plain loop: `Uint8Array.from(atob(s), mapper)` over a matte took 158 ms, this about 6 ms. */
+function bytesOf(base64: string) {
+  const bin = atob(base64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 function decodeDepth({ width, height, data }: { width: number; height: number; data: string }): DepthMap {
@@ -92,12 +101,23 @@ export function makeCutout(url: string) {
 
 export type SubjectRead = { kind: ElementKind; noun: string; identity: string; height: number | null; around: number | null };
 
-/** What a cast picture shows, read by a vision model (null when none is connected). Never throws. */
+const reads = new Map<string, Promise<SubjectRead | null>>();
+
+/**
+ * What a cast picture shows, read by a vision model (null when none is connected). Never throws. One reading per
+ * picture at a time: asked again while it runs (a page coming back, two subjects from one photo), the same answer.
+ */
 export function readSubject(url: string): Promise<SubjectRead | null> {
-  return call<{ read: SubjectRead | null }>("read", url).then(
-    (r) => r.read,
-    () => null,
-  );
+  let p = reads.get(url);
+  if (!p) {
+    p = call<{ read: SubjectRead | null }>("read", url).then(
+      (r) => r.read,
+      () => null,
+    );
+    reads.set(url, p);
+    void p.finally(() => reads.delete(url));
+  }
+  return p;
 }
 
 /** Where an image's subject is: 0…1 coverage per pixel over the whole frame (all 0 when nothing stands out). */
@@ -108,11 +128,7 @@ const masks = new Map<string, Promise<SubjectMask>>();
 export function loadMask(url: string) {
   let p = masks.get(url);
   if (!p) {
-    p = track(call<{ width: number; height: number; data: string }>("mask", url)).then(({ width, height, data }) => ({
-      width,
-      height,
-      data: Uint8Array.from(atob(data), (c) => c.charCodeAt(0)),
-    }));
+    p = track(call<{ width: number; height: number; data: string }>("mask", url)).then(({ width, height, data }) => ({ width, height, data: bytesOf(data) }));
     p.catch(() => masks.delete(url));
     masks.set(url, p);
   }

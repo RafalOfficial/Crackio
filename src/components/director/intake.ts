@@ -6,7 +6,7 @@ import { useDirector } from "@/lib/director/store";
 import { makeCutout, readSubject } from "@/lib/director/vision";
 import { guessKind } from "@/lib/director/standin";
 import { ELEMENT_DEFAULTS } from "@/lib/director/vocab";
-import type { ElementKind, SceneElement } from "@/lib/director/types";
+import type { ElementKind, PlaceVideo, SceneElement } from "@/lib/director/types";
 import { useShotModel } from "./shot-model";
 
 /**
@@ -234,3 +234,36 @@ export async function setPlaceFile(file: File) {
     useIntake.setState({ placeBusy: false });
   }
 }
+
+/**
+ * Director video mode: a video as the place (server/director-video `prepareVideoPlace`). Its first frame builds the 3D
+ * set as a photo does; the timeline becomes the video's length, and Film it films the video again along your path.
+ */
+export async function setPlaceVideoFile(file: File) {
+  if (!file.type.startsWith("video/")) return;
+  useIntake.setState({ placeError: null, placeBusy: true });
+  try {
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/uploads", { method: "POST", body });
+    const data = (await res.json().catch(() => ({}))) as { items?: { url: string }[]; error?: string };
+    if (!res.ok || !data.items?.[0]) throw new Error(data.error ?? "Upload failed");
+    await setPlaceVideoUrl(data.items[0].url);
+  } catch (err) {
+    useIntake.setState({ placeError: (err as Error).message });
+    throw err;
+  } finally {
+    useIntake.setState({ placeBusy: false });
+  }
+}
+
+/** A video already in Crackio's files (a take, an upload) as the place. */
+export async function setPlaceVideoUrl(url: string) {
+  const res = await fetch("/api/director/video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+  const data = (await res.json().catch(() => ({}))) as { video?: PlaceVideo; poster?: { url: string; width: number; height: number }; error?: string };
+  if (!res.ok || !data.video || !data.poster) throw new Error(data.error ?? "Couldn't read that video.");
+  useDirector.getState().setPlaceVideo(data.video, data.poster);
+}
+
+/** Whether a drag carries a video (the file's type is known while it's dragged). */
+export const dragsVideo = (dt: DataTransfer) => Array.from(dt.items ?? []).some((i) => i.kind === "file" && i.type.startsWith("video/"));

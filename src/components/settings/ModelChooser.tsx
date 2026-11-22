@@ -1,10 +1,11 @@
 "use client";
 
-import type { ModelOption, OptionVariant, ReqStatus } from "@/lib/setup/types";
+import type { ModelOption, OptionVariant, ReqStatus, SetupMachine } from "@/lib/setup/types";
 
 /**
  * Picking a model for one part of a tool (ToolSheet shows the choice): Crackio's pick is picked until you pick another,
- * and a pick that differs from it, and isn't there yet, is what a set-up gets instead.
+ * and a pick that differs from it, and isn't there yet, is what a set-up gets instead. A part lists its models by
+ * reference; the machine holds what each is (setup/options `optionsOf` puts them together).
  */
 
 export type Choice = { model: string; variant: string };
@@ -15,14 +16,14 @@ export function defaultChoice(r: ReqStatus): Choice | null {
   return o ? { model: o.model, variant: o.variant } : null;
 }
 
-/** Whether a part has a real choice to show: two models, or two versions of one. */
-export const hasChoice = (r: ReqStatus) => Boolean(r.options && (r.options.length > 1 || (r.options[0]?.variants.length ?? 0) > 1));
+/** Whether a part has a real choice to show on a machine: two models, or two versions of one. */
+export const hasChoice = (r: ReqStatus, m: Pick<SetupMachine, "models">) => Boolean(r.options && (r.options.length > 1 || (m.models?.[r.options[0]?.model]?.variants.length ?? 0) > 1));
 
 export const sameChoice = (a: Choice | null | undefined, b: Choice | null | undefined) => Boolean(a && b && a.model === b.model && a.variant === b.variant);
 
-/** The option and version a choice points at. */
-export function chosen(r: ReqStatus, c: Choice | null | undefined): { option: ModelOption; variant: OptionVariant } | null {
-  const option = c ? r.options?.find((o) => o.model === c.model) : undefined;
+/** The option and version a choice points at, among a part's options (`optionsOf`). */
+export function chosen(options: ModelOption[], c: Choice | null | undefined): { option: ModelOption; variant: OptionVariant } | null {
+  const option = c ? options.find((o) => o.model === c.model) : undefined;
   const variant = option?.variants.find((v) => v.id === c!.variant);
   return option && variant ? { option, variant } : null;
 }

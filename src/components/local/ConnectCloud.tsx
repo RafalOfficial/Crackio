@@ -68,7 +68,8 @@ function since(at: number | undefined, now: number) {
  * connects by itself, or with Connect), and Crackio finds its address, adds the bridge, restarts ComfyUI and lists it
  * with your machines.
  */
-export function ConnectCloud({ onConnected }: { onConnected: (machineId: string) => void }) {
+/** `bare`: the page around it already says what it is (Settings → Machines' heading), so only a line of advice stays. */
+export function ConnectCloud({ onConnected, bare = false }: { onConnected: (machineId: string) => void; bare?: boolean }) {
   const [text, setText] = useState("");
   const [job, setJob] = useState<Job | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -159,8 +160,13 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
   function follow(started: Job) {
     setJob(started);
     if (poll.current) window.clearInterval(poll.current);
+    let asking = false;
     poll.current = window.setInterval(async () => {
+      // Not while the tab is in the background, and never two looks at once (a box mid-install can answer slowly).
+      if (asking || document.visibilityState === "hidden") return;
+      asking = true;
       const res = await fetch(`/api/local/cloud?job=${started.id}`, { cache: "no-store" }).catch(() => null);
+      asking = false;
       if (!res?.ok) return;
       const next = (await res.json()) as Job;
       setJob(next);
@@ -198,7 +204,12 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
   const accounts = info ? (Object.keys(info.accounts) as ("vast" | "runpod")[]).filter((p) => info.accounts[p]) : [];
 
   return (
-    <section className="surface squircle mt-3 flex flex-col gap-4 rounded-panel p-5" aria-label="Connect a cloud GPU">
+    <section className={cn("surface squircle flex flex-col gap-4 rounded-panel p-5", !bare && "mt-3")} aria-label="Connect a cloud GPU">
+      {bare ? (
+        <p className="max-w-[86ch] text-[13px] leading-relaxed text-fog">
+          Any template works (ComfyUI, PyTorch, CUDA or plain Ubuntu): on one without ComfyUI, Crackio installs it for the card first, 5 to 10 minutes. Rent 70 GB of disk or more.
+        </p>
+      ) : (
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-haze">
@@ -213,6 +224,7 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
           </p>
         </div>
       </div>
+      )}
 
       {accounts.length || boxes.length ? (
         <div className="flex flex-col gap-1.5">
@@ -243,12 +255,16 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
                             </span>
                           ) : null;
                         })()
-                      : !b.ready && b.detail
+                      : !b.ready && b.detail && !b.connected
                         ? <span className="mt-0.5 block truncate text-[12px] text-haze">{b.detail}</span>
                         : null}
                     {b.problem ? <span className="mt-0.5 block text-[12px] text-tally">Didn&rsquo;t connect: {b.problem}</span> : null}
                   </span>
-                  {b.connected ? (
+                  {b.connected && !b.ready ? (
+                    <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-haze" title={`Connected, but stopped: start it on ${CLOUD_NAME[b.provider]}, its disk is kept`}>
+                      <span className="size-1.5 rounded-full bg-haze" /> Stopped
+                    </span>
+                  ) : b.connected ? (
                     <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-chroma">
                       <Check size={13} /> Connected
                     </span>
@@ -377,8 +393,8 @@ export function ConnectCloud({ onConnected }: { onConnected: (machineId: string)
       {key ? (
         <div className="flex flex-col gap-1.5 text-[12.5px] leading-relaxed text-haze">
           <p>
-            Crackio logs in with this SSH key. Add it to your cloud account once (vast.ai: Account → SSH Keys; RunPod: Settings → SSH Public Keys), and every GPU you rent there
-            takes it.
+            Crackio logs in with this SSH key, and puts it on each GPU your vast.ai or RunPod key brings by itself. To connect one by pasting its SSH command instead, add the
+            key to that cloud account first (vast.ai: Account → SSH Keys; RunPod: Settings → SSH Public Keys).
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
             <code className="min-w-0 max-w-full flex-1 truncate rounded-[8px] bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11.5px] text-fog">{key.key}</code>

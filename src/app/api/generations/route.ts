@@ -47,9 +47,16 @@ export async function GET(request: Request) {
       .filter((g) => g && maysee(viewer, g.owner));
     return Response.json({ items });
   }
-  const limit = Math.min(Number(url.searchParams.get("limit") ?? 60), 200);
-  const before = url.searchParams.get("before");
-  const items = listGenerations({ limit, before: before ? Number(before) : undefined, owner: viewer });
+  // A bad number ("abc") reads as the default instead of reaching SQLite as NaN.
+  const limit = Math.min(Math.max(1, Math.floor(Number(url.searchParams.get("limit") ?? 60)) || 60), 200);
+  const before = Number(url.searchParams.get("before")) || undefined;
+  // ?tool=director (or several, comma-separated): one tool's own history, past the newest 60 of every tool.
+  const tools = (url.searchParams.get("tool") ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t && t.length <= 40)
+    .slice(0, 10);
+  const items = listGenerations({ limit, before, owner: viewer, tools });
   // These are about to show as cards: get their light copies made, newest first.
   warmPreviews(mediaFiles(items.flatMap((g) => g.outputs.map((o) => o.url))));
   return Response.json({ items });

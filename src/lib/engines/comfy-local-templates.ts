@@ -506,13 +506,23 @@ export function withLoras(graph: ApiGraph, loras: { file: string; strength: numb
     const mine = loras.filter((l) => !l.match || matches(l.match, loads));
     if (!mine.length) continue;
     const chain = mine.map((_, i) => `crackio:lora:${id}:${i}`);
+    // A checkpoint brings its text encoder too (SDXL): a LoRA trained on both goes on both (`LoraLoader`), as its maker
+    // meant. On the model alone, 30 of 72 SDXL LoRAs loaded without their text-encoder half (an L4, Nov 2026).
+    const clip = g[id].class_type === "CheckpointLoaderSimple" ? 1 : null;
     mine.forEach((l, i) => {
-      g[chain[i]] = { class_type: "LoraLoaderModelOnly", inputs: { model: i ? [chain[i - 1], 0] : [id, out], lora_name: l.file, strength_model: l.strength } };
+      g[chain[i]] =
+        clip === null
+          ? { class_type: "LoraLoaderModelOnly", inputs: { model: i ? [chain[i - 1], 0] : [id, out], lora_name: l.file, strength_model: l.strength } }
+          : { class_type: "LoraLoader", inputs: { model: i ? [chain[i - 1], 0] : [id, out], clip: i ? [chain[i - 1], 1] : [id, clip], lora_name: l.file, strength_model: l.strength, strength_clip: l.strength } };
     });
-    const last: [string, number] = [chain[chain.length - 1], 0];
+    const last = chain[chain.length - 1];
     for (const [nid, n] of Object.entries(g)) {
       if (chain.includes(nid)) continue;
-      for (const [k, v] of Object.entries(n.inputs)) if (isLink(v) && String(v[0]) === id && v[1] === out) n.inputs[k] = last;
+      for (const [k, v] of Object.entries(n.inputs)) {
+        if (!isLink(v) || String(v[0]) !== id) continue;
+        if (v[1] === out) n.inputs[k] = [last, 0];
+        else if (clip !== null && v[1] === clip) n.inputs[k] = [last, 1];
+      }
     }
   }
   return g;

@@ -219,6 +219,13 @@ export type StudioSpec = {
   productImages: number;
   /** Inspect every take against the product photo and re-shoot once when something's wrong. */
   check?: boolean;
+  /**
+   * An agent's own prompt for each take (lib/agent): shot as written, one take each. No text model plans or rewords
+   * anything then.
+   */
+  shots?: string[];
+  /** False: no text model directs the shots; each take is the picks set out in Crackio's fixed words (an agent that gave no prompts). */
+  direct?: false;
 };
 
 /** What the quality check found on a take (and whether it was re-shot because of it). */

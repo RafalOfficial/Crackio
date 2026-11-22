@@ -17,14 +17,20 @@ import type { Knobs } from "./knobs";
 export type KitId = ToolSlug | "image" | "video";
 
 export type Need =
-  /** A catalog model (Crackio ids, best first); the version that fits the machine is chosen by fitModel. */
-  | { kind: "model"; anyOf: string[]; task?: "image" | "edit" | "video" | "upscale" | "swap" }
+  /**
+   * A catalog model (Crackio ids, best first); the version that fits the machine is chosen by fitModel. `open`: any
+   * other open model that does `task` works in the tool too (its picker offers them), so each is a choice here as well,
+   * after the ones named (setup/kits `modelsFor`). `unit`: only models whose job is a picture, or a clip. `from`: only
+   * models that start from a picture you give them (a product film animates a photo). `also`: models the tool runs too,
+   * a choice here but Crackio's pick only where none of `anyOf` runs.
+   */
+  | { kind: "model"; anyOf: string[]; also?: string[]; task?: "image" | "edit" | "video" | "upscale" | "swap"; open?: boolean; unit?: "image" | "clip"; from?: "image" }
   /** Voice's engine (audio.cpp) and a voice model, with speech to text and a spoken test line (setUpVoice). */
   | { kind: "voice"; clone?: boolean }
   /** LFM3-VL 2B, the small model Talk answers with and Crackio's checks read pictures with (setUpTalk). */
   | { kind: "lfm3" }
   /** One of Crackio's LFM3-VL fine-tunes: the swap judge, Retouch's eyes, Talk's chat voice. */
-  | { kind: "lfm3-lora"; lora: "judge" | "retouch" | "chat" }
+  | { kind: "lfm3-lora"; lora: Lfm3LoraKey }
   /** Lip Sync's engine and LatentSync's files (setUpLipsync). */
   | { kind: "lipsync" }
   /** An account key: the Comfy key (hosted models, Motion's agent) or the Hugging Face token (gated downloads). */
@@ -39,6 +45,11 @@ export type Requirement = {
   need: Need;
   /** The tool works without it; it adds something. */
   optional?: boolean;
+  /**
+   * Needed on every machine that can run it (the set-up gets it with the rest), left out like an optional part where it
+   * can't (too small a GPU, no NVIDIA card, too little disk): the tool works there a step down (Director's 3D World).
+   */
+  whereItRuns?: boolean;
   /** What stands in when it isn't here, in words ("Gemini 3.5 Flash on your Comfy key"). */
   instead?: string;
 };
@@ -94,9 +105,22 @@ export type ReqStatus = {
   fix?: "bridge";
   /**
    * A model part: every model it can use on this machine, Crackio's pick first (the one installed, else the plan's).
-   * Settings lets you set the tool up with any of them, or add another to try.
+   * Settings lets you set the tool up with any of them, or add another to try. Each points at the machine's `models`
+   * (setup/options `optionsOf` puts the two together): a model many parts can use is described once per machine.
    */
-  options?: ModelOption[];
+  options?: OptionRef[];
+};
+
+/** One model a part can use on a machine: its entry in `SetupMachine.models`, and what's the part's own about it. */
+export type OptionRef = {
+  /** Catalog id ("ltx-2.5"), a key of the machine's `models`. */
+  model: string;
+  /** The version to get for this part (or the one there). */
+  variant: string;
+  /** Crackio's pick for this part here. */
+  pick?: true;
+  /** The part edits a picture with it: its estimate reads a photo beside the one it makes (Knobs.edit). */
+  edit?: true;
 };
 
 /** The fit words a model library card uses: runs well, just about, slowly, or not by Crackio's estimate. */
@@ -130,6 +154,8 @@ export type ModelOption = {
   /** Who makes it, and what it's best at in a sentence (the model library's words). */
   maker: string;
   blurb: string;
+  /** The ComfyUI template whose preview shows what it makes (models/gallery `previewSrc`), when it has one. */
+  thumb?: string;
   /** Crackio's one quality scale (the model library's); `qualityKnown` when it comes from evidence (else it only sorts). */
   quality: number;
   qualityKnown: boolean;
@@ -220,6 +246,11 @@ export type SetupMachine = {
   /** A rented GPU: its cloud and instance there (to connect it again, or open its page). */
   cloud?: { provider: "vast" | "runpod" | "other"; instance?: string };
   tools: Record<KitId, ToolStatus>;
+  /**
+   * Every model a tool's part can use here, by catalog id: how each version runs on this machine, what's left to
+   * download, whether it fits the disk. The parts' `options` point into it. Left out of the light snapshot.
+   */
+  models?: Record<string, ModelOption>;
   /** Files downloading there now. */
   downloads: { count: number; received: number; total: number };
 };
@@ -259,7 +290,7 @@ export type CloudCredit = {
 
 /** A rented box's idle stop: after how many idle minutes, how long it has been idle, and whether Crackio stopped it. */
 export type AutoStop = {
-  /** "vast:58824818" */
+  /** "vast:12345678" */
   box: string;
   minutes: number | null;
   /** It counts as idle while its GPU load stays under this, in % (10 unless you pick another). */

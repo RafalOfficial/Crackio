@@ -49,6 +49,22 @@ const toolFits = (t: Take, tool: string) => tool === "all" || t.tool === tool;
 
 const folderOf = (p: LibraryProject, count = 0): FolderInfo => ({ id: p.id, name: p.name, icon: p.icon, color: p.color, count, project: p });
 
+/**
+ * A generation's cards stay the same objects while it and its folder do, so a poll tick that moves one job (or a
+ * search, a filter, a page) doesn't redraw every other card: memo(LibraryTile) compares them by identity.
+ */
+const takeMemo = new WeakMap<Generation, Take[]>();
+function stableTakes(gen: Generation, whereIs: (key: TakeKey) => string): Take[] {
+  const kept = takeMemo.get(gen);
+  if (kept && kept.every((t) => t.folder === whereIs(t.key))) return kept;
+  const fresh = takesOf(gen, whereIs);
+  takeMemo.set(gen, fresh);
+  return fresh;
+}
+
+/** Where a card sits in its day's section, in CSS pixels. */
+type Box = { take: Take; x: number; y: number; w: number; h: number };
+
 /** The address with the viewer's take in it (or without). */
 function withView(view: TakeKey | null) {
   const u = new URL(window.location.href);
@@ -109,9 +125,24 @@ export function LibraryView() {
   useLayoutEffect(() => {
     const el = grid.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(Math.floor(e.contentRect.width)));
+    let last = -1;
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const ro = new ResizeObserver(([e]) => {
+      const w = Math.floor(e.contentRect.width);
+      if (w === last) return;
+      last = w;
+      // While the width moves (a window resize, the sidebar folding) the cards go straight to their places; only a
+      // change in what's shown makes them glide (the slots' transition, off while this is set).
+      el.dataset.resizing = "";
+      clearTimeout(settle);
+      settle = setTimeout(() => delete el.dataset.resizing, 240);
+      setWidth(w);
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      clearTimeout(settle);
+      ro.disconnect();
+    };
   }, []);
 
   // Every generation; the shared store's copies are fresher while they render. A finished one
@@ -126,7 +157,7 @@ export function LibraryView() {
     return Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt);
   }, [history, items]);
 
-  const takes = useMemo(() => all.flatMap((g) => takesOf(g, (k) => placements[k] ?? GENERAL)), [all, placements]);
+  const takes = useMemo(() => all.flatMap((g) => stableTakes(g, (k) => placements[k] ?? GENERAL)), [all, placements]);
 
   const counted = useMemo(() => {
     const counts = new Map<string, number>();
@@ -202,10 +233,27 @@ export function LibraryView() {
     for (const t of shown) counts.set(dayKey(t.gen.createdAt), (counts.get(dayKey(t.gen.createdAt)) ?? 0) + 1);
     return counts;
   }, [shown]);
-  const sections = useMemo(
-    () => (width ? byDay(pageTakes, (t) => t.gen.createdAt).map((g) => ({ ...g, rows: justify(g.items, (t) => t.ratio, width, target) })) : []),
-    [pageTakes, width, target],
-  );
+  // Each day's cards are laid out as justified rows, then placed absolutely in one keyed list: a card that moves
+  // to another row (a take landing or leaving, another size) keeps its element, so it never blanks or restarts.
+  const sections = useMemo(() => {
+    if (!width) return [];
+    return byDay(pageTakes, (t) => t.gen.createdAt).map((g) => {
+      const boxes: Box[] = [];
+      let y = 0;
+      for (const row of justify(g.items, (t) => t.ratio, width, target)) {
+        const h = Math.round(row.height);
+        let x = 0;
+        row.items.forEach(({ item, ratio }, i) => {
+          // A full row fills the width exactly: its last card takes what rounding left.
+          const w = Math.max(1, row.full && i === row.items.length - 1 ? width - x : Math.round(ratio * row.height));
+          boxes.push({ take: item, x, y, w, h });
+          x += w + GAP;
+        });
+        y += h + GAP;
+      }
+      return { ...g, boxes, height: Math.max(0, y - GAP) };
+    });
+  }, [pageTakes, width, target]);
 
   const selectable = useMemo(() => shown.filter((t) => t.gen.status === "done").map((t) => t.key), [shown]);
   const picked = useMemo(() => selectable.filter((k) => selected.has(k)), [selectable, selected]);
@@ -700,7 +748,7 @@ export function LibraryView() {
       ) : null}
 
       {/* The grid: a section per day, rows that keep every take's shape. */}
-      <div ref={grid} className="mt-5 min-h-[40vh]">
+      <div ref={grid} className="mt-5 min-h-[40vh] [&[data-resizing]_.lib-slot]:transition-none">
         {!ready ? (
           <GridSkeleton />
         ) : shown.length === 0 ? (
@@ -740,25 +788,25 @@ export function LibraryView() {
                     </button>
                   ) : null}
                 </header>
-                <div className="flex flex-col" style={{ gap: GAP }}>
-                  {sec.rows.map((row, r) => (
-                    <div key={r} className="flex" style={{ height: Math.round(row.height), gap: GAP }}>
-                      {row.items.map(({ item: t, ratio }) => (
-                        <LibraryTile
-                          key={t.key}
-                          take={t}
-                          ratio={ratio}
-                          full={row.full}
-                          width={Math.round(ratio * row.height)}
-                          selecting={selecting}
-                          selected={selecting && selected.has(t.key)}
-                          leaving={leaving.has(t.key)}
-                          dragged={dragged.has(t.key)}
-                          folders={folders}
-                          newColor={newColor}
-                          on={on}
-                        />
-                      ))}
+                <div className="relative" style={{ height: sec.height }}>
+                  {sec.boxes.map(({ take: t, x, y, w, h }) => (
+                    // 2D transforms only: a 3D one would give every card its own GPU layer.
+                    <div
+                      key={t.key}
+                      className="lib-slot absolute left-0 top-0 transition-transform duration-200 ease-[var(--ease-out-quint)]"
+                      style={{ width: w, height: h, transform: `translate(${x}px, ${y}px)` }}
+                    >
+                      <LibraryTile
+                        take={t}
+                        width={w}
+                        selecting={selecting}
+                        selected={selecting && selected.has(t.key)}
+                        leaving={leaving.has(t.key)}
+                        dragged={dragged.has(t.key)}
+                        folders={folders}
+                        newColor={newColor}
+                        on={on}
+                      />
                     </div>
                   ))}
                 </div>

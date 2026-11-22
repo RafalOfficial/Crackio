@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Timer } from "lucide-react";
+import { ChevronDown, Cpu, Timer } from "lucide-react";
 import { formatSeconds } from "@/lib/local/fit";
 import { askEta, etaBody, useRunOnVersion } from "@/lib/hooks/use-run-on";
 import { Popover } from "@/components/ui/Popover";
@@ -28,12 +28,17 @@ type Eta = {
   referenceMp: number | null;
   plain: number | null;
   /** A picture's size: drawn there natively, or drawn smaller and redrawn ("detail") or enlarged at it. */
-  size: { native: string; target: string; how: "native" | "detail" | "enlarge" } | null;
+  size: { native: string; target: string; how: "native" | "detail" | "enlarge" | "kept"; asked?: string } | null;
   /** The machine it would run on. */
   target: string;
   /** That machine's heat, battery and energy mode, when it's a Mac. */
   mac?: MacHeat | null;
+  /** A billed machine: RunPod's price a second for its GPU, or Comfy Cloud's credits. Null on your own GPU (free). */
+  billing?: { perSecond?: number; credits?: boolean } | null;
 };
+
+/** A job's GPU seconds at RunPod's price: "$0.004", "$0.12". */
+const dollars = (n: number) => `$${n < 0.01 ? n.toFixed(3) : n.toFixed(2)}`;
 
 /** `demo`: in the live demo, whether the job's credits are held (it runs on the demo's GPU) or it's free (your own). */
 type Answer = { eta: Eta | null; runOn: string; fallback: "offline" | "no-model" | "unavailable" | null; machines: RunOnMachine[]; demo?: { charged: boolean } | null };
@@ -53,9 +58,11 @@ export function LocalTimeLine({
   duration,
   resolution,
   ratio,
+  nativeOnly,
   source,
   scale,
   edit,
+  timeless = false,
   className,
 }: {
   modelId: string | null;
@@ -66,15 +73,22 @@ export function LocalTimeLine({
   resolution?: string;
   /** The picture's shape (width / height). */
   ratio?: number;
+  /** Advanced's "Never enlarge": the picture stays at the largest size the model draws by itself. */
+  nativeOnly?: boolean;
   /** An upscale's picture and factor: its work grows with them. */
   source?: { width: number; height: number };
   scale?: number;
   /** An edit (Retouch, Relight, Angles): the live demo prices it as about a megapixel. */
   edit?: boolean;
+  /**
+   * Only where it runs, and the Run on picker, without a time: for jobs the estimate can't time yet (a clip's upscale,
+   * which it counts like one picture).
+   */
+  timeless?: boolean;
   className?: string;
 }) {
   const version = useRunOnVersion();
-  const body = etaBody({ model: modelId, kind, count, references, duration, resolution, ratio, source, scale });
+  const body = etaBody({ model: modelId, kind, count, references, duration, resolution, ratio, source, scale, nativeOnly });
   const key = body ? `${version}|${body}` : null;
   const [got, setGot] = useState<{ key: string; answer: Answer | null } | null>(null);
 
@@ -93,7 +107,10 @@ export function LocalTimeLine({
     };
   }, [body, key]);
 
-  const answer = got && got.key === key ? got.answer : null;
+  // While the next answer is out, the last one stays (dimmed): the line above Generate doesn't vanish and come back on
+  // every change of count, length or size.
+  const stale = got?.key !== key;
+  const answer = got?.answer ?? null;
   const eta = answer?.eta ?? null;
   if (!key || !answer || !eta) return null;
   const pickable = listedMachines(answer.machines, answer.runOn).length > 1;
@@ -109,12 +126,27 @@ export function LocalTimeLine({
   // Past what the model draws well, how the picture gets to the size asked.
   const made =
     eta.size && eta.size.how !== "native"
-      ? eta.size.how === "detail"
-        ? `Drawn at ${eta.size.native}, then redrawn at ${eta.size.target}`
-        : `Drawn at ${eta.size.native}, then enlarged to ${eta.size.target}`
+      ? eta.size.how === "kept"
+        ? `Stays at about ${eta.size.native}, the largest this model draws by itself`
+        : eta.size.how === "detail"
+          ? `Drawn at about ${eta.size.native}, then redrawn at ${eta.size.target}`
+          : `Drawn at about ${eta.size.native}, then enlarged to ${eta.size.target}`
       : null;
+  // Said in full view, not only on hover: a picture that isn't drawn at the size picked says how it gets there. The
+  // size it's drawn at is "about": a model with sizes of its own draws at the nearest one (Qwen-Image 2.1 drew
+  // 2592×1728 where this said 2528×1680).
+  const sizeName = resolution === "4k" ? "4K" : resolution === "2k" ? "2K" : resolution === "720p" ? "720p" : resolution === "1k" ? "1K" : null;
+  const sizeNote = made
+    ? eta.size!.how === "kept"
+      ? `${sizeName ?? "This size"} here: ${made.charAt(0).toLowerCase()}${made.slice(1)} (Never enlarge is on).`
+      : eta.size!.how === "detail"
+        ? `${sizeName ?? "This size"} here: drawn at about ${eta.size!.native}, then the model redraws it at ${eta.size!.target}.`
+        : `${sizeName ?? "This size"} here: drawn at about ${eta.size!.native}, then enlarged to ${eta.size!.target}. Enlarging sharpens, it adds no new detail.`
+    : null;
   const why = [
-    made
+    made && eta.size!.how === "kept"
+      ? `${made}: Never enlarge is on (Advanced), so it isn't enlarged to ${eta.size!.asked ?? "the size picked"}.`
+      : made
       ? `${made}: ${eta.size!.native} is the most this model draws well${eta.size!.how === "detail" ? ", and redrawing it lightly at the full size adds real detail" : ". Enlarging sharpens what's there rather than adding detail"}.`
       : eta.size
         ? `Drawn natively at ${eta.size.target}.`
@@ -145,12 +177,24 @@ export function LocalTimeLine({
           ? { short: "Low Power Mode: slower", long: "Low Power Mode is on, so this Mac runs the job slower (System Settings › Battery)" }
           : null;
   return (
-    <div className={cn("flex min-w-0 items-center justify-between gap-3 px-1 text-[12px] text-haze", className)} aria-live="polite" title={why}>
+    <div className="min-w-0 space-y-1">
+    <div
+      className={cn("flex min-w-0 items-center justify-between gap-3 px-1 text-[12px] text-haze transition-opacity duration-200", stale && "opacity-60", className)}
+      aria-live="polite"
+      aria-busy={stale || undefined}
+      title={timeless ? `Runs on ${eta.machine} (${eta.gpu})` : why}
+    >
       <div className="inline-flex min-w-0 shrink-0 items-center gap-1.5">
-        <Timer size={13} className="shrink-0" />
+        {timeless ? <Cpu size={13} className="shrink-0" /> : <Timer size={13} className="shrink-0" />}
         <span className="whitespace-nowrap">
-          {eta.measured ? "About " : "Roughly "}
-          <span className="tabular font-semibold text-paper">{formatSeconds(eta.seconds)}</span> on
+          {timeless ? (
+            "Runs on"
+          ) : (
+            <>
+              {eta.measured ? "About " : "Roughly "}
+              <span className="tabular font-semibold text-paper">{formatSeconds(eta.seconds)}</span> on
+            </>
+          )}
         </span>
         {pickable ? (
           <Popover
@@ -193,6 +237,15 @@ export function LocalTimeLine({
               credits
             </span>
           )
+        ) : eta.billing?.perSecond ? (
+          <span
+            className="whitespace-nowrap"
+            title="RunPod bills its GPU by the second: this job's run, plus the worker starting after a break and the minute it stays ready afterwards."
+          >
+            · about <span className="tabular font-semibold text-paper">{dollars(eta.seconds * eta.billing.perSecond)}</span>
+          </span>
+        ) : eta.billing?.credits ? (
+          <span className="whitespace-nowrap">· your Comfy credits</span>
         ) : (
           <span className="whitespace-nowrap">· free</span>
         )}
@@ -205,11 +258,15 @@ export function LocalTimeLine({
         <span className="min-w-0 truncate text-right text-tally" title={`${macHint.long}. ${why}`}>
           {macHint.short}
         </span>
-      ) : heavy ? (
+      ) : timeless ? null : heavy ? (
         <span className="min-w-0 truncate text-right">{shrunk ? `${pictures.replace(/ reference/, "")}, shrunk to save time` : `${formatSeconds(eta.plain)} without the pictures`}</span>
       ) : (
-        <span className="min-w-0 truncate text-right">{made ?? eta.why}</span>
+        <span className="min-w-0 truncate text-right">{eta.why}</span>
       )}
+    </div>
+      {sizeNote && !timeless ? (
+        <p className={cn("px-1 text-[12px] leading-snug transition-opacity duration-200", eta.size!.how === "enlarge" ? "text-tungsten" : "text-haze", stale && "opacity-60")}>{sizeNote}</p>
+      ) : null}
     </div>
   );
 }

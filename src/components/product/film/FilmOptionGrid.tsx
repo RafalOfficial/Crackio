@@ -76,6 +76,7 @@ export function FilmOptionGrid<T extends string>({
               {active ? (
                 <motion.span
                   layoutId={`film-pick-${axis}`}
+                  layoutDependency={value}
                   className="pointer-events-none absolute inset-0 rounded-[12px] shadow-[inset_0_0_0_2px_var(--color-spike)]"
                   transition={{ type: "spring", bounce: 0.18, duration: 0.38 }}
                 >
@@ -119,9 +120,26 @@ export function ClipCycle({ list, first, muted = true, onEnded }: { list: FilmPr
   const order = [first, ...list.filter((p) => p.clip !== first.clip)];
   const [at, setAt] = useState(0);
   const current = order[at % order.length];
+  const video = useRef<HTMLVideoElement>(null);
+  // Plays only while it can be seen: scrolled away, in the hidden mode or on a page you left, it waits (it used to keep
+  // decoding where nobody could see it).
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) void el.play().catch(() => {});
+      else el.pause();
+    });
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      el.pause();
+    };
+  }, [current.clip]);
   return (
     <>
       <video
+        ref={video}
         key={current.clip}
         src={current.clip}
         poster={current.poster}

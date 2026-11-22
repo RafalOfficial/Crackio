@@ -1,9 +1,12 @@
+import { connection } from "next/server";
 import { z } from "zod";
 import { LibraryError } from "@/lib/server/library";
 import { createEditProject, listEditProjects } from "@/lib/server/edit-projects";
 import { ASPECTS, type AspectId } from "@/lib/shot";
 
 export async function GET() {
+  // The database answers synchronously, so without this the list would be baked in at build time.
+  await connection();
   return Response.json({ items: listEditProjects() });
 }
 

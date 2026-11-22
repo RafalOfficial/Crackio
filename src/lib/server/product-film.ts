@@ -34,6 +34,7 @@ import { DATA_DIR } from "./paths";
 import { readProduct } from "./product";
 import { transcribe, type Transcript } from "./speech";
 import { joinParts, keepShape, lastFrame, lengthOf, punchIns, type Punch } from "./film-edit";
+import { probe } from "@/lib/motion/ffmpeg";
 import { scoreFor, withScore } from "./film-score";
 import { soundOf } from "@/lib/product/film-fit";
 import { burnCaptions } from "./film-captions";
@@ -397,13 +398,14 @@ async function checkClip(
   clip: Buffer,
   { first, product, plan, read, said, signal, landing = false }: { first: string; product: string | null; plan: FilmPlan; read: ProductRead | null; said: Transcript | null; signal: AbortSignal; landing?: boolean },
 ): Promise<(FilmCheck & { fix: string; end: number | null }) | null> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-filmcheck-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-filmcheck-"));
   try {
-    const file = path.join(dir, "clip.mp4");
-    await fs.writeFile(file, clip);
-    const length = await lengthOf(clip);
-    const sheet = path.join(dir, "sheet.jpg");
-    await fs.writeFile(sheet, await timedSheet(file, sheetTimes(length)));
+    const file = path.join(/*turbopackIgnore: true*/ dir, "clip.mp4");
+    await fs.writeFile(/*turbopackIgnore: true*/ file, clip);
+    // The clip is on disk already: measured there (lengthOf would write it out once more to probe it).
+    const length = (await probe(file)).duration ?? 0;
+    const sheet = path.join(/*turbopackIgnore: true*/ dir, "sheet.jpg");
+    await fs.writeFile(/*turbopackIgnore: true*/ sheet, await timedSheet(file, sheetTimes(length)));
     const answer = await askText({
       instructions: CHECK_INSTRUCTIONS,
       text: [
@@ -439,7 +441,7 @@ async function checkClip(
       ...(said?.text ? { said: said.text.slice(0, 600) } : {}),
     };
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
   }
 }
 
@@ -569,20 +571,20 @@ const STAGE: Record<string, string> = {
 /** Image models that re-shoot a picture and keep the person and the product, best first. */
 const STAGERS = ["comfy:openai/gpt-image-2.5-flare", "comfy:vertexai/gemini-nano-banana-2.1", "comfy:openai/gpt-image-2.5-sunburst", "local:flux3-klein", "local:flux2-klein-4b"];
 
-const FRAME_DIR = path.join(DATA_DIR, "cache", "product", "frames");
+const FRAME_DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "product", "frames");
 
 /** How a picture was taken (cached by its bytes). */
 async function readFrame(file: string, signal: AbortSignal): Promise<{ camera: string; person: boolean } | null> {
-  const key = createHash("sha1").update(await fs.readFile(file)).update("|frame1").digest("hex");
-  const cached = path.join(FRAME_DIR, `${key}.json`);
-  const hit = await fs.readFile(cached, "utf8").then((t) => JSON.parse(t) as { camera: string; person: boolean }, () => null);
+  const key = createHash("sha1").update(await fs.readFile(/*turbopackIgnore: true*/ file)).update("|frame1").digest("hex");
+  const cached = path.join(/*turbopackIgnore: true*/ FRAME_DIR, `${key}.json`);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ cached, "utf8").then((t) => JSON.parse(t) as { camera: string; person: boolean }, () => null);
   if (hit) return hit;
   const answer = await askText({ instructions: FRAME_INSTRUCTIONS, text: "How was this picture taken?", references: [{ path: file, label: "the picture" }], prefer: DIRECTORS, imageEdge: 768, detail: "low", effort: "low", timeoutMs: 60_000, signal }).catch(() => null);
   const raw = answer ? jsonObject<{ camera?: unknown; person?: unknown }>(answer) : null;
   if (!raw || typeof raw.camera !== "string") return null;
   const frame = { camera: raw.camera, person: raw.person !== false };
-  await fs.mkdir(FRAME_DIR, { recursive: true });
-  await fs.writeFile(cached, JSON.stringify(frame));
+  await fs.mkdir(/*turbopackIgnore: true*/ FRAME_DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ cached, JSON.stringify(frame));
   return frame;
 }
 
@@ -726,7 +728,7 @@ export async function runProductFilm(
     ctx.progress(0.14 + 0.74 * (done.reduce((a, b) => a + b, 0) / total), stage);
   };
   const terms = [read?.brand ?? "", ...(read?.text?.split(" / ").slice(0, 2) ?? [])].filter(Boolean);
-  const work = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-film-"));
+  const work = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-film-"));
   try {
     const filmOne = async (i: number, start: string, prompt: string, from: number, span: number) => {
       const seconds = plan.clips[i].seconds;
@@ -792,7 +794,7 @@ export async function runProductFilm(
         const m = await shootClip(i, start);
         made.push(m);
         // After a lead-in the take starts from the picture itself; each later part from the last good frame.
-        if (i < plan.clips.length - 1) start = leadIn && i === 0 ? pictures[0].path : await lastFrame(m.data, path.join(work, `part${i + 1}.png`), m.check?.end ?? undefined);
+        if (i < plan.clips.length - 1) start = leadIn && i === 0 ? pictures[0].path : await lastFrame(m.data, path.join(/*turbopackIgnore: true*/ work, `part${i + 1}.png`), m.check?.end ?? undefined);
       }
     }
     if (ctx.signal.aborted) throw new EngineError("Cancelled.");
@@ -851,7 +853,7 @@ export async function runProductFilm(
     }));
     return { outputs: [{ data, mime: "video/mp4", width, height }], usedPrompt: plans.map((p) => p.prompt).join("\n\n---\n\n"), plans, idea: plan.idea, read, ...(staged ? { startUrl: staged } : {}) };
   } finally {
-    await fs.rm(work, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ work, { recursive: true, force: true });
   }
 }
 
@@ -889,14 +891,14 @@ export async function writeScript(input: { spec: Pick<FilmSpec, "style" | "camer
 
 /** A transcript of a clip held in memory. */
 async function transcribeBuffer(data: Buffer, terms: string[], signal: AbortSignal) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-said-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-said-"));
   try {
-    const file = path.join(dir, `${createHash("sha1").update(data).digest("hex").slice(0, 12)}.mp4`);
-    await fs.writeFile(file, data);
+    const file = path.join(/*turbopackIgnore: true*/ dir, `${createHash("sha1").update(data).digest("hex").slice(0, 12)}.mp4`);
+    await fs.writeFile(/*turbopackIgnore: true*/ file, data);
     return await transcribe(file, { signal, terms });
   } catch {
     return null;
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
   }
 }

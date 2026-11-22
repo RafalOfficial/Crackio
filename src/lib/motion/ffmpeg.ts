@@ -17,7 +17,7 @@ export function ffmpegPath(): string {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
   if (resolved) return resolved;
   // Resolved from the project at runtime: the binaries live outside the bundle.
-  const req = createRequire(path.join(process.cwd(), "package.json"));
+  const req = createRequire(path.join(/*turbopackIgnore: true*/ process.cwd(), "package.json"));
   for (const load of [() => req("ffmpeg-static") as string, () => (req("@ffmpeg-installer/ffmpeg") as { path: string }).path]) {
     try {
       const p = load();
@@ -59,7 +59,9 @@ export function runFfmpeg(
     });
     const kill = () => proc.kill("SIGKILL");
     const timer = setTimeout(kill, timeoutMs);
-    signal?.addEventListener("abort", kill, { once: true });
+    // A signal that's already aborted never fires "abort": without this, ffmpeg ran on to its timeout.
+    if (signal?.aborted) kill();
+    else signal?.addEventListener("abort", kill, { once: true });
     proc.on("error", (err) => {
       clearTimeout(timer);
       reject(err);
@@ -84,9 +86,29 @@ const TEXT = /\.(txt|srt|ass|vtt|svg|json|css|html|md|csv|lrc)$/i;
 export const kindOf = (name: string): MediaKind =>
   IMAGE.test(name) ? "image" : VIDEO.test(name) ? "video" : AUDIO.test(name) ? "audio" : TEXT.test(name) ? "text" : "other";
 
+// What each file was found to be, while it's unchanged (same size and time): a Motion turn or a project's files ask about
+// the same clips again and again, and each look started an ffmpeg. On globalThis, so a hot reload keeps it.
+const gp = globalThis as unknown as { __crackioProbes?: Map<string, MediaInfo> };
+const probes = (gp.__crackioProbes ??= new Map());
+
 /** What a file is: its size, and for media its dimensions, length, frame rate and sound. */
 export async function probe(file: string): Promise<MediaInfo> {
-  const bytes = (await fs.stat(file)).size;
+  const st = await fs.stat(/*turbopackIgnore: true*/ file);
+  const key = `${file}|${st.size}|${st.mtimeMs}`;
+  const known = probes.get(key);
+  if (known) {
+    // Kept as the most recently used.
+    probes.delete(key);
+    probes.set(key, known);
+    return { ...known };
+  }
+  const info = await probeFile(file, st.size);
+  probes.set(key, info);
+  if (probes.size > 500) probes.delete(probes.keys().next().value!);
+  return { ...info };
+}
+
+async function probeFile(file: string, bytes: number): Promise<MediaInfo> {
   const kind = kindOf(file);
   if (kind === "image") {
     const m = await sharp(file).metadata().catch(() => null);
@@ -108,9 +130,10 @@ export async function probe(file: string): Promise<MediaInfo> {
 }
 
 /** One frame of a video as a JPEG, `width` pixels wide. */
-export async function frameAt(file: string, t: number, width = 480): Promise<Buffer> {
+/** `width` 0 keeps the clip's own size; `quality` is mjpeg's q (2 best, 31 worst). */
+export async function frameAt(file: string, t: number, width = 480, quality = 4): Promise<Buffer> {
   const grab = (at: number) =>
-    runFfmpeg(["-hide_banner", "-loglevel", "error", "-ss", Math.max(0, at).toFixed(3), "-i", file, "-frames:v", "1", "-vf", `scale=${width}:-2`, "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "4", "-"], {
+    runFfmpeg(["-hide_banner", "-loglevel", "error", "-ss", Math.max(0, at).toFixed(3), "-i", file, "-frames:v", "1", ...(width > 0 ? ["-vf", `scale=${width}:-2`] : []), "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", String(quality), "-"], {
       timeoutMs: 30_000,
     });
   let r = await grab(t);

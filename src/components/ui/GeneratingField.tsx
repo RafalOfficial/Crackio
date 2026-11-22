@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useSpring, useTransform, type MotionValue } fr
 import { X } from "lucide-react";
 import { DotField } from "./DotField";
 import { cn } from "@/lib/cn";
+import { previewUrl } from "@/lib/media-url";
 
 /** "0:07", "1:42". */
 const clock = (ms: number) => {
@@ -21,16 +22,29 @@ function Elapsed({ since }: { since: number }) {
   return <span className="tabular hidden text-[12px] font-medium text-paper/45 @min-[240px]:inline">{clock(now - since)}</span>;
 }
 
-/** The thin line with a glowing head, at the eased progress. */
-function Line({ width, className }: { width: MotionValue<string>; className?: string }) {
+/**
+ * The thin line with a glowing head, at the eased progress. It moves by transforms only (the fill scales, the head's
+ * track slides), so a page full of running takes doesn't re-lay itself out every frame. Without a number yet, a soft
+ * light sweeps along it instead of a made-up percentage.
+ */
+function Line({ scale, x, known, className }: { scale: MotionValue<number>; x: MotionValue<string>; known: boolean; className?: string }) {
   return (
     <div className={cn("relative h-[2px] rounded-full bg-white/[0.09]", className)}>
-      <motion.div className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,rgb(255_91_46/0.25),rgb(255_91_46/0.95))]" style={{ width }} />
-      <motion.span
-        aria-hidden="true"
-        className="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ffb08f] shadow-[0_0_12px_3px_rgb(255_91_46/0.7)]"
-        style={{ left: width }}
-      />
+      {known ? (
+        <>
+          <motion.div
+            className="absolute inset-0 origin-left rounded-full bg-[linear-gradient(90deg,rgb(255_91_46/0.25),rgb(255_91_46/0.95))]"
+            style={{ scaleX: scale }}
+          />
+          <motion.span aria-hidden="true" className="absolute inset-0" style={{ x }}>
+            <span className="absolute left-0 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ffb08f] shadow-[0_0_12px_3px_rgb(255_91_46/0.7)]" />
+          </motion.span>
+        </>
+      ) : (
+        <span aria-hidden="true" className="absolute inset-0 overflow-hidden rounded-full">
+          <span className="voice-setup-sweep absolute inset-y-0 left-0 w-1/3 bg-[linear-gradient(90deg,transparent,rgb(255_91_46/0.85),transparent)]" />
+        </span>
+      )}
     </div>
   );
 }
@@ -68,20 +82,26 @@ export function GeneratingField({
   const eased = useSpring(p, { stiffness: 70, damping: 22, mass: 0.8 });
   useEffect(() => eased.set(p), [p, eased]);
   const percent = useTransform(eased, (v) => `${Math.round(v * 100)}`);
-  const width = useTransform(eased, (v) => `${v * 100}%`);
+  const x = useTransform(eased, (v) => `${v * 100}%`);
   const label = stage?.trim() || "Queued";
+  // A faint copy of where it starts from: the light copy, never the full original (a clip gives its opening frame).
+  const under = backdrop ? (/[?&]w=/.test(backdrop) ? backdrop : previewUrl(backdrop, 480, "poster")) : null;
 
   return (
     <div className={cn("@container absolute inset-0 overflow-hidden bg-[#0e0c12]", className)}>
-      {backdrop ? (
+      {under ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={backdrop} alt="" draggable={false} className="pointer-events-none absolute inset-0 size-full scale-105 object-cover opacity-25 blur-[3px]" />
+        <img src={under} alt="" draggable={false} className="pointer-events-none absolute inset-0 size-full scale-105 object-cover opacity-25 blur-[3px]" />
       ) : null}
       <DotField progress={known ? p : 0} />
       {bare ? (
-        known ? <Line width={width} className="absolute inset-x-1.5 bottom-1.5" /> : null
+        <Line scale={eased} x={x} known={known} className="absolute inset-x-1.5 bottom-1.5" />
       ) : (
         <>
+          {/* Read out once per step, not on every percent (thumbnails stay quiet). */}
+          <span className="sr-only" role="status">
+            {label}
+          </span>
           {/* Darker toward the readout, so it stays legible over the dots. */}
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgb(14_12_18/0.92),rgb(14_12_18/0.35)_38%,transparent_62%)]" />
           {onCancel ? (
@@ -90,7 +110,7 @@ export function GeneratingField({
               onClick={onCancel}
               aria-label="Cancel"
               title="Cancel"
-              className="press squircle absolute right-2 top-2 z-[1] grid size-7 place-items-center rounded-[10px] bg-white/[0.07] text-paper/70 backdrop-blur-md hover:bg-white/[0.12] hover:text-paper @min-[320px]:right-3 @min-[320px]:top-3 @min-[320px]:size-8"
+              className="press squircle absolute right-2 top-2 z-[1] grid size-7 place-items-center rounded-[10px] bg-[rgb(14_12_18/0.72)] text-paper/70 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)] hover:bg-[rgb(36_32_42/0.9)] hover:text-paper @min-[320px]:right-3 @min-[320px]:top-3 @min-[320px]:size-8"
             >
               <X size={14} />
             </button>
@@ -98,10 +118,12 @@ export function GeneratingField({
           <div className="pointer-events-none absolute inset-x-3 bottom-3 @min-[320px]:inset-x-5 @min-[320px]:bottom-5">
             {prompt ? <p className="hidden max-w-[62ch] text-[12.5px] leading-snug text-paper/55 @min-[300px]:line-clamp-2">{prompt}</p> : null}
             <div className="mt-2 flex items-end gap-2.5 @min-[320px]:mt-3 @min-[320px]:gap-3">
-              <span className="font-display tabular text-[22px] leading-[0.85] text-paper @min-[320px]:text-[30px]">
-                <motion.span>{percent}</motion.span>
-                <span className="ml-0.5 text-[12px] text-paper/50 @min-[320px]:text-[15px]">%</span>
-              </span>
+              {known ? (
+                <span className="font-display tabular text-[22px] leading-[0.85] text-paper @min-[320px]:text-[30px]">
+                  <motion.span>{percent}</motion.span>
+                  <span className="ml-0.5 text-[12px] text-paper/50 @min-[320px]:text-[15px]">%</span>
+                </span>
+              ) : null}
               <span className="relative min-w-0 flex-1 overflow-hidden pb-0.5">
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.span
@@ -118,7 +140,7 @@ export function GeneratingField({
               </span>
               {since ? <Elapsed since={since} /> : null}
             </div>
-            <Line width={width} className="mt-2 @min-[320px]:mt-3" />
+            <Line scale={eased} x={x} known={known} className="mt-2 @min-[320px]:mt-3" />
           </div>
         </>
       )}

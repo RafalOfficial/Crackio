@@ -20,7 +20,7 @@ export class ClipError extends Error {
  * 50 → 25), so every kept frame is evenly spaced; LTX's own 24 below that, when it's unknown, or when `seconds` of it
  * would run past 480 frames (each way in one pass, RIPPLE.long). Most phones film at 30: made at 24, every fifth frame
  * was dropped, a stutter on every move all over the picture (the truck clip, 30.04 fps). A rate within 1% of a usual one
- * is taken as that one (a phone's variable rate averages 29.87). The user's pick over speed: truck × Freya at 30 fps kept
+ * is taken as that one (a phone's variable rate averages 29.87). Quality picked over speed: truck × Freya at 30 fps kept
  * all 447 frames, with the LTX step at 470 s instead of 322 s on the 5090 (the whole card, no more).
  */
 export function swapRate(fps: number | undefined, seconds: number): number {
@@ -54,9 +54,9 @@ export async function prepareClip(
   const padded = short > 0 ? short : 0;
   const rate = fps && (steady || !info.fps || info.fps > fps) ? fps : null;
 
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-clip-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-clip-"));
   try {
-    const out = path.join(dir, "clip.mp4");
+    const out = path.join(/*turbopackIgnore: true*/ dir, "clip.mp4");
     // Square pixels: rounding the size to even numbers otherwise leaves them a hair off square.
     const scale = `scale=w=${box}:h=${box}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1`;
     const run = await runFfmpeg([
@@ -73,10 +73,10 @@ export async function prepareClip(
       out,
     ]);
     if (run.code !== 0) throw new ClipError("Couldn't prepare the clip.", 422);
-    const { url } = await saveFileUpload(await fs.readFile(out), "mp4", "video");
+    const { url } = await saveFileUpload(await fs.readFile(/*turbopackIgnore: true*/ out), "mp4", "video");
     return { url, start: from, length, padded, width: info.width, height: info.height };
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }
 
@@ -87,11 +87,11 @@ export async function prepareClip(
 export async function withSourceSound(out: EngineOutput, sourcePath: string, length?: number): Promise<EngineOutput> {
   const info = await probe(sourcePath).catch(() => null);
   if (!info) return out;
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-sound-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-sound-"));
   try {
-    const edited = path.join(dir, "edited.mp4");
-    const mixed = path.join(dir, "mixed.mp4");
-    await fs.writeFile(edited, out.data);
+    const edited = path.join(/*turbopackIgnore: true*/ dir, "edited.mp4");
+    const mixed = path.join(/*turbopackIgnore: true*/ dir, "mixed.mp4");
+    await fs.writeFile(/*turbopackIgnore: true*/ edited, out.data);
     const cut = length ? ["-t", length.toFixed(2)] : [];
     const args = info.audio
       ? ["-y", "-i", edited, "-i", sourcePath, "-map", "0:v:0", "-map", "1:a:0", ...cut, "-c:v", length ? "libx264" : "copy", ...(length ? ["-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"] : []), "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", mixed]
@@ -100,9 +100,9 @@ export async function withSourceSound(out: EngineOutput, sourcePath: string, len
         : null;
     if (!args) return out;
     const run = await runFfmpeg(args);
-    return run.code === 0 ? { ...out, data: await fs.readFile(mixed), mime: "video/mp4" } : out;
+    return run.code === 0 ? { ...out, data: await fs.readFile(/*turbopackIgnore: true*/ mixed), mime: "video/mp4" } : out;
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }
 
@@ -147,11 +147,11 @@ export async function finishAtSize(out: EngineOutput, big: string, mask: { file:
   const info = await probe(big).catch(() => null);
   if (!info?.width || !info.height || !mask.height) return out;
   const tags = await colourTags(big).catch(() => []);
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-finish-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-finish-"));
   try {
-    const made = path.join(dir, "made.mp4");
-    const done = path.join(dir, "done.mp4");
-    await fs.writeFile(made, out.data);
+    const made = path.join(/*turbopackIgnore: true*/ dir, "made.mp4");
+    const done = path.join(/*turbopackIgnore: true*/ dir, "done.mp4");
+    await fs.writeFile(/*turbopackIgnore: true*/ made, out.data);
     const [W, H] = [info.width, info.height];
     const k = H / mask.height;
     const grow = (Math.max(1, Math.min(10, mask.reach * 0.06)) * k).toFixed(2);
@@ -177,8 +177,8 @@ export async function finishAtSize(out: EngineOutput, big: string, mask: { file:
       "-movflags", "+faststart",
       done,
     ]);
-    return run.code === 0 ? { ...out, data: await fs.readFile(done), mime: "video/mp4", width: W, height: H } : out;
+    return run.code === 0 ? { ...out, data: await fs.readFile(/*turbopackIgnore: true*/ done), mime: "video/mp4", width: W, height: H } : out;
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }

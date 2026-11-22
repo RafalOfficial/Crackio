@@ -25,6 +25,7 @@ import { ControlSection, EditToolShell, type Compiled, type ToolModel } from "./
 import { imageSlots } from "@/lib/models/caps";
 import type { SourceImage } from "./SourcePicker";
 import type { PickPoint } from "./angles/AngleStage";
+import { previewUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
 
 const AngleStage = dynamic(() => import("./angles/AngleStage"), {
@@ -234,13 +235,13 @@ function AnglesControls({
               ) : (
                 <span key={i} className="relative grid h-11 place-items-center overflow-hidden rounded-[10px] bg-flat" title="The subject">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={source.url} alt="" className="absolute inset-0 size-full object-cover opacity-70" />
+                  <img src={previewUrl(source.url, 160)} alt="" decoding="async" className="absolute inset-0 size-full object-cover opacity-70" />
                   <Compass azimuth={view.azimuth} />
                 </span>
               ),
             )}
           </div>
-          <div className="flex w-[92px] shrink-0 flex-col gap-1" role="group" aria-label="Camera height">
+          <div className="flex w-[92px] shrink-0 flex-col gap-1.5" role="group" aria-label="Camera height">
             {HEIGHTS.map((h) => {
               const active = view.elevation !== undefined && Math.abs(view.elevation - h.elevation) < 1;
               return (
@@ -249,7 +250,7 @@ function AnglesControls({
                   onClick={() => setView((v) => ({ ...v, elevation: h.elevation }))}
                   aria-pressed={active}
                   className={cn(
-                    "press squircle h-[23px] rounded-[8px] text-[11.5px] font-semibold",
+                    "press squircle min-h-[23px] flex-1 rounded-[8px] text-[12px] font-semibold",
                     active ? "bg-white/[0.12] text-paper shadow-[inset_0_0_0_1.5px_var(--color-spike)]" : "bg-apple-2 text-fog hover:bg-gaffer hover:text-paper",
                   )}
                 >
@@ -268,6 +269,7 @@ function AnglesControls({
             label="Around the subject"
             value={Math.round(view.azimuth)}
             min={-180}
+            origin={0}
             max={180}
             onChange={(azimuth) => setView((v) => ({ ...v, azimuth }))}
             format={(v) => (Math.abs(v) < 1 ? "As shot" : Math.abs(v) >= 179 ? "Behind" : `${Math.abs(v)}° ${v < 0 ? "left" : "right"}`)}
@@ -277,6 +279,7 @@ function AnglesControls({
             label="Height"
             value={Math.round(shot.elevation)}
             min={MIN_ELEVATION}
+            origin={0}
             max={90}
             onChange={(elevation) => setView((v) => ({ ...v, elevation: Math.min(MAX_ELEVATION, elevation) }))}
             format={(v) => (Math.abs(v) < 1 ? "Level" : `${Math.abs(v)}° ${v > 0 ? "above" : "below"}`)}
@@ -414,7 +417,7 @@ function AngleViewport({
   queued: boolean;
 }) {
   const scene = useAngleScene(source, view.pivot);
-  const shot: AngleShot = resolveShot(scene.base, view);
+  const shot: AngleShot = useMemo(() => resolveShot(scene.base, view), [scene.base, view]);
   const facts = angleFacts(scene.base, shot, scene.orbit);
   const models = useVision((s) => s.models);
   const frame = useRef<HTMLDivElement>(null);

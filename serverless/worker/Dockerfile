@@ -1,4 +1,4 @@
-# Crackio's RunPod Serverless worker: ComfyUI and PyTorch as on Crackio's RTX 5090 test box (ComfyUI 0.42.1, torch 2.10
+# Crackio's RunPod Serverless worker: ComfyUI and PyTorch as on Crackio's RTX 5090 test box (ComfyUI 0.44.0, torch 2.10
 # with CUDA 13.0), and a small handler. CUDA 13 because ComfyUI's int8 kernels (comfy-kitchen) link cuBLASLt 13: on an
 # older CUDA, the int8 LTX-2.5 and Gemma fall off their fast path. Needs hosts with driver 580+ (the endpoint's CUDA
 # filter: 13.0). Models aren't in the image: they live on the endpoint's network volume (/runpod-volume/models), filled
@@ -11,7 +11,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git ffmpeg libgl1 libglib2.0-0 \
  && rm -rf /var/lib/apt/lists/*
 
-ARG COMFY_VERSION=v0.42.1
+ARG COMFY_VERSION=v0.44.0
 # The image's own torch stays: ComfyUI's requirements are installed against it (a plain "torchvision" from PyPI would
 # bring another torch, built for another CUDA).
 RUN git clone --depth 1 --branch ${COMFY_VERSION} https://github.com/Comfy-Org/ComfyUI /comfyui \
@@ -20,6 +20,12 @@ RUN git clone --depth 1 --branch ${COMFY_VERSION} https://github.com/Comfy-Org/C
  && python3 -m pip install -c /tmp/torch.txt -r /comfyui/requirements.txt \
  && python3 -m pip install -c /tmp/torch.txt runpod websocket-client requests \
  && python3 -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda)"
+
+# The Director's moved shots run the challenge winner's 3D World workflow, which needs their Panorama Stickers node
+# (pure Python, no requirements of its own), at the commit Crackio was tested with (2026-11-13, on an A40).
+ARG PANORAMA_STICKERS=6db991a
+RUN git clone https://github.com/nomadoor/ComfyUI-Panorama-Stickers /comfyui/custom_nodes/ComfyUI-Panorama-Stickers \
+ && git -C /comfyui/custom_nodes/ComfyUI-Panorama-Stickers checkout ${PANORAMA_STICKERS}
 
 COPY extra_model_paths.yaml /extra_model_paths.yaml
 COPY handler.py /handler.py

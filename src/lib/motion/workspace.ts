@@ -11,7 +11,16 @@ import type { MotionFile } from "./store";
  */
 export class ToolError extends Error {}
 
-export const workspaceDir = (projectId: string) => path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "motion", projectId.replace(/[^\w-]/g, ""));
+/**
+ * A project id as Crackio makes them (nanoid). Anything else is refused before it becomes a path: an id that cleans
+ * down to nothing would otherwise name data/media/motion itself, and deleting it would delete every project.
+ */
+export const validProjectId = (id: unknown): id is string => typeof id === "string" && /^[\w-]{6,40}$/.test(id);
+
+export const workspaceDir = (projectId: string) => {
+  if (!validProjectId(projectId)) throw new ToolError("Not a Motion project.");
+  return path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "motion", projectId);
+};
 export const folderUrl = (projectId: string) => `/api/media/out/motion/${projectId}/`;
 
 /** A readable, safe file name: lowercase letters, digits, dot, dash and underscore. */
@@ -35,7 +44,7 @@ export async function uniqueName(dir: string, wanted: string) {
   for (let i = 1; ; i++) {
     const name = i === 1 ? wanted : `${stem}-${i}${ext}`;
     try {
-      await fs.access(path.join(dir, name));
+      await fs.access(/*turbopackIgnore: true*/ path.join(dir, name));
     } catch {
       return name;
     }
@@ -49,7 +58,7 @@ export async function resolveFile(dir: string, name: unknown): Promise<string> {
   if (clean !== path.basename(clean) || clean.startsWith(".")) throw new ToolError(`"${clean}" must be a plain file name from the project folder, with no folders or paths.`);
   const p = path.join(dir, clean);
   try {
-    await fs.access(p);
+    await fs.access(/*turbopackIgnore: true*/ p);
   } catch {
     throw new ToolError(`There's no "${clean}" in the project folder. Call list_files to see what's there.`);
   }
@@ -59,9 +68,9 @@ export async function resolveFile(dir: string, name: unknown): Promise<string> {
 /** Name → modification stamp, for spotting what a command wrote. */
 export async function snapshot(dir: string): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  for (const entry of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+  for (const entry of await fs.readdir(/*turbopackIgnore: true*/ dir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isFile() || entry.name.startsWith(".")) continue;
-    const s = await fs.stat(path.join(dir, entry.name)).catch(() => null);
+    const s = await fs.stat(/*turbopackIgnore: true*/ path.join(dir, entry.name)).catch(() => null);
     if (s) out.set(entry.name, `${s.mtimeMs}:${s.size}`);
   }
   return out;
@@ -71,15 +80,15 @@ export async function snapshot(dir: string): Promise<Map<string, string>> {
 export async function describeFile(projectId: string, name: string, source: MotionFile["source"], extra: Partial<MotionFile> = {}): Promise<MotionFile> {
   const dir = workspaceDir(projectId);
   const p = path.join(dir, name);
-  const [info, stat] = await Promise.all([probe(p), fs.stat(p)]);
+  const [info, stat] = await Promise.all([probe(p), fs.stat(/*turbopackIgnore: true*/ p)]);
   // Files can be rewritten under the same name, and media is cached forever: version the URLs.
   const v = Math.round(stat.mtimeMs).toString(36);
   let poster: string | undefined;
   if (info.kind === "video") {
     try {
       const jpg = await frameAt(p, Math.min(1, (info.duration ?? 0) * 0.3), 480);
-      await fs.mkdir(path.join(dir, ".posters"), { recursive: true });
-      await fs.writeFile(path.join(dir, ".posters", `${name}.jpg`), jpg);
+      await fs.mkdir(/*turbopackIgnore: true*/ path.join(dir, ".posters"), { recursive: true });
+      await fs.writeFile(/*turbopackIgnore: true*/ path.join(dir, ".posters", `${name}.jpg`), jpg);
       poster = `${folderUrl(projectId)}.posters/${encodeURIComponent(name)}.jpg?v=${v}`;
     } catch {
       /* no poster; the player still works */

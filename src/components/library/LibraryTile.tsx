@@ -37,11 +37,7 @@ const PLAY_AFTER = 140;
 
 type TileProps = {
   take: Take;
-  /** Width over height, as the row lays it out. */
-  ratio: number;
-  /** In a full row the card grows to its share; in a short last row it keeps `width`. */
-  full: boolean;
-  /** About how wide the card is, in CSS pixels. */
+  /** How wide the card is, in CSS pixels (it fills the slot the grid places it in). */
   width: number;
   selecting: boolean;
   selected: boolean;
@@ -59,12 +55,14 @@ type TileProps = {
  * state changes.
  */
 export const LibraryTile = memo(function LibraryTile(props: TileProps) {
-  const { take, ratio, full, width } = props;
-  const style: CSSProperties = full ? { flex: `${ratio} ${ratio} 0%`, minWidth: 0 } : { width, flex: "none" };
-  if (take.gen.status === "queued" || take.gen.status === "running") return <RunningTile take={take} style={style} onCancel={props.on.cancel} />;
-  if (take.gen.status === "error") return <FailedTile take={take} style={style} onRemove={props.on.remove} />;
-  return <DoneTile {...props} style={style} />;
+  const { take } = props;
+  if (take.gen.status === "queued" || take.gen.status === "running") return <RunningTile take={take} style={FILL} onCancel={props.on.cancel} />;
+  if (take.gen.status === "error") return <FailedTile take={take} style={FILL} onRemove={props.on.remove} />;
+  return <DoneTile {...props} style={FILL} />;
 });
+
+/** A card fills the slot the grid gives it. */
+const FILL: CSSProperties = { width: "100%", height: "100%" };
 
 function DoneTile({ take, width, style, selecting, selected, leaving, dragged, folders, newColor, on }: TileProps & { style: CSSProperties }) {
   const { gen, key } = take;
@@ -113,7 +111,7 @@ function DoneTile({ take, width, style, selecting, selected, leaving, dragged, f
         else on.open(key);
       }}
       className={cn(
-        "lib-tile group/tile squircle relative overflow-hidden rounded-[12px] bg-apple",
+        "group/tile squircle relative overflow-hidden rounded-[12px] bg-apple",
         selecting ? "cursor-pointer" : "cursor-zoom-in",
         leaving && "take-leaving",
         dragged && "opacity-40",
@@ -211,12 +209,15 @@ function DoneTile({ take, width, style, selecting, selected, leaving, dragged, f
 /** A clip's opening frame, at the width the card needs. */
 function Poster({ url, sizes, alt }: { url: string; sizes: string; alt: string }) {
   const still = posterUrl(url, 640);
+  // A width the server hasn't made yet answers 404 on the first look (it makes 640 and 960 ahead): then the 640 one.
+  const [plain, setPlain] = useState(false);
   // Media that isn't Crackio's has no stills made for it: its own first frame stands in.
   if (!still) return <video src={`${url}#t=0.1`} preload="metadata" muted playsInline aria-label={alt} className="size-full bg-black object-cover" />;
   return (
     <img
       src={still}
-      srcSet={previewSrcSet(url, WIDTHS, "poster")}
+      srcSet={plain ? undefined : previewSrcSet(url, WIDTHS, "poster")}
+      onError={() => setPlain(true)}
       sizes={sizes}
       alt={alt}
       loading="lazy"

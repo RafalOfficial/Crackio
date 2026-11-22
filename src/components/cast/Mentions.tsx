@@ -7,6 +7,7 @@ import { AtSign, LoaderCircle, Plus } from "lucide-react";
 import { useCast } from "@/lib/hooks/use-cast";
 import { floatingHost } from "@/components/ui/Popover";
 import type { Character } from "@/lib/cast/types";
+import { previewUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
 
 const WIDTH = 288;
@@ -203,10 +204,10 @@ function MentionMenu({
       <span className="relative size-8 shrink-0 overflow-hidden rounded-[9px] bg-apple">
         {o.kind === "picture" ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={o.picture.src} alt="" className="size-full object-cover" />
+          <img src={previewUrl(o.picture.src, 96)} alt="" decoding="async" className="size-full object-cover" />
         ) : o.c.portrait || o.c.photos[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={o.c.portrait ?? o.c.photos[0]} alt="" className="size-full object-cover" />
+          <img src={previewUrl(o.c.portrait ?? o.c.photos[0], 96)} alt="" decoding="async" className="size-full object-cover" />
         ) : null}
         {o.kind === "cast" && o.c.status === "building" ? <LoaderCircle size={14} className="absolute inset-0 m-auto animate-spin text-paper" /> : null}
       </span>

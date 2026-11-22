@@ -71,31 +71,63 @@ export function Row({
   );
 }
 
-/** Two or three options in a pill track. */
+/** The Segmented control's sizes: a chip-row "sm", the usual "md", a roomy "lg". */
+const SEGMENT = {
+  sm: { track: "rounded-[10px]", item: "h-6 rounded-[8px] px-2.5 text-[11.5px]" },
+  md: { track: "rounded-[12px]", item: "h-7 rounded-[10px] px-3 text-[12px]" },
+  lg: { track: "rounded-[14px]", item: "h-8 rounded-[12px] px-3.5 text-[13px]" },
+} as const;
+
+/**
+ * Two or three options in a pill track. Like a set of radio buttons: Tab lands on the chosen one, the arrow keys
+ * (and Home/End) choose another. `label` names the group for screen readers.
+ */
 export function Segmented<T extends string>({
   value,
   options,
   onChange,
+  size = "md",
+  label,
   className,
 }: {
   value: T;
   options: { id: T; label: ReactNode; disabled?: boolean; title?: string }[];
   onChange: (v: T) => void;
+  size?: keyof typeof SEGMENT;
+  label?: string;
   className?: string;
 }) {
+  const s = SEGMENT[size];
+  const enabled = options.filter((o) => !o.disabled);
+  // The chosen option takes Tab; with none chosen (or it's off), the first one that's on.
+  const tabStop = enabled.some((o) => o.id === value) ? value : enabled[0]?.id;
+  const step = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const keys: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+    if (!(e.key in keys) && e.key !== "Home" && e.key !== "End") return;
+    if (!enabled.length) return;
+    e.preventDefault();
+    const at = enabled.findIndex((o) => o.id === value);
+    const next =
+      e.key === "Home" ? enabled[0] : e.key === "End" ? enabled[enabled.length - 1] : enabled[(Math.max(0, at) + keys[e.key] + enabled.length) % enabled.length];
+    onChange(next.id);
+    e.currentTarget.querySelector<HTMLElement>(`[data-segment="${CSS.escape(next.id)}"]`)?.focus();
+  };
   return (
-    <div role="radiogroup" className={cn("squircle inline-flex rounded-[12px] bg-white/[0.05] p-0.5", className)}>
+    <div role="radiogroup" aria-label={label} onKeyDown={step} className={cn("squircle inline-flex bg-white/[0.05] p-0.5", s.track, className)}>
       {options.map((o) => (
         <button
           key={o.id}
           type="button"
           role="radio"
+          data-segment={o.id}
           aria-checked={value === o.id}
+          tabIndex={o.id === tabStop ? 0 : -1}
           disabled={o.disabled}
           title={o.title}
           onClick={() => onChange(o.id)}
           className={cn(
-            "press squircle h-7 rounded-[10px] px-3 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-40",
+            "press squircle font-semibold transition-[background-color,color,box-shadow] duration-150 disabled:cursor-not-allowed disabled:opacity-40",
+            s.item,
             value === o.id ? "bg-white/[0.14] text-paper shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]" : "text-fog hover:text-paper",
           )}
         >
@@ -127,10 +159,11 @@ export function Switch({
       className="inline-flex items-center gap-2 text-[13px] font-medium text-fog hover:text-paper"
     >
       <span className={cn("relative h-[18px] w-8 rounded-full transition-colors", checked ? "bg-spike" : "bg-gaffer")}>
+        {/* The knob slides by transform (no layout per frame). */}
         <span
           className={cn(
-            "absolute top-[3px] size-3 rounded-full bg-paper shadow transition-[left] duration-200",
-            checked ? "left-[17px]" : "left-[3px]",
+            "absolute left-[3px] top-[3px] size-3 rounded-full bg-paper shadow transition-transform duration-200 ease-[var(--ease-out-quint)]",
+            checked ? "translate-x-[14px]" : "translate-x-0",
           )}
         />
       </span>

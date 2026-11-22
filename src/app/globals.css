@@ -22,7 +22,8 @@
 
   --color-paper: #f0efed;
   --color-fog: #bdb9b3;
-  --color-haze: #85817b;
+  /* Muted text: 4.5:1 or better on every surface it sits on (cards, popovers). */
+  --color-haze: #99948e;
 
   --color-spike: #ff5b2e;
   --color-spike-hi: #ff7650;
@@ -82,7 +83,8 @@
 
 :root {
   color-scheme: dark;
-  --sidebar-w: 240px;
+  /* The rail (components/shell/Sidebar): one width on every page. */
+  --sidebar-w: 76px;
 }
 
 html,
@@ -475,17 +477,333 @@ body {
     -6px 0;
 }
 
-/* Reduced motion calms the interface. The dashboard's showcase (marked .motion-always) plays like
-   a muted video instead, with its own pause button, so it looks the same in every browser. */
+/*
+ * The rail (components/shell/Sidebar): icons with their names under them. The page you're on sits in one raised
+ * button that glides from item to item; only its icon takes the page's colour. Tools opens the drawer beside it.
+ */
+.nav-rail {
+  background: #141217;
+  box-shadow: inset -1px 0 0 rgb(255 255 255 / 0.06);
+}
+.nav-item {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 64px;
+  height: 56px;
+  border-radius: 14px;
+  corner-shape: squircle;
+  color: #99948e;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  transition:
+    color 180ms var(--ease-out-quint),
+    background-color 180ms var(--ease-out-quint);
+}
+.nav-item svg {
+  color: #8f8a84;
+  fill: transparent;
+  transition:
+    color 200ms var(--ease-out-quint),
+    fill 240ms var(--ease-out-quint),
+    transform 240ms var(--ease-out-quint);
+}
+.nav-item:hover {
+  color: var(--color-paper);
+  background-color: rgb(255 255 255 / 0.035);
+}
+.nav-item:hover svg {
+  color: var(--color-paper);
+}
+.nav-item:active svg {
+  transform: scale(0.9);
+}
+.nav-item[data-active] {
+  color: #fff;
+  font-weight: 600;
+  background-color: transparent;
+}
+.nav-item[data-active] svg {
+  color: var(--hue);
+  fill: color-mix(in oklab, var(--hue) 22%, transparent);
+}
+.nav-label {
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-selected {
+  position: absolute;
+  top: 0;
+  left: 6px;
+  width: 64px;
+  height: 56px;
+  border-radius: 14px;
+  corner-shape: squircle;
+  pointer-events: none;
+  background: linear-gradient(180deg, #2b2731 0%, #25212b 100%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.075),
+    inset 0 1px 0 rgb(255 255 255 / 0.07),
+    0 2px 6px -2px rgb(0 0 0 / 0.55);
+}
+.nav-rail[data-ready] .nav-selected {
+  transition: transform 420ms var(--ease-out-quint);
+}
+.nav-badge {
+  position: absolute;
+  top: 7px;
+  right: 13px;
+  display: grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--color-spike);
+  color: var(--color-spike-ink);
+  font-size: 9.5px;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #141217;
+}
+.nav-lamp {
+  position: absolute;
+  top: 9px;
+  right: 18px;
+  display: grid;
+  place-items: center;
+  min-width: 8px;
+  height: 8px;
+  border-radius: 8px;
+  background: var(--color-chroma);
+  color: var(--color-spike-ink);
+  font-size: 9px;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #141217;
+}
+.nav-lamp[data-tone="busy"] {
+  background: var(--color-daylight);
+}
+.nav-lamp[data-tone="warn"] {
+  top: 6px;
+  right: 13px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  background: var(--color-tungsten);
+}
+.nav-tip {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 12px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #24202a;
+  box-shadow:
+    0 14px 34px -12px rgb(0 0 0 / 0.8),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  color: #a9a49e;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-4px, -50%);
+  transition:
+    opacity 140ms var(--ease-out-quint),
+    transform 200ms var(--ease-out-quint);
+}
+.nav-tip b {
+  color: var(--color-paper);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.nav-item:hover .nav-tip,
+.nav-item:focus-visible .nav-tip {
+  opacity: 1;
+  transform: translate(0, -50%);
+  transition-delay: 120ms;
+}
+.tools-drawer {
+  background: #141217;
+  box-shadow:
+    inset -1px 0 0 rgb(255 255 255 / 0.06),
+    30px 0 60px -30px rgb(0 0 0 / 0.85);
+}
+@keyframes tool-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border-radius: 15px;
+  corner-shape: squircle;
+  background: #1c1921;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  transition:
+    background-color 200ms var(--ease-out-quint),
+    box-shadow 200ms var(--ease-out-quint),
+    transform 220ms var(--ease-out-quint);
+  animation: tool-card-in 360ms var(--ease-out-quint) both;
+  animation-delay: var(--d, 0ms);
+}
+.tool-card-thumb {
+  position: relative;
+  display: block;
+  height: 78px;
+  overflow: hidden;
+  border-radius: 11px;
+  corner-shape: squircle;
+  background: var(--color-apple);
+}
+.tool-card-thumb img {
+  transition: transform 600ms var(--ease-out-quint);
+}
+.tool-card-go {
+  flex: none;
+  color: #99948e;
+  opacity: 0;
+  transform: translate(-3px, 3px);
+  transition:
+    opacity 180ms var(--ease-out-quint),
+    transform 220ms var(--ease-out-quint);
+}
+.tool-card:hover {
+  background: #221e28;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.11);
+  transform: translateY(-1px);
+}
+.tool-card:hover .tool-card-thumb img {
+  transform: scale(1.06);
+}
+.tool-card:hover .tool-card-go,
+.tool-card:focus-visible .tool-card-go,
+.tool-card[aria-current="page"] .tool-card-go {
+  opacity: 1;
+  transform: none;
+}
+.tool-card:active {
+  transform: scale(0.98);
+}
+.tool-card[aria-current="page"] {
+  background: #28242e;
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.34);
+}
+.tool-card[aria-current="page"] .tool-card-go {
+  color: var(--color-paper);
+}
+
+/*
+ * Settings → Tools → Add-ons (components/settings/AddonBoard): at rest a card shows its picture and nothing over it.
+ * Pointing at the card (or tabbing into it) lets the picture step back and plays what the add-on does in two or three
+ * beats, each `--at` after the last. With motion off (Calm, reduced motion) the beats simply show.
+ */
+.addon-dusk {
+  opacity: 0;
+  transition: opacity 260ms var(--ease-out-quint);
+}
+.addon-beat {
+  opacity: 0;
+  transform: translateY(5px);
+  transition:
+    opacity 180ms var(--ease-out-quint),
+    transform 180ms var(--ease-out-quint);
+}
+.addon-card:hover .addon-dusk,
+.addon-card:focus-within .addon-dusk {
+  opacity: 1;
+}
+.addon-card:hover .addon-beat,
+.addon-card:focus-within .addon-beat {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 320ms var(--ease-out-quint) var(--at, 0ms),
+    transform 420ms var(--ease-out-quint) var(--at, 0ms);
+}
+
+/* A take that just finished develops (components/ui/TakeReveal): dark until it's decoded, then up out of a soft, bright blur. */
+.take-reveal {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.take-reveal[data-reveal="wait"] :is(img, video) {
+  opacity: 0;
+}
+.take-reveal[data-reveal="go"] :is(img, video) {
+  animation: take-develop 640ms var(--ease-out-quint) both;
+}
+.take-reveal-veil {
+  position: absolute;
+  inset: 0;
+  background: #0e0c12;
+  pointer-events: none;
+}
+.take-reveal[data-reveal="go"] .take-reveal-veil {
+  animation: take-veil 460ms var(--ease-out-quint) both;
+}
+@keyframes take-develop {
+  from {
+    opacity: 0;
+    filter: blur(12px) brightness(1.35);
+    transform: scale(1.03);
+  }
+}
+@keyframes take-veil {
+  to {
+    opacity: 0;
+  }
+}
+
+/* A modal open over the page (the examples' lightbox) holds the page still behind it. */
+html:has(dialog[open]:modal) {
+  overflow: hidden;
+}
+
+/*
+ * Motion follows Settings → Preferences (html[data-motion], set before the first paint; lib/motion-pref):
+ * - System (the default): with the system's reduce-motion on, nothing slides, zooms or loops, but state changes still
+ *   fade (hovers, presses, focus rings, colours): an interface that snaps reads as broken, not calm.
+ * - Full: everything moves, whatever the system says.
+ * - Calm: as with System and reduce-motion on, on any system.
+ * The dashboard's showcase and hero (.motion-always) play like muted videos in every mode, and spinners keep turning:
+ * they say something is happening.
+ */
 @media (prefers-reduced-motion: reduce) {
-  :where(*:not(.motion-always, .motion-always *)),
-  :where(*:not(.motion-always, .motion-always *))::before,
-  :where(*:not(.motion-always, .motion-always *))::after {
+  :root:not([data-motion="full"]) :where(*:not(.motion-always, .motion-always *, .animate-spin)),
+  :root:not([data-motion="full"]) :where(*:not(.motion-always, .motion-always *))::before,
+  :root:not([data-motion="full"]) :where(*:not(.motion-always, .motion-always *))::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-property: opacity, color, background-color, border-color, outline-color, box-shadow, fill, stroke !important;
     scroll-behavior: auto !important;
   }
+}
+:root[data-motion="calm"] :where(*:not(.motion-always, .motion-always *, .animate-spin)),
+:root[data-motion="calm"] :where(*:not(.motion-always, .motion-always *))::before,
+:root[data-motion="calm"] :where(*:not(.motion-always, .motion-always *))::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-property: opacity, color, background-color, border-color, outline-color, box-shadow, fill, stroke !important;
+  scroll-behavior: auto !important;
 }
 
 /*
@@ -889,6 +1207,14 @@ body {
     background: rgb(14 15 22 / 0.74);
     -webkit-backdrop-filter: blur(22px) brightness(1.1) saturate(1.4);
     backdrop-filter: blur(22px) brightness(1.1) saturate(1.4);
+    transition: background-color 220ms var(--ease-out-quint);
+  }
+  /* While it slides (data-sliding) the glass is a solid pane: a blur re-sampled every frame made the slide stutter.
+     Once still, the pane clears into the glass. */
+  .model-library-root[data-glass][data-sliding] .model-library {
+    background-color: rgb(18 19 27 / 0.97);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
   @media (min-width: 768px) {
     .model-library-root[data-glass] .model-library {

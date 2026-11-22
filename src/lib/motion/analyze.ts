@@ -133,12 +133,14 @@ export async function neutralize(file: string, stats: ColorStats, keep = 0.25): 
 /** The cast of a video, from a few frames across it. */
 export async function videoColor(file: string, duration: number, count = 5): Promise<{ at: number; stats: ColorStats }[]> {
   const times = frameTimes(Math.max(0.2, duration), count);
-  const out: { at: number; stats: ColorStats }[] = [];
-  for (const t of times) {
-    const jpg = await frameAt(file, t, 320).catch(() => null);
-    if (jpg) out.push({ at: t, stats: await colorStats(jpg) });
-  }
-  return out;
+  // The frames are read side by side (they were read one after another), and come back in their order.
+  const frames = await Promise.all(
+    times.map(async (t) => {
+      const jpg = await frameAt(file, t, 320).catch(() => null);
+      return jpg ? { at: t, stats: await colorStats(jpg) } : null;
+    }),
+  );
+  return frames.filter((f): f is { at: number; stats: ColorStats } => Boolean(f));
 }
 
 export function summarizeVideoColor(frames: { at: number; stats: ColorStats }[]): string {

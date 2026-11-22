@@ -9,7 +9,7 @@ import { withSubjectMatte } from "./vision";
 import { saveUpload, urlToPath } from "./media";
 import { DATA_DIR } from "./paths";
 import { pictureSlots } from "./director";
-import { askText, refinePrompt } from "@/lib/engines/refine";
+import { askText, enhancerReady, refinePrompt } from "@/lib/engines/refine";
 import { jsonObject } from "@/lib/json-answer";
 import { engineFor } from "@/lib/engines";
 import { EngineError, type Engine, type EngineContext, type EngineJob, type EngineOutput, type EngineReference, type EngineResult } from "@/lib/engines/types";
@@ -98,18 +98,18 @@ const CACHE = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "cast");
 async function cached(key: string, make: () => Promise<Buffer>) {
   const file = path.join(/*turbopackIgnore: true*/ CACHE, `${createHash("sha1").update(key).digest("hex").slice(0, 24)}.png`);
   try {
-    await fs.access(file);
+    await fs.access(/*turbopackIgnore: true*/ file);
   } catch {
     const png = await make();
-    await fs.mkdir(CACHE, { recursive: true });
-    await fs.writeFile(file, png);
+    await fs.mkdir(/*turbopackIgnore: true*/ CACHE, { recursive: true });
+    await fs.writeFile(/*turbopackIgnore: true*/ file, png);
   }
   return file;
 }
 
 /** Several sheets in one picture, one under the other, for a model that takes fewer pictures than there are people. */
 async function board(files: string[]) {
-  const stamps = await Promise.all(files.map((f) => fs.stat(f).then((s) => `${f}:${s.mtimeMs}`)));
+  const stamps = await Promise.all(files.map((f) => fs.stat(/*turbopackIgnore: true*/ f).then((s) => `${f}:${s.mtimeMs}`)));
   return cached(`board|${stamps.join("|")}`, async () => {
     const width = 1536;
     const rows = await Promise.all(files.map((f) => sharp(f).resize({ width }).png().toBuffer({ resolveWithObject: true })));
@@ -151,7 +151,7 @@ async function ingredientsSheet(cast: Character[], aspect: number) {
     const row = rows === 1 ? "" : rows === 2 ? ["Top", "Bottom"][r] : ["Top", "Middle", "Bottom"][r];
     return [row, col].filter(Boolean).join(" ") || "Center";
   };
-  const stamps = await Promise.all(cells.flatMap((x) => x.parts).map((f) => fs.stat(f).then((s) => `${f}:${s.mtimeMs}`)));
+  const stamps = await Promise.all(cells.flatMap((x) => x.parts).map((f) => fs.stat(/*turbopackIgnore: true*/ f).then((s) => `${f}:${s.mtimeMs}`)));
   const file = await cached(`ingredients2|${cols}|${aspect.toFixed(3)}|${stamps.join("|")}`, async () => {
     const gridW = GAP + cols * (boxW + GAP);
     const gridH = GAP + rows * (H + GAP);
@@ -182,7 +182,7 @@ async function ingredientsSheet(cast: Character[], aspect: number) {
 async function view(c: Character, i: number) {
   const sheet = fileOf(c.sheet);
   if (!sheet) return null;
-  const stat = await fs.stat(sheet);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ sheet);
   return cached(`view3|${sheet}|${stat.mtimeMs}|${c.sheetLayout ?? ""}|${i}`, async () => (await sheetViews(sheet, c))[i]);
 }
 
@@ -366,7 +366,7 @@ const GREY = { r: 210, g: 210, b: 210 };
 
 /** A photo's subject on plain light grey, trimmed to it: the photo's own pixels, nothing redrawn. Null when no subject stands out. */
 async function lifted(file: string): Promise<string | null> {
-  const stat = await fs.stat(file).catch(() => null);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ file).catch(() => null);
   if (!stat) return null;
   return cached(`lift1|${file}|${stat.mtimeMs}`, async () => {
     const matted = await withSubjectMatte(file);
@@ -543,6 +543,18 @@ async function sceneWords(job: EngineJob, cast: Character[], own: EngineReferenc
   if (!job.refine) return withNames(job.prompt, cast);
   const named = withNames(job.userPrompt, cast);
   ctx.progress(0.03, "Reading the brief");
+  // Crackio's prompt enhancer writes the scene where it's set up: it restates the request with the cast's names as they
+  // are and adds only how it looks. The general writer below, on a small model, gave people clothes and props nobody
+  // asked for (a linen dress and a backpack in a wheat field, a bouquet in a portrait), and the pictures showed them.
+  if (await enhancerReady()) {
+    try {
+      const { enhance } = await import("@/lib/engines/enhance");
+      const said = (await enhance({ text: named, references: own, kind, signal: ctx.signal })).replace(/^["“]|["”]$/g, "").trim();
+      if (said.length >= 13) return said;
+    } catch {
+      // The general writer takes it.
+    }
+  }
   const who = cast.map((c) => (c.kind === "object" ? `${called(c)} is a thing` : `${c.name} is ${what(c)}`)).join("; ");
   const out = await refinePrompt({ text: `${named}\n\n(Who's who, for you only: ${who}.)`, references: own, aspect: job.aspect, signal: ctx.signal, kind, instructions: CAST_WORDS[kind] });
   return out.by ? out.prompt : named;
@@ -642,7 +654,7 @@ Answer with JSON only: {"counts": {"Name": 1}, "wrongSize": ["Name"]}`;
 
 /** Pictures side by side at one height, for a check that reads them left to right. */
 async function row(files: string[]) {
-  const stamps = await Promise.all(files.map((f) => fs.stat(f).then((s) => `${f}:${s.mtimeMs}`)));
+  const stamps = await Promise.all(files.map((f) => fs.stat(/*turbopackIgnore: true*/ f).then((s) => `${f}:${s.mtimeMs}`)));
   return cached(`row|${stamps.join("|")}`, async () => {
     const height = 768;
     const tiles = await Promise.all(files.map((f) => sharp(f).resize({ height }).png().toBuffer({ resolveWithObject: true })));
@@ -666,8 +678,8 @@ async function offCount(data: Buffer, cast: Character[], signal: AbortSignal, co
   const sheets = covers ?? cast.map((c) => fileOf(c.sheet) ?? fileOf(c.portrait)).filter((f): f is string => Boolean(f));
   if (!sheets.length) return 0;
   const frame = path.join(/*turbopackIgnore: true*/ CACHE, `check-${createHash("sha1").update(data).digest("hex").slice(0, 20)}.png`);
-  await fs.mkdir(CACHE, { recursive: true });
-  await fs.writeFile(frame, await sharp(data).resize({ width: 1280, height: 1280, fit: "inside" }).png().toBuffer());
+  await fs.mkdir(/*turbopackIgnore: true*/ CACHE, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ frame, await sharp(data).resize({ width: 1280, height: 1280, fit: "inside" }).png().toBuffer());
   try {
     const answer = await askText({
       instructions: covers ? CHECK_COVERS : CHECK,
@@ -693,7 +705,7 @@ async function offCount(data: Buffer, cast: Character[], signal: AbortSignal, co
       return (Number.isFinite(n) ? off + Math.abs(n - 1) : off) + (cast.length > 1 && wrong.includes(c.name.toLowerCase()) ? 1 : 0);
     }, 0);
   } finally {
-    await fs.rm(frame, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ frame, { force: true });
   }
 }
 
@@ -735,8 +747,8 @@ Answer with JSON only: {"seen": "front" | "three-quarter" | "side" | "back"}: wh
 /** Which side of a Cast member a picture shows, read next to its front view; null when no vision model answers. */
 async function seenFrom(data: Buffer, front: string, signal: AbortSignal, other?: { view: SheetView; looks?: string }) {
   const file = path.join(/*turbopackIgnore: true*/ CACHE, `seen-${createHash("sha1").update(data).digest("hex").slice(0, 20)}.png`);
-  await fs.mkdir(CACHE, { recursive: true });
-  await fs.writeFile(file, await sharp(data).resize({ width: 1024, height: 1024, fit: "inside" }).png().toBuffer());
+  await fs.mkdir(/*turbopackIgnore: true*/ CACHE, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ file, await sharp(data).resize({ width: 1024, height: 1024, fit: "inside" }).png().toBuffer());
   try {
     const answer = await askText({
       instructions: SEEN,
@@ -753,7 +765,7 @@ async function seenFrom(data: Buffer, front: string, signal: AbortSignal, other?
     const seen = answer ? jsonObject<{ seen?: unknown }>(answer)?.seen : null;
     return typeof seen === "string" ? seen.toLowerCase() : null;
   } finally {
-    await fs.rm(file, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ file, { force: true });
   }
 }
 

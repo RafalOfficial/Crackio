@@ -8,10 +8,14 @@ import { useGenerations } from "@/lib/hooks/use-generations";
 import { useModels } from "@/lib/hooks/use-models";
 import { ToolTile } from "@/components/ui/ToolTile";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { ModelPicker } from "@/components/models/ModelPicker";
+import { LocalTimeLine } from "@/components/models/LocalTimeLine";
+import { useModelChoice } from "@/lib/hooks/use-model-choice";
 import { RecDot } from "@/components/ui/Viewfinder";
 import { GeneratingField } from "@/components/ui/GeneratingField";
 import { CLIP_TARGETS, VIDEO_UPSCALERS, upscaledSize } from "@/lib/local/upscalers";
 import { ControlSection, nearestAspect } from "./EditToolShell";
+import { useToolTakes } from "./use-tool-takes";
 import { cn } from "@/lib/cn";
 import { demoWords } from "@/lib/demo/config";
 
@@ -28,22 +32,35 @@ const TIER_STYLE = {
 function readClip(file: File) {
   return new Promise<{ duration: number; width: number; height: number }>((resolve) => {
     const v = document.createElement("video");
+    const src = URL.createObjectURL(file);
+    const done = (meta: { duration: number; width: number; height: number }) => {
+      URL.revokeObjectURL(src);
+      v.removeAttribute("src");
+      resolve(meta);
+    };
     v.preload = "metadata";
-    v.onloadedmetadata = () => resolve({ duration: v.duration || 0, width: v.videoWidth || 1280, height: v.videoHeight || 720 });
-    v.onerror = () => resolve({ duration: 0, width: 1280, height: 720 });
-    v.src = URL.createObjectURL(file);
+    v.onloadedmetadata = () => done({ duration: v.duration || 0, width: v.videoWidth || 1280, height: v.videoHeight || 720 });
+    v.onerror = () => done({ duration: 0, width: 1280, height: 720 });
+    v.src = src;
   });
 }
 
+/** The upscalers that take a clip, best first. */
+const CLIP_UPSCALERS = VIDEO_UPSCALERS.map((u) => u.id);
+
 /**
- * Upscale's Video section: a clip to 1080p, 2K or 4K on your own GPU, through ComfyUI. The upscalers are listed best first,
- * with what each is like and the memory it needs; ones none of your machines has yet point to the Local page.
+ * Upscale's Video section: a clip to 1080p, 2K or 4K on your own GPU, through ComfyUI. The upscaler comes from the same
+ * model library as everywhere (only those that take a clip), with what it's like and the memory it needs, and the line
+ * above Upscale says which machine it runs on (its Run on picker, as on the picture side).
  */
 export function VideoUpscale({ tool, modeSwitch }: { tool: Tool; modeSwitch: ReactNode }) {
-  const { items, submit, cancel } = useGenerations();
+  const submit = useGenerations((s) => s.submit);
+  const cancel = useGenerations((s) => s.cancel);
+  const items = useToolTakes(tool.slug);
   const { models } = useModels();
   const [clip, setClip] = useState<Clip | null>(null);
-  const [picked, setPicked] = useState<string | null>(null);
+  // A choice of its own, apart from the picture upscaler's: starts on the first clip upscaler ready on your machines.
+  const [picked, setPicked] = useModelChoice("upscale", "upscale", { own: "video", first: CLIP_UPSCALERS });
   const [target, setTarget] = useState<string>("2160p");
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -53,13 +70,16 @@ export function VideoUpscale({ tool, modeSwitch }: { tool: Tool; modeSwitch: Rea
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
-  // Each upscaler, and whether one of your machines has it.
+  // Each upscaler, and whether one of your machines has it: yours when it's ready, else the first that is.
   const rows = VIDEO_UPSCALERS.map((u) => ({ ...u, model: models.find((m) => m.id === u.id) }));
-  const chosen = rows.find((r) => r.id === picked && r.model?.available) ?? rows.find((r) => r.model?.available) ?? null;
+  // The one you picked runs, or none (it isn't set up yet): never another one quietly in its place.
+  const chosen = rows.find((r) => r.id === picked && r.model?.available) ?? null;
+  const about = rows.find((r) => r.id === picked) ?? null;
+  const anyReady = rows.some((r) => r.model?.available);
   const height = CLIP_TARGETS.find((t) => t.value === target)?.height ?? 2160;
   const size = clip ? upscaledSize(clip.width, clip.height, height) : null;
 
-  const takes = useMemo(() => (clip ? items.filter((g) => g.tool === tool.slug && g.params?.videoUrl === clip.url) : []), [items, clip, tool.slug]);
+  const takes = useMemo(() => (clip ? items.filter((g) => g.params?.videoUrl === clip.url) : []), [items, clip]);
   const live = takes.filter((g) => g.status === "queued" || g.status === "running");
   const shown = takes.find((g) => g.id === viewing) ?? takes.find((g) => g.status === "done") ?? null;
   const failed = takes[0]?.status === "error" ? takes[0] : null;
@@ -128,42 +148,24 @@ export function VideoUpscale({ tool, modeSwitch }: { tool: Tool; modeSwitch: Rea
           <div className="space-y-4 p-3">
             {modeSwitch}
 
-            <ControlSection title="Upscaler" hint={demoWords("Best first · runs on your own GPU")}>
-              <div className="space-y-1.5" role="radiogroup" aria-label="Upscaler">
-                {rows.map((r) => {
-                  const on = chosen?.id === r.id;
-                  const have = Boolean(r.model?.available);
-                  return (
-                    <button
-                      key={r.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={on}
-                      disabled={!have}
-                      onClick={() => setPicked(r.id)}
-                      className={cn(
-                        "press squircle w-full rounded-[14px] px-3 py-2.5 text-left disabled:cursor-default",
-                        on ? "bg-white/[0.07] shadow-[inset_0_0_0_1.5px_var(--color-spike)]" : "shadow-[inset_0_0_0_1px_var(--color-line)] hover:bg-white/[0.03]",
-                      )}
-                    >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className={cn("text-[14px] font-semibold", on ? "text-paper" : have ? "text-fog" : "text-haze")}>{r.name}</span>
-                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", TIER_STYLE[r.tier])}>{r.tier}</span>
-                      </span>
-                      <span className="mt-1 block text-[12px] leading-relaxed text-haze">{r.note}</span>
-                      <span className="mt-1.5 flex items-center justify-between gap-2 text-[11.5px]">
-                        <span className="text-haze">About {r.needGb} GB of GPU memory</span>
-                        {have ? null : (
-                          <Link href="/settings/tools?tool=upscale" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-0.5 font-semibold text-fog hover:text-paper">
-                            Set up in Settings <ArrowUpRight size={11} />
-                          </Link>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
+            <ModelPicker kind="upscale" task="upscale" tool={tool.slug} value={picked} onChange={setPicked} only={CLIP_UPSCALERS} />
+            {about ? (
+              <div className="squircle rounded-[14px] px-3 py-2.5 shadow-[inset_0_0_0_1px_var(--color-line)]">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-semibold text-paper">{about.name}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", TIER_STYLE[about.tier])}>{about.tier}</span>
+                </span>
+                <span className="mt-1 block text-[12px] leading-relaxed text-haze">{about.note}</span>
+                <span className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-haze">
+                  <span>About {about.needGb} GB of GPU memory</span>
+                  {about.model?.available ? null : (
+                    <Link href="/settings/tools?tool=upscale" className="inline-flex items-center gap-0.5 font-semibold text-fog hover:text-paper">
+                      Not on your machines yet: set it up <ArrowUpRight size={11} />
+                    </Link>
+                  )}
+                </span>
               </div>
-            </ControlSection>
+            ) : null}
 
             <ControlSection title="Clip" hint={clip ? `${clip.width}×${clip.height} · ${clip.duration.toFixed(1)} s` : "MP4, MOV or WebM"}>
               {clip ? (
@@ -237,7 +239,7 @@ export function VideoUpscale({ tool, modeSwitch }: { tool: Tool; modeSwitch: Rea
             </ControlSection>
           </div>
 
-          <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat/90 p-3 backdrop-blur-xl">
+          <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat p-3">
             {failed ? (
               <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-tally">
                 <TriangleAlert size={14} className="mt-0.5 shrink-0" />
@@ -249,14 +251,14 @@ export function VideoUpscale({ tool, modeSwitch }: { tool: Tool; modeSwitch: Rea
             {error ? <p className="text-[12.5px] text-tally">{error}</p> : null}
             {!chosen ? (
               <p className="text-[12.5px] leading-relaxed text-haze">
-                None of your machines has a video upscaler yet:{" "}
+                {about && anyReady ? `${about.name} isn't on your machines yet: ` : anyReady ? "Pick an upscaler above, or " : "None of your machines has a video upscaler yet: "}
                 <Link href="/settings/tools?tool=upscale" className="font-semibold text-fog underline-offset-2 hover:underline">
-                  set one up in Settings → Tools
+                  {anyReady ? "set it up in Settings → Tools" : "set one up in Settings → Tools"}
                 </Link>
                 .
               </p>
             ) : (
-              <p className="text-[12.5px] text-haze">{demoWords("Free on your own GPU")} · {chosen.name}</p>
+              <LocalTimeLine modelId={chosen.id} kind="upscale" timeless resolution={target} duration={clip ? Math.min(60, Math.max(1, Math.round(clip.duration))) : undefined} />
             )}
             <button
               onClick={() => void run()}

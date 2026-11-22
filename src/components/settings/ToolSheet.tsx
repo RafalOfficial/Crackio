@@ -1,13 +1,15 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Check, LoaderCircle, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowUpRight, Check, LoaderCircle, Search, X } from "lucide-react";
 import { AppIcon } from "@/components/ui/ToolTile";
 import { setUp, stopSetUp } from "@/lib/hooks/use-setup";
 import { formatSeconds } from "@/lib/local/fit";
 import { kitById } from "@/lib/setup/kits";
 import { defaultJob, type JobSpec } from "@/lib/setup/knobs";
+import { optionsOf } from "@/lib/setup/options";
 import { useEstimate } from "@/lib/hooks/use-estimate";
 import type { Kit, KitId, ModelOption, OptionVariant, ReqStatus, SetupJob, SetupMachine, SetupSnapshot, ToolStatus } from "@/lib/setup/types";
 import { cn } from "@/lib/cn";
@@ -21,26 +23,55 @@ import { bytesText, fits, gbText, plainWhy, REQ_TONE, toolWords } from "./words"
  * than one), and for a model part every model it can use on this machine on the left, the one picked on the right with
  * its versions and an estimate (time, cost here, cost on the official API). One bar at the bottom does the one thing to
  * do next: set up, set up with your picks, make room, open the tool.
+ *
+ * A part that takes any open model for its job lists dozens (every picture model for the Image page): the list has a
+ * search, scrolls by itself beside the model's details on a wide screen, and asks for a model's time only once its row
+ * has been on screen.
  */
 
 export type SheetCtx = { m: SetupMachine; snap: SetupSnapshot; live: SetupJob | null };
 
-export function ToolSheet({ kitId, ctx, onClose }: { kitId: KitId | null; ctx: SheetCtx; onClose: () => void }) {
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** `pick`: a model (its catalog id) to open the sheet on, picked in the part that lists it (Settings → Models' links). */
+export function ToolSheet({ kitId, ctx, onClose, pick }: { kitId: KitId | null; ctx: SheetCtx; onClose: () => void; pick?: string | null }) {
   const [shown, setShown] = useState<KitId | null>(kitId);
   if (kitId && kitId !== shown) setShown(kitId);
   const open = Boolean(kitId);
   const panel = useRef<HTMLElement>(null);
+  const latestClose = useRef(onClose);
+  useLayoutEffect(() => {
+    latestClose.current = onClose;
+  });
   useEffect(() => {
     if (!open) return;
+    const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     panel.current?.focus({ preventScroll: true });
-    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const key = (e: KeyboardEvent) => {
+      const p = panel.current;
+      if (e.key === "Escape") return latestClose.current();
+      if (e.key !== "Tab" || !p) return;
+      const items = [...p.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const at = document.activeElement;
+      const outside = !p.contains(at);
+      if (e.shiftKey ? outside || at === first || at === p : outside || at === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    };
     window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener("keydown", key);
+      if (back?.isConnected) back.focus({ preventScroll: true });
+    };
+  }, [open]);
   const kit = shown ? kitById(shown) : null;
   const status = shown ? ctx.m.tools[shown] : null;
   return (
-    <div className={cn("fixed inset-0 z-[70]", open ? "" : "pointer-events-none")} aria-hidden={!open}>
+    <div className={cn("fixed inset-0 z-[70]", open ? "" : "pointer-events-none")} aria-hidden={!open} inert={!open}>
       <div className={cn("absolute inset-0 bg-black/60 transition-opacity duration-300", open ? "opacity-100" : "opacity-0")} onClick={onClose} />
       <aside
         ref={panel}
@@ -49,11 +80,12 @@ export function ToolSheet({ kitId, ctx, onClose }: { kitId: KitId | null; ctx: S
         aria-modal="true"
         aria-label={kit ? `${kit.name} on ${ctx.m.label}` : undefined}
         className={cn(
-          "absolute inset-y-0 right-0 flex w-full flex-col overflow-hidden bg-flat outline-none shadow-[-40px_0_100px_rgb(0_0_0/0.55)] transition-transform duration-[460ms] ease-[cubic-bezier(0.32,0.72,0,1)] md:w-[min(860px,calc(100vw-56px))] md:rounded-l-[28px]",
-          open ? "translate-x-0" : "translate-x-full",
+          // Hidden once it has slid out (visibility flips at the end of the slide), so its shadow doesn't darken the page's edge.
+          "absolute inset-y-0 right-0 flex w-full flex-col overflow-hidden bg-flat outline-none shadow-[-40px_0_100px_rgb(0_0_0/0.55)] transition-[transform,visibility] duration-[460ms] ease-[cubic-bezier(0.32,0.72,0,1)] md:w-[min(860px,calc(100vw-56px))] md:rounded-l-[28px]",
+          open ? "visible translate-x-0" : "invisible translate-x-full",
         )}
       >
-        {kit && status ? <SheetBody key={`${ctx.m.id}:${kit.id}`} kit={kit} status={status} ctx={ctx} onClose={onClose} /> : null}
+        {kit && status ? <SheetBody key={`${ctx.m.id}:${kit.id}`} kit={kit} status={status} ctx={ctx} onClose={onClose} pick={pick} /> : null}
       </aside>
     </div>
   );
@@ -90,16 +122,32 @@ const unitWord = (o: ModelOption) =>
           ? "30 s of speech"
           : "a 5 s clip";
 
-/** The usual job's time with one version here, from the same estimate as the panel's (so the numbers agree). */
-function JobTime({ m, option, variant, className }: { m: SetupMachine; option: ModelOption; variant: OptionVariant; className?: string }) {
+/**
+ * The usual job's time with one version here, from the same estimate as the panel's (so the numbers agree). `lazy`: asked
+ * only once it has been on screen (a row far down a long list costs nothing until it's scrolled to).
+ */
+function JobTime({ m, option, variant, className, lazy = false }: { m: SetupMachine; option: ModelOption; variant: OptionVariant; className?: string; lazy?: boolean }) {
   const runs = variant.fit !== "no" && m.online;
-  const { answer, loading } = useEstimate(runs ? { machine: m.id, model: option.model, variant: variant.id, ...defaultJob(option.knobs) } : null);
+  const mark = useRef<HTMLSpanElement>(null);
+  const [seen, setSeen] = useState(!lazy);
+  useEffect(() => {
+    const el = mark.current;
+    if (seen || !el) return;
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: "120px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+  const { answer, loading } = useEstimate(runs && seen ? { machine: m.id, model: option.model, variant: variant.id, ...defaultJob(option.knobs) } : null);
   const e = answer?.estimate;
   if (!runs) return null;
-  return <span className={cn("tabular", className)}>{e ? formatSeconds(e.shown) : loading ? "…" : null}</span>;
+  return (
+    <span ref={mark} className={cn("tabular", className)}>
+      {e ? formatSeconds(e.shown) : loading || !seen ? "…" : null}
+    </span>
+  );
 }
 
-function SheetBody({ kit, status, ctx, onClose }: { kit: Kit; status: ToolStatus; ctx: SheetCtx; onClose: () => void }) {
+function SheetBody({ kit, status, ctx, onClose, pick }: { kit: Kit; status: ToolStatus; ctx: SheetCtx; onClose: () => void; pick?: string | null }) {
   const m = ctx.m;
   const words = toolWords(status);
   const hrefWith = useHrefWith();
@@ -111,9 +159,22 @@ function SheetBody({ kit, status, ctx, onClose }: { kit: Kit; status: ToolStatus
   const [jobs, setJobs] = useState<Record<string, JobSpec>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The model the sheet was opened for: picked once, in the first part that lists it, as soon as the parts' models are in
+  // (a page opened on the link may hold the light snapshot for a moment).
+  const [asked, setAsked] = useState(pick ?? null);
+  if (asked) {
+    const home = parts.find((r) => !r.optional && r.options?.some((o) => o.model === asked)) ?? parts.find((r) => r.options?.some((o) => o.model === asked));
+    const ref = home?.options?.find((o) => o.model === asked);
+    // One whose licence leaves your region out can't be set up: the sheet opens on Crackio's pick.
+    if (home && ref && !m.models?.[asked]?.blocked) {
+      setAsked(null);
+      setPartId(home.id);
+      setPicked((p) => ({ ...p, [home.id]: { model: ref.model, variant: ref.variant } }));
+    } else if (parts.some((r) => r.options?.length)) setAsked(null);
+  }
 
   const changed = parts
-    .map((r) => ({ r, c: picked[r.id], to: chosen(r, picked[r.id]) }))
+    .map((r) => ({ r, c: picked[r.id], to: chosen(optionsOf(m, r), picked[r.id]) }))
     .filter((x): x is { r: ReqStatus; c: Choice; to: NonNullable<ReturnType<typeof chosen>> } => Boolean(x.c && x.to && !sameChoice(x.c, defaultChoice(x.r)) && !x.to.variant.installed));
   const choices = Object.fromEntries(changed.map((x) => [x.r.id, x.c]));
   const otherBytes = status.state === "missing" ? parts.filter((r) => !r.optional && !choices[r.id] && r.plan && r.state !== "ready").reduce((n, r) => n + (r.plan?.bytes ?? 0), 0) : 0;
@@ -134,8 +195,7 @@ function SheetBody({ kit, status, ctx, onClose }: { kit: Kit; status: ToolStatus
   return (
     <>
       <header className="relative h-[148px] shrink-0 overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={kit.media} alt="" className={cn("absolute inset-0 h-full w-full object-cover", status.state === "ready" ? "opacity-80" : "opacity-55 grayscale-[0.5]")} />
+        <Image src={kit.media} alt="" fill sizes="(min-width: 768px) 860px, 100vw" className={cn("object-cover", status.state === "ready" ? "opacity-80" : "opacity-55 grayscale-[0.5]")} />
         <span className="absolute inset-0 bg-gradient-to-t from-flat via-flat/70 to-flat/5" />
         <button type="button" onClick={onClose} aria-label="Close" className="press absolute right-5 top-5 grid size-9 place-items-center rounded-full bg-black/55 text-paper hover:bg-black/75">
           <X size={16} />
@@ -181,6 +241,7 @@ function SheetBody({ kit, status, ctx, onClose }: { kit: Kit; status: ToolStatus
         {part ? (
           part.options?.length ? (
             <ModelPart
+              key={part.id}
               part={part}
               m={m}
               snap={ctx.snap}
@@ -357,6 +418,10 @@ function Primary({
   }
 }
 
+/** A part with more models than this gets a search, and on a phone shows only its first few until asked for the rest. */
+const LONG = 8;
+const FIRST = 5;
+
 /** A model part: the models it can use here on the left; the one picked, its versions and its estimate on the right. */
 function ModelPart({
   part,
@@ -379,7 +444,15 @@ function ModelPart({
   jobs: Record<string, JobSpec>;
   onJob: (model: string, j: JobSpec) => void;
 }) {
-  const options = part.options ?? [];
+  const options = optionsOf(m, part);
+  const [query, setQuery] = useState("");
+  // On a phone the list sits above the model's details: its first few, the rest behind one button.
+  const [all, setAll] = useState(false);
+  // Opened on a model far down a long list (a link from Settings → Models): its row is brought into the list's view.
+  const pickedRow = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (window.matchMedia("(min-width: 1024px)").matches) pickedRow.current?.scrollIntoView({ block: "nearest" });
+  }, []);
   const option = options.find((o) => o.model === choice?.model) ?? options[0];
   const variant = option?.variants.find((v) => v.id === (choice?.model === option?.model ? choice?.variant : option?.variant)) ?? option?.variants[0];
   if (!option || !variant) return null;
@@ -389,27 +462,45 @@ function ModelPart({
   const elsewhere: Elsewhere[] = snap.machines
     .filter((x) => x.id !== m.id && x.online)
     .flatMap((x) => {
-      const o = x.tools[kitId]?.reqs.find((r) => r.id === part.id)?.options?.find((y) => y.model === option.model);
+      const o = optionsOf(x, x.tools[kitId]?.reqs.find((r) => r.id === part.id)).find((y) => y.model === option.model);
       // The version picked here if it runs there, else the one Crackio would get there (a GTX 1060 can't run INT8).
       const same = o?.variants.find((y) => y.id === variant.id && y.fit !== "no");
       const v = o ? (same ?? o.variants.find((y) => y.id === o.variant)) : undefined;
       return o && v ? [{ m: x, option: o, variant: v }] : [];
     });
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = words.length ? options.filter((o) => words.every((w) => `${o.name} ${o.maker}`.toLowerCase().includes(w))) : options;
+  const long = options.length > LONG;
+  const folded = long && !all && !words.length;
   return (
-    <div className="grid gap-6 px-6 pb-8 pt-4 lg:grid-cols-[minmax(220px,250px)_minmax(0,1fr)] lg:gap-7">
-      <div className="min-w-0">
+    <div className="grid gap-6 px-6 pb-8 pt-4 lg:h-full lg:grid-cols-[minmax(220px,250px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-7 lg:pb-0">
+      <div className="flex min-w-0 flex-col lg:min-h-0">
         <p className="mb-2 text-[12.5px] text-haze">
           {part.label}
           {part.optional ? " (optional)" : ""}: {options.length} {options.length === 1 ? "model" : "models"} for {m.label}
         </p>
-        <ul role="radiogroup" aria-label={`${part.label}: pick a model`} className="flex flex-col gap-1">
-          {options.map((o) => {
+        {long ? (
+          <label className="mb-2 flex h-9 shrink-0 items-center gap-2 rounded-[11px] bg-white/[0.045] px-3 text-haze shadow-[inset_0_0_0_1px_var(--color-line)] focus-within:text-paper focus-within:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.22)]">
+            <Search size={14} className="shrink-0" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Find a model"
+              aria-label={`Find a model for ${lowerFirst(part.label)}`}
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-paper outline-none placeholder:text-haze [&::-webkit-search-cancel-button]:hidden"
+            />
+          </label>
+        ) : null}
+        <ul role="radiogroup" aria-label={`${part.label}: pick a model`} className="scroll-thin flex flex-col gap-1 lg:-mr-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pb-6 lg:pr-2">
+          {shown.length ? null : <li className="px-4 py-3 text-[13px] text-haze">No model here matches &ldquo;{query.trim()}&rdquo;.</li>}
+          {shown.map((o, i) => {
             const on = o.model === option.model;
             const v = o.variants.find((x) => x.id === (on ? variant.id : o.variant)) ?? o.variants[0];
             const w = v ? versionWords(v) : null;
             const there = o.variants.some((x) => x.installed);
             return (
-              <li key={o.model}>
+              <li key={o.model} ref={on ? pickedRow : undefined} className={cn(folded && i >= FIRST && !on && "max-lg:hidden")}>
                 <button
                   type="button"
                   role="radio"
@@ -433,7 +524,7 @@ function ModelPart({
                     <span className={cn("truncate", o.blocked ? "text-haze" : (w?.tone ?? "text-haze"))}>{o.blocked ? "Not in your region" : w?.text}</span>
                     <span className="shrink-0 tabular text-haze">
                       {v && !v.installed ? `${bytesText(v.bytes)} · ` : null}
-                      {v ? <JobTime m={m} option={o} variant={v} /> : null}
+                      {v ? <JobTime m={m} option={o} variant={v} lazy={long} /> : null}
                     </span>
                   </span>
                 </button>
@@ -441,10 +532,15 @@ function ModelPart({
             );
           })}
         </ul>
-        <p className="mt-3 px-1 text-[11.5px] leading-snug text-haze">Times are for {unitWord(option)} here. Pick any model: Crackio tells you if it doubts one, and lets you try it.</p>
+        {folded && shown.length > FIRST ? (
+          <button type="button" onClick={() => setAll(true)} className="press mt-1 rounded-[12px] bg-white/[0.045] px-4 py-2.5 text-left text-[13px] font-semibold text-fog hover:bg-white/[0.08] hover:text-paper lg:hidden">
+            Show all {options.length} models
+          </button>
+        ) : null}
+        <p className="mt-3 shrink-0 px-1 text-[11.5px] leading-snug text-haze lg:pb-4">Times are for {unitWord(option)} here. Pick any model: Crackio tells you if it doubts one, and lets you try it.</p>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-6">
+      <div className="scroll-thin flex min-w-0 flex-col gap-6 lg:-mr-3 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-8 lg:pr-3">
         <div>
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h3 className="font-display text-[28px] uppercase leading-none text-paper">{option.name}</h3>
@@ -489,7 +585,10 @@ function ModelPart({
                     {v.installed ? <Check size={14} className="shrink-0 text-chroma" /> : null}
                   </span>
                   <span className="mt-1 block text-[12px] tabular text-fog">
-                    {v.installed ? "On it" : bytesText(v.bytes)} · {Math.round(v.fidelity * 100)}% quality
+                    {/* The number is what the smaller number format costs next to full precision, nothing else. A fast
+                        version (Turbo, distilled: trained to draw in a few steps) gives up some detail for its speed,
+                        which that number doesn't measure: said in words. */}
+                    {v.installed ? "On it" : bytesText(v.bytes)} · {/turbo|distill|lightning|fast/i.test(v.label) ? "fewer steps: faster, a little less detail" : `${Math.round(v.fidelity * 100)}% of full precision`}
                   </span>
                   <span className={cn("mt-0.5 line-clamp-2 block text-[11.5px] leading-snug", w.tone)}>
                     {w.text}

@@ -527,7 +527,7 @@ def place(img, face_size, warp, x0, y0, ww, wh):
     the frame's window (x0, y0, ww × wh) in one resampling. Where it has more pixels than the frame gives the face
     (drawn bigger, or decoded at twice the size) it's first softened just enough not to alias, a Gaussian of
     0.4·sqrt(f²-1) of its pixels for f of them to a frame pixel, then placed with one bicubic warp (Lanczos near 1:1).
-    Measured on the clip's own frames against an antialiased Lanczos shrink (C:/CrackioTemp/humo/place_test4.py): rmse
+    Measured on the clip's own frames against an antialiased Lanczos shrink (a test script kept outside this repo): rmse
     0.9-1.5 from f 1 to 3 where the old bilinear warp gave 1.2-3.6 (it blurred every frame at the sub-pixel shifts a
     moving face has, and aliased pictures drawn bigger)."""
     import cv2

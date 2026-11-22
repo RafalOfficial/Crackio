@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Check, ChevronDown, ChevronLeft, Coins, Copy, Film, Flame, ImagePlus, LoaderCircle, Pause, Play, RotateCcw, Sparkles, TriangleAlert, Upload, Wand2, X } from "lucide-react";
 import { Panel, Segmented } from "@/components/ui/Panel";
 import { Slider } from "@/components/ui/Slider";
@@ -18,7 +19,7 @@ import { useCast } from "@/lib/hooks/use-cast";
 import { useNow } from "@/lib/hooks/use-now";
 import { imageSlots, resolutionLabel, fitResolution, durationTicks, fitDuration, type Caps } from "@/lib/models/caps";
 import { templateById } from "@/lib/templates/library";
-import { heatBadge, heatOf, swapLabel } from "@/lib/templates/meta";
+import { heatBadge, heatOf, inSeason, swapLabel } from "@/lib/templates/meta";
 import { shotPrompt, swapPrompt, type SlotFill } from "@/lib/templates/prompt";
 import { EFFECT_MODELS, SWAP_TAGS, clipFit, clipLimit, profileOf, swapModels } from "@/lib/templates/models";
 import { LOCAL_RIPPLE_ID, LOCAL_SWAP_ID, LOCAL_SWAP_IDS } from "@/lib/models/catalog";
@@ -88,7 +89,8 @@ async function frameOf(source: string, t: number): Promise<Pic> {
 /** One template: add your photos, pick a model, see the exact prompt, make it. */
 export function TemplateStudio({ id }: { id: string }) {
   const t = templateById(id)!;
-  const { items } = useGenerations();
+  // Only this template's takes: another tool's job ticking along doesn't redraw the studio.
+  const takes = useGenerations(useShallow((s) => s.items.filter((g) => g.tool === "templates" && g.params?.template === id)));
   const now = useNow();
   const swap = t.kind === "swap";
   const needsClip = swap && !t.base;
@@ -205,7 +207,6 @@ export function TemplateStudio({ id }: { id: string }) {
   const ticks = !swap && caps?.duration ? durationTicks(caps.duration) : null;
   const lengthValue = !swap && caps?.duration ? fitDuration(caps.duration, duration) : duration;
 
-  const takes = useMemo(() => items.filter((g) => g.tool === "templates" && g.params?.template === t.id), [items, t.id]);
   const live = takes.find((g) => g.status === "queued" || g.status === "running");
   const shownTake = takes.find((g) => g.id === viewing) ?? live ?? takes.find((g) => g.status === "done") ?? null;
 
@@ -217,11 +218,15 @@ export function TemplateStudio({ id }: { id: string }) {
   useEffect(() => {
     if (!clickable || useOwn || !tplUrl) return;
     let live = true;
-    void frameOf(tplUrl, partStart)
-      .then((pic) => live && setTplFrame({ pic, t: partStart }))
-      .catch(() => undefined);
+    // A moment after "Swap the part" stops moving (as Swap does), not one frame read per step of the slider.
+    const timer = setTimeout(() => {
+      void frameOf(tplUrl, partStart)
+        .then((pic) => live && setTplFrame({ pic, t: partStart }))
+        .catch(() => undefined);
+    }, 220);
     return () => {
       live = false;
+      clearTimeout(timer);
     };
   }, [clickable, useOwn, tplUrl, partStart]);
 
@@ -246,10 +251,19 @@ export function TemplateStudio({ id }: { id: string }) {
     try {
       const duration = await new Promise<number>((resolve) => {
         const v = document.createElement("video");
+        const src = URL.createObjectURL(file);
+        // The probe lets go of the file once it knows the length.
+        const end = (seconds: number) => {
+          v.onloadedmetadata = v.onerror = null;
+          v.removeAttribute("src");
+          v.load();
+          URL.revokeObjectURL(src);
+          resolve(seconds);
+        };
         v.preload = "metadata";
-        v.onloadedmetadata = () => resolve(v.duration || 0);
-        v.onerror = () => resolve(0);
-        v.src = URL.createObjectURL(file);
+        v.onloadedmetadata = () => end(v.duration || 0);
+        v.onerror = () => end(0);
+        v.src = src;
       });
       const up = await upload(file);
       setOwn({ url: up.url, name: file.name, duration });
@@ -291,9 +305,8 @@ export function TemplateStudio({ id }: { id: string }) {
       });
       const data = (await res.json()) as { item?: Generation; error?: string };
       if (!res.ok || !data.item) throw new Error(data.error ?? "Couldn't start it.");
-      const store = useGenerationsStore.getState();
-      useGenerationsStore.setState({ items: [data.item, ...store.items] });
-      void store.load();
+      // In the list at once, and followed until it's done, so its progress shows while it renders.
+      useGenerationsStore.getState().track(data.item);
       setViewing(data.item.id);
     } catch (err) {
       setError((err as Error).message);
@@ -303,7 +316,8 @@ export function TemplateStudio({ id }: { id: string }) {
   }
 
   const heat = heatOf(t, now);
-  const badge = heatBadge(t);
+  // A seasonal template past its date still works; its badge stops saying "until…".
+  const badge = t.seasonal && !inSeason(t, now) ? "Season's over · still works" : heatBadge(t);
   const seconds = swap ? Math.min(span || 8, useOwn ? (own ? own.duration - start : span) : (t.base?.seconds ?? 8)) : typeof lengthValue === "number" ? lengthValue : (t.seconds ?? 6);
 
   return (
@@ -461,7 +475,7 @@ export function TemplateStudio({ id }: { id: string }) {
                       onChange={setPart}
                       format={(v) => `${v.toFixed(1)}–${Math.min(baseSeconds, v + span).toFixed(1)} s`}
                     />
-                    <p className="mt-1.5 text-[11.5px] leading-relaxed text-haze">This model edits up to {Math.round(span)} s. H3 Recast and Genjutsu take the whole clip.</p>
+                    <p className="mt-1.5 text-[11.5px] leading-relaxed text-haze">This model edits up to {Math.round(span)} s of the clip: pick the part.</p>
                   </>
                 ) : null}
                 {clickable && !useOwn && current ? (
@@ -653,7 +667,7 @@ export function TemplateStudio({ id }: { id: string }) {
                   : "The template writes the shot from your answers."
                 : takesPictures
                   ? "Your photos go to the model as references, bound to who they replace; the motion, camera and sound stay."
-                  : "Grok's clip editor takes words only, so Crackio describes your photo in detail. For the closest likeness, pick a model that takes your photo."}
+                  : "This model takes words only, so Crackio describes your photo. For a closer likeness, pick one that takes photos."}
             </p>
           </div>
         </Panel>

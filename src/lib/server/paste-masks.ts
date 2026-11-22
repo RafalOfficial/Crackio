@@ -14,14 +14,14 @@ export type PasteMask = { file: string; reach: number; height: number };
 const masks: Map<string, PasteMask> = ((globalThis as { __crackioPasteMasks?: Map<string, PasteMask> }).__crackioPasteMasks ??= new Map());
 
 export function keepPasteMask(clip: string, mask: PasteMask) {
-  const key = path.resolve(clip);
+  const key = path.resolve(/*turbopackIgnore: true*/ clip);
   const old = masks.get(key);
   if (old && old.file !== mask.file) void dropPasteMask(old);
   masks.set(key, mask);
 }
 
 export function takePasteMask(clip: string): PasteMask | null {
-  const key = path.resolve(clip);
+  const key = path.resolve(/*turbopackIgnore: true*/ clip);
   const mask = masks.get(key) ?? null;
   masks.delete(key);
   return mask;
@@ -29,5 +29,5 @@ export function takePasteMask(clip: string): PasteMask | null {
 
 /** The outline's own folder, once it's used. */
 export async function dropPasteMask(mask: PasteMask) {
-  await fs.rm(path.dirname(mask.file), { recursive: true, force: true }).catch(() => {});
+  await fs.rm(/*turbopackIgnore: true*/ path.dirname(mask.file), { recursive: true, force: true }).catch(() => {});
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { nanoid } from "nanoid";
 import { Clapperboard, ListPlus, LoaderCircle, Music2, Plus, Trash2, TriangleAlert, Upload, X } from "lucide-react";
 import { useEditor } from "@/lib/storyboard/edit-store";
 import { clipFromFile, type EditFile } from "@/lib/storyboard/edit";
 import { addMusic, insertMain } from "@/lib/storyboard/edit-ops";
+import { useShallow } from "zustand/react/shallow";
 import { isLive, useGenerations } from "@/lib/hooks/use-generations";
 import type { Generation } from "@/lib/generations/types";
 import { posterUrl, previewUrl } from "@/lib/media-url";
@@ -50,11 +51,11 @@ export function addAllToFilm() {
  * Everything in the project, newest first: what the Director shot, the clips made here, the films exported, and what
  * you added. Drag one onto the timeline; click a picture to make a clip from it.
  */
-export function Files({ projectId, onDirect }: { projectId: string; onDirect: () => void }) {
+export function Files({ projectId, onDirect, onDirectFrom }: { projectId: string; onDirect: () => void; onDirectFrom?: (file: EditFile) => void }) {
   const { items, loaded, uploading, error, upload, remove, refresh } = useProjectFiles();
   const pickKey = useEditor((s) => s.pick?.file.key ?? null);
-  const main = useEditor((s) => s.timeline.main);
-  const all = useGenerations((s) => s.items);
+  // Which file is which shot, as one string: a trim or a move that keeps the order changes nothing here.
+  const order = useEditor((s) => s.timeline.main.map((c) => c.url).join("\n"));
   const [show, setShow] = useState<Show>("all");
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [over, setOver] = useState(false);
@@ -62,11 +63,11 @@ export function Files({ projectId, onDirect }: { projectId: string; onDirect: ()
   // Failures from the last hour are shown (older ones were seen before).
   const [since] = useState(() => Date.now() - 3_600_000);
 
-  // Takes of this project still being made (or that just failed), followed live.
-  const making = useMemo(
-    () => all.filter((g) => g.params?.project === projectId && (isLive(g) || (g.status === "error" && (g.finishedAt ?? g.createdAt) > since)) && !dismissed.includes(g.id)),
-    [all, projectId, dismissed, since],
+  // Takes of this project still being made (or that just failed), followed live: only they redraw the panel.
+  const mine = useGenerations(
+    useShallow((s) => s.items.filter((g) => g.params?.project === projectId && (isLive(g) || (g.status === "error" && (g.finishedAt ?? g.createdAt) > since)))),
   );
+  const making = useMemo(() => mine.filter((g) => !dismissed.includes(g.id)), [mine, dismissed]);
   // One finishing brings the list up to date.
   const liveIds = making.filter(isLive).map((g) => g.id).join(",");
   const lastLive = useRef(liveIds);
@@ -88,8 +89,11 @@ export function Files({ projectId, onDirect }: { projectId: string; onDirect: ()
   const counts = { image: 0, video: 0, audio: 0 } as Record<EditFile["kind"], number>;
   for (const f of items) counts[f.kind]++;
   // Where each file is in the film: its shot numbers, shown on it.
-  const usedAs = new Map<string, number[]>();
-  main.forEach((c, i) => usedAs.set(c.url, [...(usedAs.get(c.url) ?? []), i + 1]));
+  const usedAs = useMemo(() => {
+    const map = new Map<string, number[]>();
+    if (order) order.split("\n").forEach((url, i) => map.set(url, [...(map.get(url) ?? []), i + 1]));
+    return map;
+  }, [order]);
   const unused = items.filter((f) => f.kind !== "audio" && !isFilm(f) && !usedAs.has(f.url)).length;
 
   return (
@@ -111,27 +115,46 @@ export function Files({ projectId, onDirect }: { projectId: string; onDirect: ()
         void upload(Array.from(e.dataTransfer.files));
       }}
     >
-      <div className="flex items-center gap-2 px-3 pb-2 pt-3">
-        <h2 className="label">Files</h2>
-        <span className="tabular text-[11.5px] text-haze">{items.length || ""}</span>
-        <span className="flex-1" />
+      {/* One row: what to show, put every unused shot in the film, add your own files. */}
+      <div className="flex items-center gap-1.5 p-2">
+        <div role="radiogroup" aria-label="Show" className="grid min-w-0 flex-1 grid-cols-4 rounded-[12px] bg-white/[0.04] p-0.5">
+          {SHOWS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="radio"
+              aria-checked={show === s.id}
+              onClick={() => setShow(s.id)}
+              title={s.id !== "all" && counts[s.id] ? `${counts[s.id]} ${s.label.toLowerCase()}` : undefined}
+              className={cn(
+                "press squircle h-7 truncate rounded-[10px] px-1 text-[11.5px] font-semibold",
+                show === s.id ? "bg-white/[0.12] text-paper shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]" : "text-fog hover:text-paper",
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
         {unused ? (
           <button
             type="button"
             onClick={addAllToFilm}
-            title="Put every shot that isn't in the film yet at its end, in the order they were made"
-            className="press squircle inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-white/[0.06] px-2.5 text-[12.5px] font-semibold text-fog hover:bg-white/[0.1] hover:text-paper"
+            title={`Put the ${unused === 1 ? "shot" : `${unused} shots`} not in the film yet at its end, in the order they were made`}
+            aria-label="All to the film"
+            className="press squircle relative grid size-8 shrink-0 place-items-center rounded-[10px] text-fog hover:bg-white/[0.07] hover:text-paper"
           >
-            <ListPlus size={14} /> All to the film <span className="tabular text-haze">{unused}</span>
+            <ListPlus size={15} />
+            <span className="tabular absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-spike px-1 text-[9.5px] font-bold text-spike-ink">{unused}</span>
           </button>
         ) : null}
         <button
           type="button"
           onClick={() => input.current?.click()}
           title="Add pictures, clips or sounds from your computer"
-          className="press squircle inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-white/[0.06] px-2.5 text-[12.5px] font-semibold text-fog hover:bg-white/[0.1] hover:text-paper"
+          aria-label="Add files"
+          className="press squircle grid size-8 shrink-0 place-items-center rounded-[10px] text-fog hover:bg-white/[0.07] hover:text-paper"
         >
-          {uploading ? <LoaderCircle size={14} className="animate-spin" /> : <Upload size={14} />} Add
+          {uploading ? <LoaderCircle size={15} className="animate-spin" /> : <Upload size={15} />}
         </button>
         <input
           ref={input}
@@ -145,26 +168,17 @@ export function Files({ projectId, onDirect }: { projectId: string; onDirect: ()
           }}
         />
       </div>
-      <div role="radiogroup" aria-label="Show" className="mx-3 grid grid-cols-4 rounded-[12px] bg-white/[0.04] p-0.5">
-        {SHOWS.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            role="radio"
-            aria-checked={show === s.id}
-            onClick={() => setShow(s.id)}
-            className={cn(
-              "press squircle h-7 rounded-[10px] text-[12px] font-semibold",
-              show === s.id ? "bg-white/[0.12] text-paper shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]" : "text-fog hover:text-paper",
-            )}
-          >
-            {s.label}
-            {s.id !== "all" && counts[s.id] ? <span className="tabular ml-1 font-medium text-haze">{counts[s.id]}</span> : null}
+      {/* A notice floats over the files (never pushes them down), and goes when you close it or the next thing works. */}
+      {error ? (
+        <div role="alert" className="absolute inset-x-3 bottom-3 z-10 flex items-start gap-2 rounded-[14px] bg-[#2a1416] px-3 py-2 text-[12px] leading-snug text-tally shadow-[0_10px_30px_-10px_rgb(0_0_0/0.8),inset_0_0_0_1px_rgb(255_91_74/0.3)]">
+          <TriangleAlert size={13} className="mt-px shrink-0" />
+          <span className="min-w-0 flex-1">{error}</span>
+          <button type="button" onClick={() => useProjectFiles.setState({ error: null })} aria-label="Dismiss" className="press -m-1 grid size-6 shrink-0 place-items-center rounded-full text-tally/80 hover:bg-white/[0.08] hover:text-paper">
+            <X size={12} />
           </button>
-        ))}
-      </div>
-      {error ? <p className="mx-3 mt-2 rounded-[10px] bg-tally/10 px-2.5 py-1.5 text-[12px] text-tally">{error}</p> : null}
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-3 pt-2.5">
+        </div>
+      ) : null}
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-2 pt-0.5">
         {!loaded ? (
           <div className="grid grid-cols-2 gap-2">
             {Array.from({ length: 4 }, (_, i) => (
@@ -191,7 +205,7 @@ export function Files({ projectId, onDirect }: { projectId: string; onDirect: ()
               <MakingTile key={g.id} gen={g} onDismiss={() => setDismissed((d) => [...d, g.id])} />
             ))}
             {shown.map((f) => (
-              <FileTile key={f.key} file={f} picked={pickKey === f.key} shots={usedAs.get(f.url)} onRemove={() => void remove(f.key)} />
+              <FileTile key={f.key} file={f} picked={pickKey === f.key} shots={usedAs.get(f.url)?.join(", ")} onRemove={remove} onDirect={onDirectFrom} />
             ))}
           </div>
         )}
@@ -224,26 +238,51 @@ function MakingTile({ gen, onDismiss }: { gen: Generation; onDismiss: () => void
   );
 }
 
-function FileTile({ file, picked, shots, onRemove }: { file: EditFile; picked: boolean; shots?: number[]; onRemove: () => void }) {
+/** One file: memoized on what it shows, so a project's take finishing or a trim on the timeline doesn't redraw them all. */
+const FileTile = memo(function FileTile({
+  file,
+  picked,
+  shots,
+  onRemove,
+  onDirect,
+}: {
+  file: EditFile;
+  picked: boolean;
+  shots?: string;
+  onRemove: (key: string) => unknown;
+  /** A picture: a new Director set made from it, and over to the Director. */
+  onDirect?: (file: EditFile) => void;
+}) {
   const [arming, setArming] = useState(false);
   const disarm = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(disarm.current), []);
+  const pickIt = () => {
+    if (file.kind === "image") useEditor.getState().setPick(picked ? null : { file });
+  };
   return (
     <div
       draggable
+      role="button"
+      tabIndex={0}
+      aria-label={file.kind === "image" ? `${file.name}: make a clip from it` : `${file.name}: add it at the end of the film`}
       onDragStart={(e) => {
         e.dataTransfer.setData(FILE_DRAG, file.key);
         e.dataTransfer.effectAllowed = "copy";
         useFileDrag.setState({ file });
       }}
       onDragEnd={() => useFileDrag.setState({ file: null })}
-      onClick={() => {
-        if (file.kind === "image") useEditor.getState().setPick(picked ? null : { file });
-      }}
+      onClick={pickIt}
       onDoubleClick={() => appendFile(file)}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        // Enter makes a clip from a picture (Shift: puts it at the end of the film); a clip or a sound goes at the end.
+        if (file.kind === "image" && !e.shiftKey) pickIt();
+        else appendFile(file);
+      }}
       title={file.kind === "image" ? `${file.name}\nClick to make a clip from it · drag it onto the timeline` : `${file.name}\nDrag it onto the timeline · double-click to add it at the end`}
       className={cn(
-        "group relative aspect-video cursor-grab overflow-hidden rounded-[12px] bg-apple active:cursor-grabbing",
+        "group relative aspect-video cursor-grab overflow-hidden rounded-[12px] bg-apple outline-none active:cursor-grabbing focus-visible:shadow-[0_0_0_2px_var(--color-paper)]",
         picked ? "shadow-[0_0_0_2px_var(--color-spike)]" : "shadow-[inset_0_0_0_1px_var(--color-line)] hover:shadow-[inset_0_0_0_1px_var(--color-line-strong)]",
       )}
     >
@@ -268,15 +307,26 @@ function FileTile({ file, picked, shots, onRemove }: { file: EditFile; picked: b
       ) : null}
       {isFilm(file) ? (
         <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-tool-storyboard">Film</span>
-      ) : shots?.length ? (
-        <span
-          className="tabular pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-paper px-1.5 py-0.5 text-[10.5px] font-bold text-[#16131b]"
-          title={`In the film as shot ${shots.join(", ")}`}
-        >
-          {shots.length > 2 ? `${shots[0]}, ${shots[1]}…` : shots.join(", ")}
+      ) : shots ? (
+        <span className="tabular pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-paper px-1.5 py-0.5 text-[10.5px] font-bold text-[#16131b]" title={`In the film as shot ${shots}`}>
+          {shots.split(", ").length > 2 ? `${shots.split(", ").slice(0, 2).join(", ")}…` : shots}
         </span>
       ) : null}
-      <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 group-focus-visible:opacity-100">
+        {file.kind === "image" && onDirect ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDirect(file);
+            }}
+            className="press inline-flex h-6 items-center gap-1 rounded-full bg-spike px-2 text-[10.5px] font-bold text-spike-ink hover:bg-spike-hi"
+            title="Direct it: a new Director set made from this picture, then over to the Director"
+            aria-label="Direct it: a new Director set made from this picture"
+          >
+            <Clapperboard size={11} /> Direct
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={(e) => {
@@ -298,7 +348,7 @@ function FileTile({ file, picked, shots, onRemove }: { file: EditFile; picked: b
               disarm.current = setTimeout(() => setArming(false), 2500);
               return;
             }
-            onRemove();
+            void onRemove(file.key);
           }}
           className={cn("press grid h-6 place-items-center rounded-full text-paper", arming ? "bg-tally px-2 text-[10.5px] font-semibold" : "size-6 bg-black/60 hover:bg-black/85")}
           title={file.gen ? "Out of the project (it stays in the Library)" : "Out of the project"}
@@ -309,4 +359,4 @@ function FileTile({ file, picked, shots, onRemove }: { file: EditFile; picked: b
       </div>
     </div>
   );
-}
+});

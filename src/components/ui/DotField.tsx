@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/cn";
+import { calmNow } from "@/lib/motion-pref";
 
 const GAP = 18;
 /** How far the pull reaches (px, a Gaussian's width), how far the nearest dots are pushed out, and how much they sink. */
@@ -36,7 +37,7 @@ export function DotField({ progress = 0, className }: { progress?: number; class
     const host = canvas?.parentElement;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !host || !ctx) return;
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = calmNow();
 
     let w = 0;
     let h = 0;

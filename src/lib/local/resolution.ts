@@ -67,7 +67,7 @@ export type Tuning = {
 };
 
 /** The Advanced section's values, in a job's options. */
-export type TuningOptions = { negative?: string; steps?: number; cfg?: number; seed?: number };
+export type TuningOptions = { negative?: string; steps?: number; cfg?: number; seed?: number; nativeOnly?: boolean };
 
 export function tuningFor(steps: number | null, cfg: number | null, stepsFixed = false): Tuning {
   return {

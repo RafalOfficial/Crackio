@@ -2,29 +2,31 @@ import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { localStatus } from "../local-models";
-import { allLocalModels } from "../local-templates";
+import { allLocalModels, templateDefs } from "../local-templates";
 import { voiceMachines } from "../voice/machines";
 import { lipsyncMachines } from "../lipsync/machines";
 import { setupStatus, type SetupStatus } from "../comfy-install";
 import { comfyTargets, type ComfyTarget } from "../comfy-targets";
 import { getSettings } from "../settings";
 import { visionOnDisk } from "../vision";
-import { fitRows, installState, installedVariant, runsWell, type Row } from "@/lib/local/rows";
+import { fitRows, haveOf, installState, installedVariant, runsWell, type Row } from "@/lib/local/rows";
 import { cardWork } from "@/lib/local/work";
 import { knobsFor, VOICE_KNOBS } from "@/lib/setup/knobs";
 import { boxPrice } from "../cloud-accounts";
 import { autoStopNow, creditNow } from "./cloud-money";
 import { pricePerSecond } from "../serverless/runpod";
 import { fitVariant, mainGpu, shortGpuName, speedOf } from "@/lib/local/fit";
-import { KITS } from "@/lib/setup/kits";
-import { bridgeHas, versionAtLeast } from "@/lib/setup/bridge";
+import { KITS, modelsFor } from "@/lib/setup/kits";
+import { bridgeHas, versionAtLeast, type BridgeFeature } from "@/lib/setup/bridge";
 import { LFM3_BYTES, LFM3_LORAS, LFM3_NAME, lfm3LoraUrl, type Lfm3LoraKey } from "@/lib/local/lfm3";
 import { AUDIOCPP_BYTES, HEARING, VOICE_MODELS, variantFor } from "@/lib/voice/models";
 import { LIPSYNC_BEST_VRAM_GB, LIPSYNC_FILES, LIPSYNC_VRAM_GB, type LipsyncMachine } from "@/lib/lipsync/machines";
 import type { LocalModel, LocalStatus, LocalVariant, Machine, TargetStatus } from "@/lib/local/types";
 import type { VoiceMachine } from "@/lib/voice/types";
-import type { Kit, KitId, MachineKind, ModelOption, OptionVariant, Requirement, ReqStatus, SetupMachine, SetupPart, SetupSnapshot, ToolState, ToolStatus } from "@/lib/setup/types";
+import type { Kit, KitId, MachineKind, ModelOption, OptionRef, OptionVariant, Requirement, ReqStatus, SetupMachine, SetupPart, SetupSnapshot, ToolState, ToolStatus } from "@/lib/setup/types";
+import type { Caps } from "@/lib/models/caps";
 import { setupJobs } from "./jobs";
+import { epoch } from "../epoch";
 
 /**
  * Settings' one look at every machine and every tool on it (GET /api/setup). Nothing here probes a machine itself: it reads
@@ -54,7 +56,11 @@ const COMFY_BYTES = 4.5e9;
 
 type Ctx = {
   local: LocalStatus;
+  /** Every open model, hand-tuned ones first; `models` has them by Crackio id ("local:flux3-klein"). */
+  catalog: LocalModel[];
   models: Map<string, LocalModel>;
+  /** What each template model takes (a clip's lengths and sizes), by Crackio id: its estimate's settings. */
+  caps: Map<string, Caps>;
   voice: Map<string, VoiceMachine>;
   lipsync: Map<string, LipsyncMachine>;
   vision: Awaited<ReturnType<typeof visionOnDisk>>;
@@ -69,6 +75,12 @@ type Place = {
   online: boolean;
   /** No ComfyUI on this computer yet: a set-up installs it first. */
   noComfy: boolean;
+  /** Every model's fit here (local/rows), worked out once for all the tools' parts. */
+  rows?: Map<string, Row>;
+  /** Its hardware as a free card (see `cardOf`). */
+  card?: Machine;
+  /** Every model a part can use here, described once (SetupMachine.models); the parts' options point into it. */
+  table: Record<string, ModelOption>;
 };
 
 const ready = (r: Requirement, has: string): ReqStatus => ({ id: r.id, label: r.label, state: "ready", why: has, has, optional: r.optional, instead: r.instead });
@@ -88,25 +100,40 @@ const gbText = (bytes: number) => {
   return gb < 0.1 ? `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB` : `${gb < 10 ? gb.toFixed(1).replace(/\.0$/, "") : Math.round(gb)} GB`;
 };
 
-/** A catalog model the kit lists, by its Crackio id ("local:flux3-klein"). */
-function candidates(r: Extract<Requirement["need"], { kind: "model" }>, ctx: Ctx) {
-  return r.anyOf.map((id) => ctx.models.get(id)).filter((m): m is LocalModel => Boolean(m) && (!r.task || !m!.tasks.length || m!.tasks.includes(r.task)));
+/**
+ * The fit of each of these models on a machine, in their order. Every model's fit there is worked out once (fitRows over
+ * the whole catalog) and shared by all the tools' parts: an open part lists dozens of models, and a dozen parts list the
+ * same ones.
+ */
+function rowsOf(list: LocalModel[], place: Place, ctx: Ctx): Row[] {
+  const hw = place.hw;
+  if (!hw) return [];
+  if (!place.rows) {
+    place.rows = new Map();
+    for (const row of fitRows({ machine: hw, catalog: ctx.catalog, target: place.target, status: ctx.local })) place.rows.set(row.model.id, row);
+  }
+  const rows = place.rows;
+  return list.flatMap((m) => {
+    const row = rows.get(m.id);
+    return row ? [row] : [];
+  });
 }
 
 /** `left`: the disk the tool's set-up can still use for this part, once the parts before it took theirs (toolOn). */
 function judgeModel(r: Requirement, need: Extract<Requirement["need"], { kind: "model" }>, place: Place, ctx: Ctx, left?: number | null): ReqStatus {
-  const list = candidates(need, ctx);
+  // Crackio's picks in order, then (an open part) every other open model that does the job: setup/kits `modelsFor`.
+  const list = modelsFor(need, ctx.catalog);
   if (!list.length) return say(r, "unsupported", "No open model does this yet");
   const hw = place.hw;
-  const rows = hw ? fitRows({ machine: hw, catalog: list, target: place.target, status: ctx.local }) : [];
+  const rows = rowsOf(list, place, ctx);
   const room = roomOn(place);
   const missing = (v: LocalVariant) => installState(v, place.target).missingGb * 1024 ** 3;
   // Every model it can use here, for Settings' chooser (each against the whole free disk): the status below marks
   // Crackio's pick among them, which fits what the tool's other parts leave.
-  const options = hw ? modelOptions(rows, hw, place, room, need.task) : undefined;
+  const options = hw ? rows.map((row) => optionRef(row, hw, place, room, need.task, ctx)) : undefined;
   const budget = left === undefined ? room : left;
   const out = (s: ReqStatus, model?: string, variant?: string): ReqStatus =>
-    options ? { ...s, options: options.map((o) => (o.model === model ? { ...o, pick: true, variant: variant ?? o.variant } : o)).sort(byPick) } : s;
+    options ? { ...s, options: options.map((o): OptionRef => (o.model === model ? { ...o, pick: true, variant: variant ?? o.variant } : o)).sort(byPick(place.table)) } : s;
 
   for (const model of list) {
     const v = installedVariant(model, place.target);
@@ -124,7 +151,11 @@ function judgeModel(r: Requirement, need: Extract<Requirement["need"], { kind: "
       return out(say(r, "installing", st.checking ? `Checking ${row.model.name}` : `Downloading ${row.model.name}`, { progress: { received: st.done, total: st.total }, plan }), row.model.id, v.id);
     }
   }
-  let pick = rows.find((x) => !x.blocked && runsWell(x.fit)) ?? rows.find((x) => !x.blocked && x.fit.state === "slow");
+  // Crackio's picks first: one of the models the part names that runs well, else one of them that runs slowly; the
+  // part's other models (an open part's, or its `also`) only where none of those runs at all.
+  const mine = rows.filter((x) => x.model.crackio && need.anyOf.includes(x.model.crackio));
+  const runs = (among: Row[]) => among.find((x) => !x.blocked && runsWell(x.fit)) ?? among.find((x) => !x.blocked && x.fit.state === "slow");
+  let pick = runs(mine) ?? (mine.length < rows.length ? runs(rows.filter((x) => !mine.includes(x))) : undefined);
   if (!pick || !pick.fit.variant) {
     if (rows.length && rows.every((x) => x.blocked)) return out(say(r, "blocked", `Its licence leaves out ${ctx.local.region ?? "your region"}`));
     return out(say(r, "unsupported", rows.find((x) => !x.blocked)?.fit.why ?? "Doesn't run on this machine"));
@@ -134,16 +165,19 @@ function judgeModel(r: Requirement, need: Extract<Requirement["need"], { kind: "
   // Set up button says to make room.
   let roomy = "";
   if (budget !== null && missing(pick.fit.variant) > budget) {
-    const smaller = rows
-      .filter((x) => !x.blocked)
-      .flatMap((x) => x.model.variants.map((v) => ({ model: x.model, fit: fitVariant(hw, v) })))
-      .filter((o) => o.fit.state !== "no" && o.fit.variant && missing(o.fit.variant) <= budget)
-      .sort(
-        (a, b) =>
-          Number(runsWell(b.fit)) - Number(runsWell(a.fit)) ||
-          b.model.quality * b.fit.variant!.fidelity - a.model.quality * a.fit.variant!.fidelity ||
-          (a.fit.seconds ?? Infinity) - (b.fit.seconds ?? Infinity),
-      )[0];
+    const fitting = (among: Row[]) =>
+      among
+        .filter((x) => !x.blocked)
+        .flatMap((x) => x.model.variants.map((v) => ({ model: x.model, fit: fitVariant(hw, v) })))
+        .filter((o) => o.fit.state !== "no" && o.fit.variant && missing(o.fit.variant) <= budget)
+        .sort(
+          (a, b) =>
+            Number(runsWell(b.fit)) - Number(runsWell(a.fit)) ||
+            b.model.quality * b.fit.variant!.fidelity - a.model.quality * a.fit.variant!.fidelity ||
+            (a.fit.seconds ?? Infinity) - (b.fit.seconds ?? Infinity),
+        )[0];
+    // Among Crackio's picks first; the part's other models only when none of those fits the disk.
+    const smaller = fitting(mine) ?? (mine.length < rows.length ? fitting(rows) : undefined);
     if (smaller) {
       pick = { ...smaller, blocked: false };
       roomy = ", fits the disk";
@@ -166,79 +200,101 @@ function judgeModel(r: Requirement, need: Extract<Requirement["need"], { kind: "
   const said = (s: ReqStatus) => out(s, picked, variant.id);
   if (st.failed && !st.active.length) return said(say(r, "broken", `${pick.model.name}: its download stopped (${st.failed.error ?? "failed"})`, { plan }));
   if (pick.model.gated && !ctx.keys.hf) return said(say(r, "needs-key", `${pick.model.name} needs your Hugging Face token`, { plan, key: "hf" }));
+  // A custom node only a newer helper sets up: the set-up brings the helper up to date first (planFor's bridgeOld).
+  const node = (variant.requires?.customNodes ?? []).find((n) => NODE_BRIDGE[n] && !bridgeHas(place.target?.bridge, NODE_BRIDGE[n]));
+  if (node && place.target) return said(say(r, "outdated", `${pick.model.name} needs a newer Crackio helper there`, { plan, fix: "bridge" }));
   return said(say(r, "missing", `${pick.model.name}, ${variant.label}${slow}${roomy}`, { plan }));
 }
 
+/** Custom nodes that only a newer Crackio helper (bridge) sets up, by the helper feature that brought them. */
+const NODE_BRIDGE: Record<string, BridgeFeature> = { "ComfyUI-Panorama-Stickers": "panorama", "Crackio-Video": "videoReshoot" };
+
 /** Crackio's pick first, then what's there, then what runs well, then the best looking. */
-function byPick(a: ModelOption, b: ModelOption) {
-  const there = (o: ModelOption) => Number(o.variants.some((v) => v.installed));
-  const well = (o: ModelOption) => {
-    const v = o.variants.find((x) => x.id === o.variant);
+const byPick = (table: Record<string, ModelOption>) => (a: OptionRef, b: OptionRef) => {
+  const there = (o: OptionRef) => Number(Boolean(table[o.model]?.variants.some((v) => v.installed)));
+  const well = (o: OptionRef) => {
+    const v = table[o.model]?.variants.find((x) => x.id === o.variant);
     return v ? (v.fit === "great" || v.fit === "ok" ? 2 : v.fit === "slow" ? 1 : 0) : 0;
   };
-  return Number(b.pick) - Number(a.pick) || there(b) - there(a) || Number(a.blocked) - Number(b.blocked) || well(b) - well(a) || b.quality - a.quality;
+  const blocked = (o: OptionRef) => Number(Boolean(table[o.model]?.blocked));
+  return Number(Boolean(b.pick)) - Number(Boolean(a.pick)) || there(b) - there(a) || blocked(a) - blocked(b) || well(b) - well(a) || (table[b.model]?.quality ?? 0) - (table[a.model]?.quality ?? 0);
+};
+
+/**
+ * A machine as a free card (as Settings' estimate is planned): a ComfyUI's budget is what its GPU has free right now,
+ * which a model still loaded from the last job shrinks (a 4090 with LTX loaded showed 13 GB, and LTX "spilling 11 GB").
+ */
+function cardOf(place: Place, hw0: Machine): Machine {
+  if (!place.card) {
+    const gpu = mainGpu(hw0);
+    place.card = gpu && !gpu.unified && gpu.memoryGb ? { ...hw0, modelMemoryGb: Math.max(hw0.modelMemoryGb, gpu.memoryGb) } : hw0;
+  }
+  return place.card;
+}
+
+/** A part's reference to a model's entry on a machine (made the first time a part lists it): its version to get there. */
+function optionRef(row: Row, hw: Machine, place: Place, room: number | null, task: string | undefined, ctx: Ctx): OptionRef {
+  const o = (place.table[row.model.id] ??= modelOption(row, cardOf(place, hw), place, room, ctx));
+  // An editing part's estimate reads a photo beside the picture it makes (setup/knobs `knobsFor`).
+  return { model: o.model, variant: o.variant, ...(task === "edit" && o.knobs.kind === "image" && row.model.tasks.includes("edit") ? { edit: true as const } : {}) };
 }
 
 /**
- * Each model a requirement can use on a machine, with every version of it: how it runs there (the model library's fit),
+ * A model a requirement can use on a machine, with every version of it: how it runs there (the model library's fit),
  * what's left to download, whether that fits the disk. Its version to get: the one there, else the one that runs best
- * and fits the disk.
+ * and fits the disk. `hw`: the machine as a free card (`cardOf`).
  */
-function modelOptions(rows: Row[], hw0: Machine, place: Place, room: number | null, task?: string): ModelOption[] {
-  const have = new Set(place.target?.installed ?? []);
-  // Planned for a free card (as Settings' estimate is): a ComfyUI's budget is what its GPU has free right now, which a
-  // model still loaded from the last job shrinks (a 4090 with LTX loaded showed 13 GB, and LTX "spilling 11 GB").
-  const gpu = mainGpu(hw0);
-  const hw: Machine = gpu && !gpu.unified && gpu.memoryGb ? { ...hw0, modelMemoryGb: Math.max(hw0.modelMemoryGb, gpu.memoryGb) } : hw0;
-  return rows.map((row) => {
-    const work = cardWork(row.model);
-    const variants: OptionVariant[] = row.model.variants
-      .filter((v) => v.files.length > 0)
-      .map((v) => {
-        // How it fits this machine's GPU, RAM and disk (pooling with another computer, for the version that does); its time
-        // comes from Settings' estimate, which reads this machine's runs on a free GPU (the library's "measured far slower"
-        // can be another job sharing the GPU).
-        const f = v.id === row.fit.variant?.id && row.fit.pool ? row.fit : fitVariant(hw, v);
-        const left = Math.round(installState(v, place.target).missingGb * 1024 ** 3);
-        const seconds = f.seconds === null ? null : f === row.fit ? f.seconds : f.seconds * work;
-        return {
-          id: v.id,
-          label: v.label,
-          bytes: left,
-          fit: f.state,
-          why: f.why,
-          seconds,
-          installed: v.files.every((x) => have.has(`${x.folder}/${x.name}`)),
-          fitsDisk: room === null || left <= room,
-          fidelity: v.fidelity,
-          needGb: v.needGb,
-        };
-      });
-    const there = variants.find((v) => v.installed);
-    const runs = (v: OptionVariant) => (v.fit === "great" || v.fit === "ok" ? 2 : v.fit === "slow" ? 1 : 0);
-    const best = variants.find((v) => v.id === row.fit.variant?.id);
-    const roomy = [...variants]
-      .filter((v) => v.fitsDisk && runs(v) > 0)
-      .sort((a, b) => runs(b) - runs(a) || fidelity(row.model, b.id) - fidelity(row.model, a.id) || (a.seconds ?? Infinity) - (b.seconds ?? Infinity))[0];
-    const variant = there ?? (best && best.fitsDisk ? best : (roomy ?? best ?? variants[0]));
-    return {
-      model: row.model.id,
-      name: row.model.name,
-      maker: row.model.maker,
-      blurb: row.model.blurb,
-      quality: row.model.quality,
-      qualityKnown: Boolean(row.model.qualityKnown),
-      audio: Boolean(row.model.audio),
-      licence: { name: row.model.licence.name, commercial: row.model.licence.commercial, ...(row.model.licence.url ? { url: row.model.licence.url } : {}) },
-      unit: row.model.unit,
-      gated: Boolean(row.model.gated),
-      blocked: row.blocked,
-      pick: false,
-      variant: variant?.id ?? "",
-      variants,
-      knobs: knobsFor(row.model, task),
-    };
-  });
+function modelOption(row: Row, hw: Machine, place: Place, room: number | null, ctx: Ctx): ModelOption {
+  const have = haveOf(place.target);
+  const work = cardWork(row.model);
+  const variants: OptionVariant[] = row.model.variants
+    .filter((v) => v.files.length > 0)
+    .map((v) => {
+      // How it fits this machine's GPU, RAM and disk (pooling with another computer, for the version that does); its time
+      // comes from Settings' estimate, which reads this machine's runs on a free GPU (the library's "measured far slower"
+      // can be another job sharing the GPU).
+      const f = v.id === row.fit.variant?.id && row.fit.pool ? row.fit : fitVariant(hw, v);
+      const left = Math.round(installState(v, place.target).missingGb * 1024 ** 3);
+      const seconds = f.seconds === null ? null : f === row.fit ? f.seconds : f.seconds * work;
+      return {
+        id: v.id,
+        label: v.label,
+        bytes: left,
+        fit: f.state,
+        why: f.why,
+        seconds,
+        installed: v.files.every((x) => have.has(`${x.folder}/${x.name}`)),
+        fitsDisk: room === null || left <= room,
+        fidelity: v.fidelity,
+        needGb: v.needGb,
+      };
+    });
+  const there = variants.find((v) => v.installed);
+  const runs = (v: OptionVariant) => (v.fit === "great" || v.fit === "ok" ? 2 : v.fit === "slow" ? 1 : 0);
+  const best = variants.find((v) => v.id === row.fit.variant?.id);
+  const roomy = [...variants]
+    .filter((v) => v.fitsDisk && runs(v) > 0)
+    .sort((a, b) => runs(b) - runs(a) || fidelity(row.model, b.id) - fidelity(row.model, a.id) || (a.seconds ?? Infinity) - (b.seconds ?? Infinity))[0];
+  const variant = there ?? (best && best.fitsDisk ? best : (roomy ?? best ?? variants[0]));
+  return {
+    model: row.model.id,
+    name: row.model.name,
+    maker: row.model.maker,
+    blurb: row.model.blurb,
+    ...(row.model.thumb ? { thumb: row.model.thumb } : {}),
+    quality: row.model.quality,
+    qualityKnown: Boolean(row.model.qualityKnown),
+    audio: Boolean(row.model.audio),
+    licence: { name: row.model.licence.name, commercial: row.model.licence.commercial, ...(row.model.licence.url ? { url: row.model.licence.url } : {}) },
+    unit: row.model.unit,
+    gated: Boolean(row.model.gated),
+    blocked: row.blocked,
+    pick: false,
+    variant: variant?.id ?? "",
+    variants,
+    // A template model's own lengths and sizes (a 480p model isn't estimated at 720p); the hand-tuned ones' are built in.
+    knobs: knobsFor(row.model, undefined, row.model.crackio ? ctx.caps.get(row.model.crackio) : undefined),
+  };
 }
 
 const fidelity = (model: LocalModel, variant: string) => model.variants.find((v) => v.id === variant)?.fidelity ?? 1;
@@ -322,8 +378,11 @@ function judgeVoice(r: Requirement, clone: boolean, place: Place, ctx: Ctx): Req
   const room = roomOn(place);
   // Its list for the chooser, Crackio's pick (the one there, else the plan's) marked first.
   const listed = (s: ReqStatus, gpuGb: number | null, ramGb: number | null, unified: boolean, have: string[], extra: number, pick?: string | null): ReqStatus => {
-    const options = voiceOptions(clone, gpuGb, ramGb, unified, have, extra, room).map((o) => (o.model === pick ? { ...o, pick: true } : o));
-    return { ...s, options: options.sort((a, b) => Number(b.pick) - Number(a.pick)) };
+    const options = voiceOptions(clone, gpuGb, ramGb, unified, have, extra, room).map((o): OptionRef => {
+      place.table[o.model] = o;
+      return { model: o.model, variant: o.variant, ...(o.model === pick ? { pick: true as const } : {}) };
+    });
+    return { ...s, options: options.sort((a, b) => Number(Boolean(b.pick)) - Number(Boolean(a.pick))) };
   };
   if (place.noComfy || !vm) {
     const gpu = place.hw ? mainGpu(place.hw) : undefined;
@@ -450,11 +509,13 @@ function toolOn(kit: Kit, place: Place, ctx: Ctx): ToolStatus {
   const first = kit.needs.map((r) => judge(r, place, ctx));
   const takes = (s: ReqStatus) => (!s.optional && s.plan && (s.state === "missing" || s.state === "needs-key" || s.state === "broken") ? s.plan.bytes : 0);
   const room = roomOn(place);
-  const total = first.reduce((n, s) => n + takes(s), 0);
-  const reqs =
+  // A part needed only where it runs makes room for itself (whereItRuns below), never the others smaller.
+  const total = first.reduce((n, s, i) => n + (kit.needs[i].whereItRuns ? 0 : takes(s)), 0);
+  const judged =
     room !== null && total > room
-      ? kit.needs.map((r, i) => (r.need.kind === "model" && !r.optional && takes(first[i]) ? judgeModel(r, r.need, place, ctx, room - (total - takes(first[i]))) : first[i]))
+      ? kit.needs.map((r, i) => (r.need.kind === "model" && !r.optional && !r.whereItRuns && takes(first[i]) ? judgeModel(r, r.need, place, ctx, room - (total - takes(first[i]))) : first[i]))
       : first;
+  const reqs = whereItRuns(kit, judged, place, ctx, room);
   const required = reqs.filter((r) => !r.optional);
   const cloud = Boolean(kit.cloud && ctx.keys.comfy);
   const bytes = required.reduce((s, r) => s + (r.state === "missing" || r.state === "needs-key" || r.state === "broken" || r.state === "outdated" ? (r.plan?.bytes ?? 0) : 0), 0);
@@ -479,6 +540,34 @@ function toolOn(kit: Kit, place: Place, ctx: Ctx): ToolStatus {
   }
   const main = required.find((r) => r.has && r.state === "ready");
   return { kit: kit.id, state: "ready", why: main?.has ?? "Ready", bytes: 0, reqs, cloud };
+}
+
+/**
+ * The parts a tool needs only where they run (Requirement.whereItRuns, the Director's 3D World): where one can't run here,
+ * or the disk can't take it beside the tool's other parts, it's left out as an optional part is. Its download counts only
+ * the files the other parts don't bring (the 3D World shares Qwen-Image 2.1 Turbo with the Director's shot model).
+ */
+function whereItRuns(kit: Kit, reqs: ReqStatus[], place: Place, ctx: Ctx, room: number | null): ReqStatus[] {
+  if (!kit.needs.some((r) => r.whereItRuns)) return reqs;
+  // A plan names the catalog model by its own id ("director-world"); the context keeps them by Crackio's ("local:…").
+  const byId = new Map([...ctx.models.values()].map((m) => [m.id, m]));
+  const filesOf = (p?: SetupPart) => (p?.kind === "model" ? (byId.get(p.model)?.variants.find((v) => v.id === p.variant)?.files ?? []) : []);
+  const key = (f: { folder: string; name: string }) => `${f.folder}/${f.name}`;
+  const getting = (s: ReqStatus) => Boolean(s.plan) && (s.state === "missing" || s.state === "needs-key" || s.state === "broken" || s.state === "outdated");
+  const others = reqs.filter((s, i) => !kit.needs[i].whereItRuns && !kit.needs[i].optional && getting(s));
+  const have = new Set(place.target?.installed ?? []);
+  // What the other parts download, each file once (the shot and place models are often the same one).
+  const coming = new Map<string, number>();
+  for (const s of others) for (const f of filesOf(s.plan)) if (!have.has(key(f))) coming.set(key(f), f.bytes);
+  const othersBytes = [...coming.values()].reduce((n, b) => n + b, 0) + others.filter((s) => s.plan?.kind !== "model").reduce((n, s) => n + (s.plan?.bytes ?? 0), 0);
+  return reqs.map((s, i) => {
+    if (!kit.needs[i].whereItRuns) return s;
+    if (s.state === "unsupported" || s.state === "blocked") return { ...s, optional: true };
+    if (!getting(s) || s.plan?.kind !== "model") return s;
+    const plan = { ...s.plan, bytes: filesOf(s.plan).filter((f) => !have.has(key(f)) && !coming.has(key(f))).reduce((n, f) => n + f.bytes, 0) };
+    if (room !== null && othersBytes + plan.bytes > room) return { ...s, plan, optional: true, why: `${s.why}: no room for it beside the rest` };
+    return { ...s, plan };
+  });
 }
 
 function missingNames(reqs: ReqStatus[]) {
@@ -535,6 +624,8 @@ function placeOf(p: Place, ctx: Ctx, latest: string, runOn: string, comfy: Setup
   const update: SetupMachine["bridge"]["update"] =
     p.kind === "serverless" || p.kind === "comfy-cloud" ? "never" : p.kind === "this-computer" ? "this-computer" : ct?.cloud?.ssh ? "reconnect" : "by-hand";
   const thisComfy = p.kind === "this-computer" ? comfy : null;
+  // The tools first: judging their parts fills the machine's model table (p.table).
+  const tools = Object.fromEntries(KITS.map((k) => [k.id, toolOn(k, p, ctx)])) as Record<KitId, ToolStatus>;
   return {
     id: p.id,
     label: labelOf(hw, t),
@@ -559,28 +650,59 @@ function placeOf(p: Place, ctx: Ctx, latest: string, runOn: string, comfy: Setup
     runOn: Boolean(t) && runOn === t!.id,
     metered: Boolean(ct?.metered),
     cloud: t?.cloud ? { provider: t.cloud.provider, instance: t.cloud.instance } : undefined,
-    tools: Object.fromEntries(KITS.map((k) => [k.id, toolOn(k, p, ctx)])) as Record<KitId, ToolStatus>,
+    tools,
+    ...(Object.keys(p.table).length ? { models: p.table } : {}),
     downloads: { count: active.length, received: active.reduce((s, d) => s + d.received, 0), total: active.reduce((s, d) => s + d.total, 0) },
   };
 }
 
-const cache = globalThis as unknown as { __crackioSetupSnapshot?: { at: number; snap: Promise<SetupSnapshot> } };
+type SnapEntry = { at: number; epoch: number; snap: Promise<SetupSnapshot>; done?: SetupSnapshot };
+const cache = globalThis as unknown as { __crackioSetupSnapshot?: SnapEntry; __crackioSetupSnapshotLast?: SnapEntry };
 
-/** Every machine × every tool, looked at afresh at most every 2 s (Settings and the pills poll it). */
-export function setupSnapshot(fresh = false): Promise<SetupSnapshot> {
+/**
+ * Every machine × every tool. Settings and every tool's setup pill poll it, and a look reads every machine: the last look
+ * answers at once while a new one is made in the background once it's 2 s old (up to 30 s), and a look from before a
+ * change (the epoch: a set-up finished, settings changed, a machine came online or went away) is never answered. Set-up
+ * jobs and cloud credit are always read live. `fresh` waits for a new look.
+ */
+export async function setupSnapshot(fresh = false): Promise<SetupSnapshot> {
+  const now = epoch();
+  const live = (s: SetupSnapshot): SetupSnapshot => ({ ...s, jobs: setupJobs(), credit: creditNow() });
   const hit = cache.__crackioSetupSnapshot;
-  if (!fresh && hit && Date.now() - hit.at < 2000) return hit.snap;
-  const snap = build();
-  cache.__crackioSetupSnapshot = { at: Date.now(), snap };
-  snap.catch(() => {
-    if (cache.__crackioSetupSnapshot?.snap === snap) cache.__crackioSetupSnapshot = undefined;
-  });
-  return snap;
+  if (!fresh && hit && hit.epoch === now) {
+    const age = Date.now() - hit.at;
+    if (age < 2000) return live(await hit.snap);
+    const last = hit.done ? hit : cache.__crackioSetupSnapshotLast;
+    if (last?.done && last.epoch === now && Date.now() - last.at < 30_000) {
+      void rebuild(now);
+      return live(last.done);
+    }
+  }
+  return live(await rebuild(now, fresh));
+}
+
+/** A new look, or the one being made for this epoch already (unless `fresh`, which starts one). */
+function rebuild(now: number, fresh = false): Promise<SetupSnapshot> {
+  const hit = cache.__crackioSetupSnapshot;
+  if (!fresh && hit && hit.epoch === now && !hit.done && Date.now() - hit.at < 60_000) return hit.snap;
+  const entry: SnapEntry = { at: Date.now(), epoch: now, snap: build() };
+  if (hit?.done) cache.__crackioSetupSnapshotLast = hit;
+  cache.__crackioSetupSnapshot = entry;
+  entry.snap.then(
+    (s) => {
+      entry.done = s;
+    },
+    () => {
+      if (cache.__crackioSetupSnapshot === entry) cache.__crackioSetupSnapshot = cache.__crackioSetupSnapshotLast;
+    },
+  );
+  return entry.snap;
 }
 
 /** Forget the last look, so the next one is fresh (a set-up just changed something). */
 export function forgetSetupSnapshot() {
   cache.__crackioSetupSnapshot = undefined;
+  cache.__crackioSetupSnapshotLast = undefined;
 }
 
 async function build(): Promise<SetupSnapshot> {
@@ -594,15 +716,17 @@ async function build(): Promise<SetupSnapshot> {
     visionOnDisk().catch(() => ({}) as Awaited<ReturnType<typeof visionOnDisk>>),
     latestBridge(),
   ]);
+  const catalog = allLocalModels();
   const models = new Map<string, LocalModel>();
-  for (const m of allLocalModels()) if (m.crackio) models.set(m.crackio, m);
+  for (const m of catalog) if (m.crackio) models.set(m.crackio, m);
+  const caps = new Map(templateDefs().map((t) => [t.def.id, t.caps]));
   const keys = {
     comfy: Boolean(settings.keys.comfy || process.env.COMFY_API_KEY),
     hf: local.hfToken,
     vast: Boolean(settings.keys.vast),
     runpod: Boolean(settings.keys.runpod || process.env.RUNPOD_API_KEY),
   };
-  const ctx: Ctx = { local, models, voice: new Map(voice.map((m) => [m.id, m])), lipsync: new Map(lipsync.map((m) => [m.id, m])), vision, keys };
+  const ctx: Ctx = { local, catalog, models, caps, voice: new Map(voice.map((m) => [m.id, m])), lipsync: new Map(lipsync.map((m) => [m.id, m])), vision, keys };
   const byTarget = new Map(targets.map((t) => [t.id, t]));
   const hwOf = new Map(local.machines.filter((m) => m.target).map((m) => [m.target!, m]));
   const thisComputer = local.machines.find((m) => m.where === "this-computer") ?? null;
@@ -615,11 +739,11 @@ async function build(): Promise<SetupSnapshot> {
     // (Accounts), not a machine to set up.
     if ((t.implicit && !t.connected) || kind === "comfy-cloud") continue;
     const hw = hwOf.get(t.id) ?? (t.onThisComputer ? thisComputer : null);
-    places.push({ id: t.id, kind, target: t, hw, online: t.connected, noComfy: false });
+    places.push({ id: t.id, kind, target: t, hw, online: t.connected, noComfy: false, table: {} });
   }
   // This computer with no ComfyUI yet (or none Crackio knows): a set-up installs one first.
   if (!places.some((p) => p.kind === "this-computer") && thisComputer && !comfy?.installed) {
-    places.unshift({ id: "this-computer", kind: "this-computer", target: null, hw: thisComputer, online: true, noComfy: true });
+    places.unshift({ id: "this-computer", kind: "this-computer", target: null, hw: thisComputer, online: true, noComfy: true, table: {} });
   }
   // This computer first, then the rest by GPU speed.
   places.sort((a, b) => Number(b.kind === "this-computer") - Number(a.kind === "this-computer") || Number(b.online) - Number(a.online) || (b.hw ? (speedOf(b.hw) ?? 0) : 0) - (a.hw ? (speedOf(a.hw) ?? 0) : 0));
@@ -634,7 +758,9 @@ async function build(): Promise<SetupSnapshot> {
     return p?.hw ? (speedOf(p.hw) ?? 0) : 0;
   };
   for (const kit of KITS) {
-    const usable = machines.filter((m) => m.online && !m.metered);
+    // A billed machine (RunPod Serverless) counts when it's the one chosen under Run on, where every job goes: left out,
+    // every tool's page said "isn't ready on your machines yet · Fix in Settings" over a Director that ran (Nov 13).
+    const usable = machines.filter((m) => m.online && (!m.metered || m.runOn));
     const readyOn = usable.filter((m) => m.tools[kit.id].state === "ready");
     const pinned = readyOn.find((m) => m.runOn);
     runsOn[kit.id] = (pinned ?? [...readyOn].sort((a, b) => speed(b) - speed(a))[0])?.id ?? null;

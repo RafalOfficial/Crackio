@@ -3,9 +3,18 @@
 import Link from "next/link";
 import { GenerationCard } from "@/components/generations/GenerationCard";
 import { useGenerations } from "@/lib/hooks/use-generations";
+import { takeKey, useLibrary } from "@/lib/hooks/use-library";
+
+/** The Library's viewer on this take, in the folder it's filed in (if the Library knows yet). */
+function viewHref(id: string, index: number, placements: Record<string, string>) {
+  const key = takeKey(id, index);
+  const folder = placements[key];
+  return `/library?${folder ? `project=${encodeURIComponent(folder)}&` : ""}view=${encodeURIComponent(key)}`;
+}
 
 export function RecentGenerations() {
   const { items, loaded } = useGenerations();
+  const placements = useLibrary((s) => s.placements);
   // The dashboard shows finished and rendering takes; failed ones stay in the Library.
   const shown = items.filter((g) => g.status !== "error" && g.tool !== "showcase");
   if (!loaded || shown.length === 0) return null;
@@ -26,7 +35,7 @@ export function RecentGenerations() {
       <div className="mt-5 columns-2 gap-3 sm:columns-3 lg:columns-4 xl:columns-5 [&>*]:mb-3">
         {tiles.map(({ gen, i }) => (
           <div key={`${gen.id}-${i}`} className="break-inside-avoid">
-            <GenerationCard gen={gen} index={i} />
+            <GenerationCard gen={gen} index={i} href={gen.status === "done" ? viewHref(gen.id, i, placements) : undefined} />
           </div>
         ))}
       </div>

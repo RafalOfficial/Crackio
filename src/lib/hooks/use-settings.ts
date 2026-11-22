@@ -14,6 +14,7 @@ export type PublicSettings = {
   swapChecker: "auto" | "local" | "cloud";
   swapStrictness: "strict" | "normal" | "lenient";
   retouchEyes: "auto" | "local" | "cloud";
+  promptEnhancer: "auto" | "off";
   pooling: "auto" | "always" | "off";
   runOn: string;
   cloudAutoConnect: boolean;

@@ -47,7 +47,10 @@ export function CompareView({
             <div
               role="slider"
               aria-label="Compare before and after"
+              aria-valuemin={0}
+              aria-valuemax={100}
               aria-valuenow={Math.round(split)}
+              aria-valuetext={`${Math.round(split)}% before`}
               tabIndex={0}
               onKeyDown={(e) => {
                 if (e.key === "ArrowLeft") setSplit((s) => Math.max(0, s - 5));

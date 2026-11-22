@@ -133,7 +133,7 @@ export function PicturePicker({
           </span>
         </button>
         {mine === null ? [0, 1, 2].map((i) => <div key={i} className="skeleton shrink-0 rounded-[12px]" style={{ height: H, width: Math.round(H * 0.6) }} />) : null}
-        {uploads.map((p) => tile(p, p.url, `u:${p.url}`))}
+        {uploads.map((p) => tile(p, previewUrl(p.url, 320), `u:${p.url}`))}
         {ours.map((p) => tile(p, previewUrl(p.url, 320), `m:${p.url}`))}
         {mine !== null ? (
           <>

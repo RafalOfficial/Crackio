@@ -493,7 +493,7 @@ export function compileBrief(scene: Scene, slots = 5) {
  * The stand-ins on the real place, swapped for the subjects: one edit of one picture (the place as this camera sees it,
  * a plain colored figure where each subject stands), each subject's own picture beside it (`pictures`: its image number,
  * and whether it shows the subject from the side the camera sees it) or else in words. Measured on Grok 2.0
- * (2026-10-28, the user's gas station shot): an edit of one coherent picture keeps its camera and place exactly, and
+ * (2026-10-28, a gas station test shot): an edit of one coherent picture keeps its camera and place exactly, and
  * the model draws each subject fresh, lit by the scene, at the figure's spot, size and facing.
  */
 export function swapPrompt(
@@ -557,7 +557,7 @@ export function swapPrompt(
   const light = lightPhrases(scene, camRight);
   sentences.push(`Light ${framings.length > 1 ? "them" : "it"} the way the place is lit (${light.direction}, ${light.quality}), with natural shadows on the ground and reflections on wet or shiny surfaces.`);
   if (scene.notes.trim()) sentences.push(`Also: ${scene.notes.trim()}`);
-  // FLUX 3 Klein drew the user's "holding a phone to his ear" with no phone in the hand.
+  // FLUX 3 Klein drew a man told to hold a phone to his ear with no phone in his hand.
   if (framings.some((f) => f.element.kind === "person") && (scene.notes.trim() || framings.some((f) => f.element.action?.trim()))) {
     sentences.push("Anything a person holds or uses is clearly visible, whole and real in their hand.");
   }
@@ -567,7 +567,7 @@ export function swapPrompt(
 }
 
 /**
- * Everything once. Measured on Grok 2.0 (the user's gas station shot, camera a meter from the car): the photo's one red
+ * Everything once. Measured on Grok 2.0 (a gas station test shot, camera a meter from the car): the photo's one red
  * Mustang, stretched across the frame up close, came back as two cars, a hood in front and a whole car behind; and a
  * car staged where the place already had one came back stacked on it. `things` are what the place photo shows
  * ("one red Ford Mustang convertible"); only those already in the picture count, so none is added where the camera
@@ -585,7 +585,7 @@ export function onceRule(things: string[], subjects: boolean) {
 
 /**
  * Which way a subject faces, said as what the camera sees of it: which eye and ear show, where the nose, chest or
- * front end points. Measured on Grok 2.0 (2026-10-28, the user's gas station shot): "in profile, looking toward the
+ * front end points. Measured on Grok 2.0 (2026-10-28, a gas station test shot): "in profile, looking toward the
  * right edge of the frame" came back turned to the camera; "we see the right side of his face: one eye, his right ear,
  * his nose pointing at the right edge; he does not turn toward the camera" came back in profile, both takes. A subject
  * facing frame right shows the camera its right side.

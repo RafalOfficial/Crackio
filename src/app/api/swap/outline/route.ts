@@ -1,4 +1,7 @@
 import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { nanoid } from "nanoid";
 import sharp from "sharp";
 import { z } from "zod";
 // The text models first: they reach the engine registry, which loads comfy-local whole (loaded first, comfy-local would
@@ -41,16 +44,17 @@ export async function POST(request: Request) {
   const tint = { r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
   const file = urlToPath(frame);
   if (!file) return Response.json({ error: "That frame isn't on this computer." }, { status: 400 });
-  const picture = await fs.readFile(file).catch(() => null);
+  const picture = await fs.readFile(/*turbopackIgnore: true*/ file).catch(() => null);
   const meta = picture ? await sharp(picture).metadata().catch(() => null) : null;
   if (!picture || !meta?.width || !meta.height) return Response.json({ error: "Couldn't read the frame." }, { status: 422 });
   const [W, H] = [meta.width, meta.height];
-  // Long enough to wait for a render that's already running on the GPU.
-  const signal = AbortSignal.timeout(420_000);
+  // Long enough to wait for a render that's already running on the GPU; and over as soon as the page gives up on it,
+  // so an abandoned click doesn't hold the front of the GPU's queue (runWorkflow takes its prompt back on abort).
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(420_000)]);
   try {
     const target = await pickTarget("ltx-2.5-ripple");
     const mask = await withTarget(target, async () => {
-      const up = await uploadInput(await sharp(picture).rotate().png().toBuffer(), `outline-${Date.now().toString(36)}.png`, signal);
+      const up = await uploadInput(await sharp(picture).rotate().png().toBuffer(), `outline-${Date.now().toString(36)}-${nanoid(6)}.png`, signal);
       const coords = JSON.stringify(points.map((p) => ({ x: Math.round(p.x * (W - 1)), y: Math.round(p.y * (H - 1)) })));
       const graph = {
         "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: SAM } },
@@ -67,30 +71,45 @@ export async function POST(request: Request) {
     });
     // The outline at the frame's size, one byte a pixel; its box; the overlay: tint inside, a solid edge around.
     const gray = await sharp(mask).resize(W, H, { fit: "fill" }).extractChannel(0).raw().toBuffer();
-    let [x0, y0, x1, y1, area] = [W, H, -1, -1, 0];
-    for (let i = 0; i < gray.length; i++) {
-      if (gray[i] < 128) continue;
-      area++;
-      const [x, y] = [i % W, Math.floor(i / W)];
-      [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
+    // Plain numbers and indexed writes in these per-pixel loops: no arrays made per pixel (169 → 49 ms on 1080p).
+    let x0 = W;
+    let y0 = H;
+    let x1 = -1;
+    let y1 = -1;
+    let area = 0;
+    for (let y = 0, i = 0; y < H; y++) {
+      for (let x = 0; x < W; x++, i++) {
+        if (gray[i] < 128) continue;
+        area++;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
     }
     if (!area) return Response.json({ error: "Nothing was found where you clicked. Click right on them." }, { status: 422 });
     // (A one-band raw buffer can come back from sharp as three bands: one channel taken out again.)
     const grown = await sharp(gray, { raw: { width: W, height: H, channels: 1 } }).blur(Math.max(1, W / 400)).extractChannel(0).raw().toBuffer();
     const rgba = Buffer.alloc(W * H * 4);
+    const put = (o: number, r: number, g: number, b: number, a: number) => {
+      rgba[o] = r;
+      rgba[o + 1] = g;
+      rgba[o + 2] = b;
+      rgba[o + 3] = a;
+    };
     for (let i = 0; i < W * H; i++) {
       const inside = gray[i] >= 128;
       const edge = !inside && grown[i] >= 24;
       if (style === "tint") {
         // Only what you picked: a light tint of its colour over it, and a solid edge around it.
-        if (inside) rgba.set([tint.r, tint.g, tint.b, 56], i * 4);
-        else if (edge) rgba.set([tint.r, tint.g, tint.b, 255], i * 4);
+        if (inside) put(i * 4, tint.r, tint.g, tint.b, 56);
+        else if (edge) put(i * 4, tint.r, tint.g, tint.b, 255);
         continue;
       }
       if (inside) continue;
       // Everything else dimmed, and a solid edge around what you picked.
-      const [r, g, b, a] = edge ? [TINT.r, TINT.g, TINT.b, 255] : [10, 8, 14, 125];
-      rgba.set([r, g, b, a], i * 4);
+      if (edge) put(i * 4, TINT.r, TINT.g, TINT.b, 255);
+      else put(i * 4, 10, 8, 14, 125);
     }
     const overlay = await saveFileUpload(await sharp(rgba, { raw: { width: W, height: H, channels: 4 } }).png().toBuffer(), "png", "file");
     const box = [Math.round((x0 / W) * 1000), Math.round((y0 / H) * 1000), Math.round(((x1 + 1) / W) * 1000), Math.round(((y1 + 1) / H) * 1000)];
@@ -104,8 +123,10 @@ export async function POST(request: Request) {
         .extract({ left: x0, top: y0, width: x1 + 1 - x0, height: y1 + 1 - y0 })
         .png()
         .toBuffer();
-      const cutFile = `${file}.cut.png`;
-      await fs.writeFile(cutFile, cut);
+      // A file of its own: two picks named at once on the same frame used to share one (and could swap names), and a
+      // frame under /assets put it in the source tree.
+      const cutFile = path.join(/*turbopackIgnore: true*/ os.tmpdir(), `crackio-cut-${nanoid(10)}.png`);
+      await fs.writeFile(/*turbopackIgnore: true*/ cutFile, cut);
       try {
         const answer = await askText({
           instructions: NAME,
@@ -120,7 +141,7 @@ export async function POST(request: Request) {
         }).catch(() => null);
         label = answer?.trim().replace(/^["'\s]+|["'.\s]+$/g, "").slice(0, 160) || null;
       } finally {
-        await fs.rm(cutFile, { force: true }).catch(() => {});
+        await fs.rm(/*turbopackIgnore: true*/ cutFile, { force: true }).catch(() => {});
       }
     }
     return Response.json({ overlay: overlay.url, box, share: area / (W * H), ...(label ? { name: label } : {}) });

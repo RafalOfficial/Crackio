@@ -1,162 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { motion } from "motion/react";
 import { create } from "zustand";
-import { Clapperboard, LoaderCircle, Play, X } from "lucide-react";
-import { useGenerations } from "@/lib/hooks/use-generations";
-import { askForModel, useModelChoice } from "@/lib/hooks/use-model-choice";
-import { useModelInfo } from "@/lib/hooks/use-custom-models";
-import { durationTicks } from "@/lib/models/caps";
+import { Play, X } from "lucide-react";
 import type { Generation } from "@/lib/generations/types";
-import type { Scene } from "@/lib/director/types";
-import { ModelPicker } from "@/components/models/ModelPicker";
-import { Popover } from "@/components/ui/Popover";
+import { useToolTakes } from "@/components/tools/use-tool-takes";
 import { posterUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
 
 /**
- * Shots into a film: any take becomes a clip of the length you want (2, 4 or 6 seconds), and the clips play in the
- * order you made them, each cut to its length: a wide shot for four seconds, a close-up for two, then the next scene.
+ * Shots into a film: the Director's clips play in the order you made them, each cut to its length: a wide shot for four
+ * seconds, a close-up for two, then the next scene.
  */
 
 /** A take that is a clip: made from a still take, cut to `length` seconds. */
 export const isClip = (g: Generation) => g.params?.kind === "video";
 export const clipLength = (g: Generation) => (typeof g.params?.length === "number" ? g.params.length : 4);
 
-/** Every finished clip, in the order they were made. */
+/** Every finished clip, in the order they were made (every Director take, not only the newest of all tools). */
 export function useDirectorClips() {
-  const { items } = useGenerations();
+  const items = useToolTakes("director");
   return useMemo(
-    () =>
-      items
-        .filter((g) => g.tool === "director" && isClip(g) && g.status === "done" && g.outputs.some((o) => o.kind === "video"))
-        .sort((a, b) => a.createdAt - b.createdAt),
+    () => items.filter((g) => isClip(g) && g.status === "done" && g.outputs.some((o) => o.kind === "video")).sort((a, b) => a.createdAt - b.createdAt),
     [items],
-  );
-}
-
-const LENGTHS = [2, 4, 6];
-const MOVES = [
-  { id: "still", label: "Still", words: "The camera stays perfectly still: a locked-off shot." },
-  { id: "push", label: "Push in", words: "The camera slowly pushes in." },
-  { id: "follow", label: "Follow", words: "The camera follows the action smoothly." },
-] as const;
-
-/** Make a clip from a still take: what happens, for how long, how the camera moves, with the video model you choose. */
-export function MakeClip({ take }: { take: Generation }) {
-  const submit = useGenerations((s) => s.submit);
-  const [model, setModel] = useModelChoice("video", "video");
-  const info = useModelInfo(model === "auto" ? "" : model);
-  const scene = take.params?.scene as Scene | undefined;
-  const [what, setWhat] = useState(() => scene?.notes?.trim() ?? "");
-  const [length, setLength] = useState(4);
-  const [move, setMove] = useState<(typeof MOVES)[number]["id"]>("still");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const still = take.outputs.find((o) => o.kind === "image");
-  if (!still || isClip(take)) return null;
-
-  // The model's shortest length that holds the cut (the clip is trimmed to it when it plays).
-  const ticks = info.caps?.duration ? durationTicks(info.caps.duration) : null;
-  const duration = ticks ? (ticks.seconds.filter((s) => s >= length).sort((a, b) => a - b)[0] ?? ticks.max) : Math.max(length, 5);
-
-  const go = async (close: () => void) => {
-    if (model === "auto") return void askForModel("video");
-    setBusy(true);
-    setError(null);
-    try {
-      const words = what.trim() || "Natural, subtle movement: everyone stays in character.";
-      const moveWords = MOVES.find((m) => m.id === move)!.words;
-      await submit({
-        tool: "director",
-        prompt: words,
-        compiledPrompt: `${words.replace(/\.?$/, ".")} ${moveWords} Everyone and everything keeps the look they have in the first frame.`,
-        aspect: take.aspect,
-        count: 1,
-        model,
-        refine: false,
-        references: [{ url: still.url, label: "the start frame", role: "subject" }],
-        params: { kind: "video", startUrl: still.url, options: { duration }, fromTake: take.id, length, scene },
-      });
-      close();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Popover
-      placement="bottom-end"
-      panelClassName="w-[300px]"
-      trigger={({ toggle }) => (
-        <button
-          onClick={toggle}
-          className="press squircle inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-spike px-2.5 text-[12.5px] font-semibold text-spike-ink"
-          title="Turn this shot into a clip"
-        >
-          <Clapperboard size={14} /> <span className="hidden md:inline">Make it move</span>
-        </button>
-      )}
-    >
-      {(close) => (
-        <div className="space-y-3 p-3">
-          <div>
-            <p className="label mb-1.5">What happens</p>
-            <textarea
-              autoFocus
-              value={what}
-              onChange={(e) => setWhat(e.target.value)}
-              rows={2}
-              placeholder="She turns and walks away; he laughs"
-              className="squircle field-focus w-full resize-none rounded-[10px] bg-white/[0.05] px-2.5 py-2 text-[13px] outline-none placeholder:text-haze"
-            />
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <p className="label">Length</p>
-            <div className="flex gap-1">
-              {LENGTHS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setLength(s)}
-                  aria-pressed={length === s}
-                  className={cn("press squircle h-7 rounded-[8px] px-2.5 text-[12.5px] font-semibold", length === s ? "bg-white/[0.14] text-paper" : "text-fog hover:bg-white/[0.06]")}
-                >
-                  {s}s
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <p className="label">Camera</p>
-            <div className="flex gap-1">
-              {MOVES.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => setMove(m.id)}
-                  aria-pressed={move === m.id}
-                  className={cn("press squircle h-7 rounded-[8px] px-2 text-[12px] font-semibold", move === m.id ? "bg-white/[0.14] text-paper" : "text-fog hover:bg-white/[0.06]")}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <ModelPicker kind="video" task="video" value={model} onChange={setModel} label="Clip made with" className="w-full" />
-          {error ? <p className="text-[12px] text-tally">{error}</p> : null}
-          <button
-            onClick={() => void go(close)}
-            disabled={busy}
-            className="press squircle flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] bg-spike text-[13px] font-semibold text-spike-ink disabled:opacity-60"
-          >
-            {busy ? <LoaderCircle size={14} className="animate-spin" /> : <Clapperboard size={14} />}
-            Make a {length}s clip
-          </button>
-        </div>
-      )}
-    </Popover>
   );
 }
 

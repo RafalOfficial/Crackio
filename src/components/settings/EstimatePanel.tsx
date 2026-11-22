@@ -7,6 +7,7 @@ import { useEstimate } from "@/lib/hooks/use-estimate";
 import { jobWords, SAFETY, type JobSpec, type Knobs } from "@/lib/setup/knobs";
 import type { ModelOption, OptionVariant, SetupMachine } from "@/lib/setup/types";
 import { cn } from "@/lib/cn";
+import { radioArrows, radioTab } from "@/lib/roving";
 
 /**
  * The estimate under a model's versions: set the job (a clip's length and size, a picture's size and how many, an
@@ -27,13 +28,14 @@ export function usd(n: number) {
 /** A few choices side by side, one picked. */
 export function Segmented<T extends string | number>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-[12px] bg-white/[0.04] p-1">
-      {options.map((o) => (
+    <div role="radiogroup" aria-label={label} onKeyDown={radioArrows} className="inline-flex flex-wrap gap-1 rounded-[12px] bg-white/[0.04] p-1">
+      {options.map((o, i) => (
         <button
           key={String(o.value)}
           type="button"
           role="radio"
           aria-checked={o.value === value}
+          tabIndex={radioTab(o.value === value, i, options.some((x) => x.value === value))}
           onClick={() => onChange(o.value)}
           className={cn(
             "press rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold tabular transition-colors",

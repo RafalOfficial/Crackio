@@ -6,6 +6,7 @@ import { AtSign, LoaderCircle, Plus, X } from "lucide-react";
 import { Popover } from "@/components/ui/Popover";
 import { useCast } from "@/lib/hooks/use-cast";
 import { MENTION, formatHeight, mentionedHandles, type Character } from "@/lib/cast/types";
+import { previewUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
 
 /** "@mia" out of a prompt, with the space after it. */
@@ -32,7 +33,7 @@ export function CastStrip({ prompt, onChange, how, className }: { prompt: string
         {inShot.map((c) => (
           <span key={c.id} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/[0.06] pl-1 pr-1.5 text-[12.5px] font-semibold text-paper">
             <span className="relative size-6 overflow-hidden rounded-full bg-apple">
-              {c.portrait || c.photos[0] ? <img src={c.portrait ?? c.photos[0]} alt="" className="size-full object-cover" /> : null}
+              {c.portrait || c.photos[0] ? <img src={previewUrl(c.portrait ?? c.photos[0], 96)} alt="" decoding="async" className="size-full object-cover" /> : null}
               {c.status === "building" ? <LoaderCircle size={12} className="absolute inset-0 m-auto animate-spin text-paper" /> : null}
             </span>
             {c.name}
@@ -72,7 +73,7 @@ export function CastStrip({ prompt, onChange, how, className }: { prompt: string
                   className="squircle flex w-full items-center gap-2.5 rounded-[12px] px-2 py-1.5 text-left text-fog hover:bg-gaffer hover:text-paper"
                 >
                   <span className="relative size-8 shrink-0 overflow-hidden rounded-[9px] bg-apple">
-                    {c.portrait || c.photos[0] ? <img src={c.portrait ?? c.photos[0]} alt="" className="size-full object-cover" /> : null}
+                    {c.portrait || c.photos[0] ? <img src={previewUrl(c.portrait ?? c.photos[0], 96)} alt="" decoding="async" className="size-full object-cover" /> : null}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-semibold text-paper">{c.name}</span>

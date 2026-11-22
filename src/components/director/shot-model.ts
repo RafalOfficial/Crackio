@@ -7,14 +7,18 @@ import { persist } from "zustand/middleware";
 export const useShotModel = create<{ model: string }>(() => ({ model: "auto" }));
 
 /**
- * Which ControlNet model draws the shots (models.ts SHOT_MODELS): Z-Image Director (the most cinematic, 4 s) or Qwen
- * Director (keeps the cast's faces and clothes from their pictures, 14 s). Kept in this browser.
+ * Which model makes the shots (models.ts SHOT_MODELS): one that keeps the place's own pixels (Qwen-Image 2.1, the
+ * default) or one that redraws it through a ControlNet (Z-Image Director, Qwen Director). Kept in this browser; empty
+ * is the first one ready. Version 1 (Nov 2026) drops a pick from before keeping the place was offered, so everyone
+ * starts on it.
  */
-export const useDirectorShot = create<{ model: string }>()(persist(() => ({ model: "" }), { name: "crackio-director-shot-model" }));
+export const useDirectorShot = create<{ model: string }>()(
+  persist(() => ({ model: "" }), { name: "crackio-director-shot-model", version: 1, migrate: () => ({ model: "" }) }),
+);
 
 /**
  * How big shots are drawn, and how carefully (2K asks for each model's full version, comfy-local-recipes): 2K by default, where a face in a full-body two-shot is about 125 px tall (at 1K it was about
- * 80 and models drew soft, wrong eyes; the user's crop), at two to three times the time. 1K when speed matters.
+ * 80 and models drew soft, wrong eyes, plain to see in a crop), at two to three times the time. 1K when speed matters.
  */
 export const useShotSize = create<{ size: string }>()(persist(() => ({ size: "2k" }), { name: "crackio-director-shot-size" }));
 

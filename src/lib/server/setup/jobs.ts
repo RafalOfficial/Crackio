@@ -12,10 +12,12 @@ import { lipsyncJobOf } from "../lipsync/jobs";
 import { forgetVoiceMachines } from "../voice/machines";
 import { installComfy, setupStatus, updateLocalBridge } from "../comfy-install";
 import { forgetTargets } from "../comfy-targets";
+import { bumpEpoch } from "../epoch";
 import { planInstall } from "../storage";
 import { installState } from "@/lib/local/rows";
 import { LFM3_LORAS, lfm3LorasBytes } from "@/lib/local/lfm3";
 import { kitById } from "@/lib/setup/kits";
+import { optionsOf } from "@/lib/setup/options";
 import type { KitId, ReqStatus, SetupJob, SetupMachine, SetupPart, SetupSnapshot, SetupStep } from "@/lib/setup/types";
 import type { VoiceModelId } from "@/lib/voice/models";
 
@@ -25,7 +27,7 @@ import type { VoiceModelId } from "@/lib/voice/models";
  * setUpLipsync, installComfy and updateLocalBridge. A step that's already done there is skipped by its own installer.
  */
 
-type Job = SetupJob & { parts: SetupPart[]; abort: AbortController; include: string[]; choices: Record<string, Choice>; needsComfy: boolean };
+type Job = SetupJob & { parts: SetupPart[]; abort: AbortController; include: string[]; choices: Record<string, Choice>; only?: string[]; needsComfy: boolean };
 
 const g = globalThis as unknown as { __crackioSetupJobs?: Map<string, Job> };
 const jobs = (g.__crackioSetupJobs ??= new Map<string, Job>());
@@ -72,9 +74,10 @@ export type Choice = { model: string; variant: string };
 /**
  * The parts a set-up of these tools gets on a machine: every required one that isn't there, plus the optional ones asked
  * for. A model picked for a requirement (`choices`) is got instead of Crackio's pick, also beside one that's there
- * already (to try another); `hf` says whether your Hugging Face token is in.
+ * already (to try another); `hf` says whether your Hugging Face token is in. `only`: just these requirements of the
+ * tools, optional or not, and nothing else they need (an add-on is got by itself, not with the tool it helps).
  */
-export function planFor(machine: SetupMachine, kits: KitId[], include: string[] = [], choices: Record<string, Choice> = {}, hf = true) {
+export function planFor(machine: SetupMachine, kits: KitId[], include: string[] = [], choices: Record<string, Choice> = {}, hf = true, only?: string[]) {
   const parts: SetupPart[] = [];
   const blocked: ReqStatus[] = [];
   const keys = new Set<"comfy" | "hf">();
@@ -96,9 +99,10 @@ export function planFor(machine: SetupMachine, kits: KitId[], include: string[] 
     const tool = machine.tools[kit];
     if (!tool) continue;
     for (const r of tool.reqs) {
+      if (only && !only.includes(r.id)) continue;
       const chosen = choices[r.id];
       if (chosen) {
-        const o = r.options?.find((x) => x.model === chosen.model);
+        const o = optionsOf(machine, r).find((x) => x.model === chosen.model);
         const v = o?.variants.find((x) => x.id === chosen.variant);
         if (!o || !v) {
           unknown.push(r.label);
@@ -115,14 +119,14 @@ export function planFor(machine: SetupMachine, kits: KitId[], include: string[] 
         else add({ kind: "model", model: o.model, name: o.name, variant: v.id, variantLabel: v.label, bytes: v.bytes, gated: o.gated });
         continue;
       }
-      if (r.optional && !include.includes(r.id)) continue;
+      if (r.optional && !include.includes(r.id) && !only?.includes(r.id)) continue;
       if (r.state === "needs-key" && r.key) keys.add(r.key);
       if ((r.state === "unsupported" || r.state === "blocked" || r.state === "unpublished") && !r.optional) blocked.push(r);
       // A part downloading already joins too: its step follows that download (the installers skip files on their way).
       if (r.plan && (r.state === "missing" || r.state === "broken" || r.state === "outdated" || r.state === "needs-key" || r.state === "installing")) add(r.plan);
     }
   }
-  const bridgeOld = kits.some((k) => machine.tools[k]?.reqs.some((r) => r.fix === "bridge" && (!r.optional || include.includes(r.id))));
+  const bridgeOld = kits.some((k) => machine.tools[k]?.reqs.some((r) => r.fix === "bridge" && (only ? only.includes(r.id) : !r.optional || include.includes(r.id))));
   return { parts, blocked, keys: [...keys], bridgeOld, unknown, bytes: parts.reduce((s, p) => s + p.bytes, 0) };
 }
 
@@ -142,7 +146,7 @@ const step = (id: string, label: string): SetupStep => ({ id, label, state: "wai
  * Starts setting tools up on a machine (or queues it behind the one running there). Refuses up front what can't work:
  * an offline machine, a missing key, too little room.
  */
-export async function startSetup(snapshot: SetupSnapshot, input: { machine: string; kits: KitId[]; include?: string[]; choices?: Record<string, Choice> }): Promise<SetupJob> {
+export async function startSetup(snapshot: SetupSnapshot, input: { machine: string; kits: KitId[]; include?: string[]; choices?: Record<string, Choice>; only?: string[] }): Promise<SetupJob> {
   const machine = snapshot.machines.find((m) => m.id === input.machine);
   if (!machine) throw new SetupError("That computer isn't one of your machines.", 404);
   // This computer without a ComfyUI yet: the set-up installs one first.
@@ -151,7 +155,7 @@ export async function startSetup(snapshot: SetupSnapshot, input: { machine: stri
   if (machine.metered) throw new SetupError("Pay-per-job machines bring their own models: set tools up on one of your GPUs instead.");
   const kits = input.kits.filter((k) => kitById(k));
   if (!kits.length) throw new SetupError("Pick a tool to set up.", 400);
-  const plan = planFor(machine, kits, input.include, input.choices, snapshot.keys.hf);
+  const plan = planFor(machine, kits, input.include, input.choices, snapshot.keys.hf, input.only);
   if (plan.unknown.length) throw new SetupError(`That model isn't one ${plan.unknown[0].toLowerCase()} can use on ${machine.label}: pick it again.`, 400);
   if (plan.keys.includes("hf")) throw new SetupError("Some of these files need your Hugging Face token first: add it under Settings → Accounts.");
   if (plan.bridgeOld && machine.bridge.update !== "this-computer") {
@@ -193,6 +197,7 @@ export async function startSetup(snapshot: SetupSnapshot, input: { machine: stri
     abort: new AbortController(),
     include: input.include ?? [],
     choices: input.choices ?? {},
+    only: input.only,
     needsComfy: noComfy,
   };
   jobs.set(job.id, job);
@@ -224,6 +229,8 @@ function finish(job: Job, state: SetupJob["state"], error: string | null = null)
   job.error = error;
   job.finishedAt = Date.now();
   for (const s of job.steps) if (s.state === "waiting" || s.state === "running") s.state = state === "done" ? "done" : "skipped";
+  // What it set up is in the next model list and look at once.
+  bumpEpoch();
   void import("./status").then((m) => m.forgetSetupSnapshot());
 }
 
@@ -302,7 +309,7 @@ async function runComfy(job: Job, s: SetupStep) {
   if (!machine) throw new Error("ComfyUI installed, but Crackio can't reach it yet: open Settings → Machines.");
   job.machine = machine.id;
   job.machineLabel = machine.label;
-  const plan = planFor(machine, job.kits, job.include, job.choices);
+  const plan = planFor(machine, job.kits, job.include, job.choices, true, job.only);
   job.parts = plan.parts;
   const done = job.steps.filter((x) => x.id === "comfyui");
   job.steps = [...done, ...plan.parts.map((p) => step(p.kind === "model" ? `model:${p.model}` : p.kind, labelOf(p)))];

@@ -6,7 +6,7 @@ import { LibraryDrawer, TabButton, useLibraryClose, type TabItem } from "@/compo
 import { Sky } from "./Orb";
 import { Wave } from "./Wave";
 import { usePlayer } from "./player";
-import { VoiceModelMark } from "./VoiceModelLibrary";
+import { VoiceModelMark } from "./ModelMark";
 import { Listening, Recorder } from "./Recorder";
 import { useVoiceStore } from "@/lib/hooks/use-voice";
 import { HEARING, VOICE_MODELS, gbOf, variantFor, voiceModel, type VoiceModelId } from "@/lib/voice/models";
@@ -30,6 +30,7 @@ export function VoiceDrawer({
   onPick,
   forWho,
   view = "all",
+  glass = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -40,9 +41,11 @@ export function VoiceDrawer({
   forWho?: string | null;
   /** The tab it opens on. */
   view?: View;
+  /** Smoked glass: on Voice's own page only; tool pages keep their solid sheet. */
+  glass?: boolean;
 }) {
   return (
-    <LibraryDrawer open={open} onClose={onClose} anchor={anchor} glass label={forWho ? `Choose who plays ${forWho}` : "Choose a voice"}>
+    <LibraryDrawer open={open} onClose={onClose} anchor={anchor} glass={glass} label={forWho ? `Choose who plays ${forWho}` : "Choose a voice"}>
       <Voices key={open ? `open-${view}` : "shut"} current={current} onPick={onPick} forWho={forWho ?? null} first={view} />
     </LibraryDrawer>
   );

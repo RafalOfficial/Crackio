@@ -21,6 +21,7 @@ import { imageSlots } from "@/lib/models/caps";
 import { briefInputs, canCompose, directorInputs, pictureSlots, runDirectorComp, runDirectorPlate } from "./director";
 import { castClipJob, castImageJob, castOfJob, runCastImage, runCastView } from "./cast-refs";
 import { outside, recording } from "./recipes";
+import { inJob } from "./job-scope";
 
 /**
  * In-process job queue. Crackio runs on your machine, so a small queue inside the server
@@ -59,7 +60,8 @@ function pump() {
     busy[l]++;
     state.queue.splice(i, 1);
     // Every graph and request the job sends is kept with its take (server/recipes).
-    void recording(id, () => (state.run ?? run)(id));
+    // In the job's own scope too, so work deep inside it knows whose it is (server/job-scope).
+    void recording(id, () => inJob(id, () => (state.run ?? run)(id)));
   }
 }
 
@@ -223,6 +225,8 @@ async function run(id: string) {
     let filmed: FilmResult | null = null;
     let composed: Awaited<ReturnType<typeof runDirectorComp>> | null = null;
     let plated: Awaited<ReturnType<typeof runDirectorPlate>> | null = null;
+    // The Director's video mode: the video you dropped, filmed again along your Camera path (server/director-video).
+    let reshot: { layoutUrl?: string; lookUrl?: string } | null = null;
     const result =
       kind === "image" && retouch?.version === 2 && original
         ? await runRetouch(job, retouch, original, engine, { signal: ctrl.signal, progress })
@@ -230,6 +234,8 @@ async function run(id: string) {
           ? (shoot = await runProductShoot(job, studio, engine, { signal: ctrl.signal, progress }, { notes: studio.noted ? gen.prompt : "", seesImages: def.caps ? imageSlots(def.caps) > 0 : def.maxRefs > 0 }))
           : kind === "video" && film?.version === 1
             ? (filmed = await runProductFilm(job, film, engine, def, { signal: ctrl.signal, progress }, { notes: film.noted ? gen.prompt : "" }))
+            : kind === "video" && (gen.params?.reshoot as { version?: number } | undefined)?.version === 1
+              ? (reshot = await (await import("./director-video")).runDirectorVideo(job, gen, engine, { signal: ctrl.signal, progress }))
             : plating
               ? (plated =
                   gen.params?.cast === "control"
@@ -237,7 +243,7 @@ async function run(id: string) {
                     : gen.params?.cast === "fresh"
                     ? await (await import("./director-fresh")).runDirectorFresh(job, gen, engine, { signal: ctrl.signal, progress })
                     : gen.params?.cast === "real" && (gen.params?.comp as { lookUrl?: string } | undefined)?.lookUrl
-                      ? await (await import("./director-real")).runDirectorReal(job, gen, engine, { signal: ctrl.signal, progress }, slots)
+                      ? await (await import("./director-real")).runDirectorReal(job, gen, engine, { signal: ctrl.signal, progress })
                       : await runDirectorPlate(job, gen, engine, { signal: ctrl.signal, progress }, slots))
               : composing
               ? (composed = await runDirectorComp(job, gen, engine, { signal: ctrl.signal, progress }))
@@ -250,6 +256,7 @@ async function run(id: string) {
     if (composed) update({ params: { ...gen.params, compUrl: composed.compUrl, views: composed.views } });
     if (plated) update({ params: { ...gen.params, filledPlateUrl: plated.plateUrl, compUrl: plated.swapUrl } });
     if (shoot) update({ params: { ...gen.params, shots: shoot.shots, ...(shoot.read && !studio?.read ? { studio: { ...studio, read: shoot.read } } : {}) } });
+    if (reshot) update({ params: { ...gen.params, ...(reshot.layoutUrl ? { layoutUrl: reshot.layoutUrl } : {}), ...(reshot.lookUrl ? { lookUrl: reshot.lookUrl } : {}) } });
     if (filmed) update({ params: { ...gen.params, clips: filmed.plans, idea: filmed.idea, ...(filmed.startUrl ? { startUrl: filmed.startUrl, staged: true } : {}), ...(filmed.read && !film?.read ? { film: { ...film, read: filmed.read } } : {}) } });
 
     // Takes from before Retouch made changes up close: the original's pixels outside the changes.

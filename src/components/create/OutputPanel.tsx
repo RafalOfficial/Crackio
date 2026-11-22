@@ -7,7 +7,7 @@ import { Copy, Download, Trash, TriangleAlert } from "lucide-react";
 import { Panel, PanelHeader, EmptyState } from "@/components/ui/Panel";
 import { Osd } from "@/components/ui/Viewfinder";
 import { GeneratingField } from "@/components/ui/GeneratingField";
-import { useGenerations } from "@/lib/hooks/use-generations";
+import { isLive, useGenerations } from "@/lib/hooks/use-generations";
 import { useHandoff } from "@/lib/hooks/use-handoff";
 import type { Generation } from "@/lib/generations/types";
 import { aspectById } from "@/lib/shot";
@@ -16,6 +16,7 @@ import { copyText } from "@/lib/clipboard";
 import { Media } from "@/components/ui/Media";
 import { AppIcon, ToolTile } from "@/components/ui/ToolTile";
 import { toolBySlug, type ToolSlug } from "@/lib/tools";
+import { TakeReveal, useJustFinished } from "@/components/ui/TakeReveal";
 
 /** A tool's own app icon, small, for the "continue in…" shortcuts. */
 function ToolGlyph({ slug }: { slug: ToolSlug }) {
@@ -32,6 +33,8 @@ export function OutputPanel() {
   const send = useHandoff((s) => s.send);
   const [pick, setPick] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
 
   // This page's own takes (and Home's composer's): Motion's turns, Swap's clips and the other tools' takes stay in their tools.
   const tiles: Tile[] = useMemo(
@@ -42,9 +45,18 @@ export function OutputPanel() {
         .slice(0, 24),
     [items],
   );
+  // A new take goes to the big view, even after you looked at an older one: you see what you just started.
+  const newest = tiles[0] ? `${tiles[0].gen.id}:${tiles[0].index}` : null;
+  const [seenNewest, setSeenNewest] = useState(newest);
+  if (newest !== seenNewest) {
+    setSeenNewest(newest);
+    setPick(null);
+  }
   const current = tiles.find((t) => `${t.gen.id}:${t.index}` === pick) ?? tiles[0] ?? null;
   const gen = current?.gen;
   const out = gen?.outputs[current?.index ?? 0];
+  // The take in the big view finished while you watched: it develops instead of popping in.
+  const fresh = useJustFinished(gen?.id, gen ? isLive(gen) : false);
   const ratio = out?.width && out?.height ? out.width / out.height : gen ? aspectById(gen.aspect).w / aspectById(gen.aspect).h : 3 / 2;
 
   function openIn(href: string) {
@@ -73,7 +85,15 @@ export function OutputPanel() {
             className="relative overflow-hidden rounded-[12px] bg-apple"
             style={{ aspectRatio: ratio, width: `min(100cqw, calc(100cqh * ${ratio}))` }}
           >
-            {out ? <Media media={out} alt={gen.prompt} controls className="size-full object-contain" /> : null}
+            {out ? (
+              fresh ? (
+                <TakeReveal>
+                  <Media media={out} alt={gen.prompt} controls className="size-full object-contain" />
+                </TakeReveal>
+              ) : (
+                <Media media={out} alt={gen.prompt} controls className="size-full object-contain" />
+              )
+            ) : null}
             {gen.status === "queued" || gen.status === "running" ? (
               <GeneratingField stage={gen.stage} progress={gen.progress} prompt={gen.prompt || "From references"} since={gen.createdAt} onCancel={() => cancel(gen.id)} />
             ) : null}
@@ -122,7 +142,8 @@ export function OutputPanel() {
                 onClick={async () => {
                   if (!(await copyText(gen.compiledPrompt ?? gen.prompt))) return;
                   setCopied(true);
-                  setTimeout(() => setCopied(false), 1400);
+                  clearTimeout(copiedTimer.current);
+                  copiedTimer.current = setTimeout(() => setCopied(false), 1400);
                 }}
               >
                 <Copy size={15} />
@@ -153,7 +174,7 @@ export function OutputPanel() {
                 aria-label="Show this take"
               >
                 {o ? <Media media={o} slot="chip" className="size-full object-cover" /> : null}
-                {t.gen.status === "queued" || t.gen.status === "running" ? <div className="skeleton absolute inset-0" /> : null}
+                {t.gen.status === "queued" || t.gen.status === "running" ? <GeneratingField bare progress={t.gen.progress} /> : null}
                 {t.gen.status === "error" ? <TriangleAlert size={14} className="absolute inset-0 m-auto text-tally" /> : null}
               </button>
             );

@@ -163,13 +163,13 @@ export async function POST(request: Request) {
     const sheet = Boolean(character?.sheet) && takesPictures && (!local || ripple);
     const sheetFile = scail && character?.sheet ? urlToPath(character.sheet) : null;
     const sheetCut = sheetFile ? await sheetViews(sheetFile).catch(() => null) : null;
-    const figure = !scail ? null : (sheetCut?.[0] ?? (await fs.readFile(file).catch(() => null)));
+    const figure = !scail ? null : (sheetCut?.[0] ?? (await fs.readFile(/*turbopackIgnore: true*/ file).catch(() => null)));
     let localRef: string | undefined;
     const moreViews: string[] = [];
     if (figure) {
       localRef = (await mattedUpload(figure))?.url;
       const portrait = character?.portrait ? urlToPath(character.portrait) : null;
-      const more = [portrait ? await fs.readFile(portrait).catch(() => null) : null, ...(sheetCut?.slice(1) ?? [])];
+      const more = [portrait ? await fs.readFile(/*turbopackIgnore: true*/ portrait).catch(() => null) : null, ...(sheetCut?.slice(1) ?? [])];
       for (const view of more) {
         const up = view ? await mattedUpload(view, true) : null;
         if (up) moreViews.push(up.url);

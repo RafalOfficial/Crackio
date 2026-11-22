@@ -3,28 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
-import {
-  ArrowRight,
-  Focus,
-  Hand,
-  ImagePlus,
-  LoaderCircle,
-  Plus,
-  Lock,
-  MoveDown,
-  MoveHorizontal,
-  MoveUp,
-  Plane,
-  RotateCcw,
-  RotateCw,
-  ScanEye,
-  TriangleAlert,
-  Volume2,
-  VolumeX,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { ArrowRight, ImagePlus, LoaderCircle, Plus, TriangleAlert, Volume2, VolumeX, X } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import type { Generation } from "@/lib/generations/types";
 import { ASPECTS as SHOT_ASPECTS, aspectById, type AspectId } from "@/lib/shot";
 import { useGenerations } from "@/lib/hooks/use-generations";
@@ -51,6 +31,7 @@ import { HoverPreview } from "./HoverPreview";
 import { PicturePicker, type PickedPicture } from "@/components/media/PicturePicker";
 import { sayPictures } from "@/lib/prompt-pictures";
 import { previewUrl } from "@/lib/media-url";
+import { MOVES, PACES } from "@/lib/video/moves";
 import { cn } from "@/lib/cn";
 import { useModelParam } from "@/lib/hooks/use-model-param";
 import { askForModel, useModelChoice } from "@/lib/hooks/use-model-choice";
@@ -61,53 +42,7 @@ type Keyframe = { id: string; frame: Frame; t: number };
 
 const V = "/assets/video";
 
-/** Camera moves in plain words, each with the phrasing video models follow best and a sample clip. */
-const MOVES = [
-  { id: "static", label: "Locked off", icon: Lock, phrase: "The camera stays perfectly still on a tripod.", caption: "The frame never moves; only the scene does." },
-  { id: "push", label: "Push in", icon: ZoomIn, phrase: "The camera slowly pushes in toward the subject.", caption: "Moves closer for intimacy and tension." },
-  { id: "pull", label: "Pull out", icon: ZoomOut, phrase: "The camera slowly pulls back to reveal more of the scene.", caption: "Backs away to reveal where we are." },
-  {
-    id: "orbit-l",
-    label: "Orbit left",
-    icon: RotateCcw,
-    phrase: "The camera arcs smoothly to the left around the subject (counter-clockwise seen from above), keeping them centered as the background slides left.",
-    caption: "Circles the subject to the left.",
-  },
-  {
-    id: "orbit-r",
-    label: "Orbit right",
-    icon: RotateCw,
-    phrase: "The camera arcs smoothly to the right around the subject (clockwise seen from above), keeping them centered as the background slides right.",
-    caption: "Circles the subject to the right.",
-  },
-  { id: "pan", label: "Pan", icon: MoveHorizontal, phrase: "The camera pans slowly across the scene.", caption: "Turns side to side from one spot." },
-  { id: "tilt", label: "Tilt up", icon: MoveUp, phrase: "The camera tilts up from the ground to the subject.", caption: "Turns upward, ground to face to sky." },
-  { id: "crane", label: "Crane up", icon: MoveDown, phrase: "The camera cranes up and rises above the scene.", caption: "Rises high above for the big picture." },
-  { id: "handheld", label: "Handheld", icon: Hand, phrase: "Handheld camera with subtle natural shake, documentary feel.", caption: "Natural shake, like a person holding it." },
-  { id: "dolly-zoom", label: "Dolly zoom", icon: Focus, phrase: "A dolly zoom: the camera moves back while zooming in, warping the background.", caption: "The vertigo effect: the world stretches." },
-  {
-    id: "fpv",
-    label: "Fly-through",
-    icon: Plane,
-    phrase: "A smooth FPV drone fly-through: the camera flies forward past the subject and on through the scene, while the subject stays where they are.",
-    caption: "Flies past the subject and on into the scene.",
-  },
-  {
-    id: "pov",
-    label: "POV",
-    icon: ScanEye,
-    // Who it is comes from the prompt (or the main character), so the same words work for any scene.
-    phrase:
-      "First-person POV shot: the camera is the eyes of the main character (or whoever the prompt names), so we see exactly what they see as they move, at their own eye height, with the natural sway of their steps and head; their own hands, arms or body enter the edge of the frame when natural, and they are never seen from outside.",
-    caption: "The camera becomes the character's own eyes.",
-  },
-] as const;
-
-const PACES = [
-  { id: "subtle", label: "Subtle", phrase: "Gentle, minimal motion.", caption: "Barely moving: hair and light, nothing else." },
-  { id: "natural", label: "Natural", phrase: "", caption: "Real-life pace, like the moment really happened." },
-  { id: "dynamic", label: "Dynamic", phrase: "Energetic, dynamic motion.", caption: "Big, energetic movement and quick camera work." },
-] as const;
+/** Camera moves and paces: the shared list (lib/video/moves), the same words and phrasing Storyboard's Make it move uses. */
 
 /** Shapes shown while the model's own list loads. */
 const FALLBACK_SHAPES = ["16:9", "21:9", "3:2", "1:1", "2:3", "9:16"].map((v) => aspectChoice(v)!);
@@ -177,7 +112,7 @@ function Choice<T extends string | number>({
             value === o.value ? "text-[#16131b]" : "text-fog hover:text-paper",
           )}
         >
-          {value === o.value ? <motion.span layoutId={`choice-${id}`} className="absolute inset-0 rounded-full bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
+          {value === o.value ? <motion.span layoutId={`choice-${id}`} layoutDependency={value} className="absolute inset-0 rounded-full bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
           <span className="relative">{o.label}</span>
         </button>
       ))}
@@ -216,8 +151,22 @@ function RatioGlyph({ ratio, max = 15 }: { ratio: number | null; max?: number })
 }
 
 /** Image-to-video and text-to-video: start and end frames, a camera move, a pace, a shape, a length. */
+const isVideoTake = (g: Generation) => g.tool === "video" || (g.tool === "motion" && g.params?.kind === "video");
+
+/** The Video tool's takes, newest first: only one of them changing redraws what shows them (not every job anywhere). */
+function useVideoTakes() {
+  return useGenerations(useShallow((s) => s.items.filter(isVideoTake)));
+}
+
+/** The take on screen: the one you picked, else the one being made, else the newest finished. */
+function pickShown(takes: Generation[], viewing: string | null) {
+  const live = takes.filter((g) => g.status === "queued" || g.status === "running");
+  const shownGen = takes.find((g) => g.outputs[0]?.url === viewing) ?? live[0] ?? takes.find((g) => g.status === "done") ?? takes[0] ?? null;
+  return { live, shownGen };
+}
+
 export function VideoTool() {
-  const { items, submit, cancel } = useGenerations();
+  const submit = useGenerations((s) => s.submit);
   const { models, defaults, loaded } = useModels();
   const [model, setModel] = useModelChoice("video", "video");
   useModelParam(setModel);
@@ -328,11 +277,6 @@ export function VideoTool() {
   const cropping = Boolean(explicit && usedStart && chosen?.ratio && startRatio && Math.abs(Math.log(chosen.ratio / startRatio)) > 0.03);
   const cropRatio = cropping ? (chosen?.ratio ?? undefined) : undefined;
 
-  const takes = useMemo(() => items.filter((g) => g.tool === "video" || (g.tool === "motion" && g.params?.kind === "video")), [items]);
-  const live = takes.filter((g) => g.status === "queued" || g.status === "running");
-  const shownGen = takes.find((g) => g.outputs[0]?.url === viewing) ?? live[0] ?? takes.find((g) => g.status === "done") ?? takes[0] ?? null;
-  const shown = shownGen?.outputs[0];
-
   const words = [sayPictures(prompt.trim(), framePictures), MOVES.find((m) => m.id === move)?.phrase, PACES.find((p) => p.id === pace)?.phrase].filter(Boolean).join(" ");
   const missingStart = startNeeded && !usedStart;
   const canRun = Boolean((prompt.trim() || usedStart || words) && !busy && !noModel && !missingStart && !(info.loading && !caps));
@@ -438,6 +382,7 @@ export function VideoTool() {
 
             <Section title={keyframesCap ? "Keyframes" : "Start & end frames"} hint={frameHint}>
               <HoverPreview
+                off={!(start?.example || end?.example)}
                 title="How start and end frames shape a clip"
                 caption="The clip opens on your first frame and lands exactly on your last; the prompt fills the motion between them."
                 width={280}
@@ -448,7 +393,7 @@ export function VideoTool() {
                     <video src={`${V}/frames-clip.mp4`} autoPlay muted loop playsInline className="absolute inset-0 size-full object-cover" />
                     <div className="absolute inset-x-2 top-2 flex items-center justify-between gap-2">
                       <MiniFrame src={EXAMPLE_START.url} label="Start" />
-                      <span className="grid size-6 place-items-center rounded-full bg-black/55 text-white backdrop-blur-md">
+                      <span className="grid size-6 place-items-center rounded-full bg-black/65 text-white">
                         <ArrowRight size={12} />
                       </span>
                       <MiniFrame src={EXAMPLE_END.url} label="End" />
@@ -507,7 +452,13 @@ export function VideoTool() {
                 ref={promptField}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => void mentions.onKeyDown(e)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    return void run();
+                  }
+                  void mentions.onKeyDown(e);
+                }}
                 rows={3}
                 placeholder={usedStart ? "She turns from the window and smiles, lifting her cup…" : "A paper boat drifts across a pond at dawn, ripples spreading…"}
                 className="w-full resize-none rounded-[14px] bg-white/[0.03] px-3.5 py-3 text-[14px] leading-relaxed outline-none shadow-[inset_0_0_0_1px_var(--color-line)] placeholder:text-haze focus:shadow-[inset_0_0_0_1px_var(--color-line-strong)]"
@@ -562,7 +513,7 @@ export function VideoTool() {
                         pace === p.id ? "text-[#16131b]" : "bg-white/[0.04] text-fog hover:bg-white/[0.08] hover:text-paper",
                       )}
                     >
-                      {pace === p.id ? <motion.span layoutId="pace-pill" className="absolute inset-0 rounded-full bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
+                      {pace === p.id ? <motion.span layoutId="pace-pill" layoutDependency={pace} className="absolute inset-0 rounded-full bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
                       <span className="relative">{p.label}</span>
                     </button>
                   </HoverPreview>
@@ -611,7 +562,7 @@ export function VideoTool() {
                               active ? "text-[#16131b]" : "bg-white/[0.04] text-fog hover:bg-white/[0.08] hover:text-paper",
                             )}
                           >
-                            {active ? <motion.span layoutId="aspect-pill" className="absolute inset-0 rounded-[12px] bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
+                            {active ? <motion.span layoutId="aspect-pill" layoutDependency={chosen?.value} className="absolute inset-0 rounded-[12px] bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
                             <span className="relative">
                               <RatioGlyph ratio={s.ratio} />
                             </span>
@@ -697,15 +648,8 @@ export function VideoTool() {
             />
           </div>
 
-          <div className="mt-auto space-y-2 border-t border-line p-3.5">
-            {shownGen?.status === "error" ? (
-              <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-tally">
-                <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-                <span>
-                  {shownGen.error} {shownGen.stage ? <span className="text-paper">{shownGen.stage}</span> : null}
-                </span>
-              </p>
-            ) : null}
+          <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat p-3.5 shadow-[0_-14px_28px_-18px_rgb(0_0_0/0.7)]">
+            <ShownError viewing={viewing} />
             {error ? <p className="text-[12.5px] text-tally">{error}</p> : null}
             <LocalTimeLine modelId={effectiveId} kind="video" duration={typeof durationValue === "number" ? durationValue : undefined} resolution={resValue !== null ? String(resValue) : undefined} />
             <CostLine
@@ -734,6 +678,33 @@ export function VideoTool() {
           </div>
         </Panel>
 
+        <VideoOutput viewing={viewing} setViewing={setViewing} />
+      </div>
+    </div>
+  );
+}
+
+/** The last take's error, under the button (it follows the takes itself, so the form doesn't). */
+function ShownError({ viewing }: { viewing: string | null }) {
+  const { shownGen } = pickShown(useVideoTakes(), viewing);
+  if (shownGen?.status !== "error") return null;
+  return (
+    <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-tally">
+      <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+      <span>
+        {shownGen.error} {shownGen.stage ? <span className="text-paper">{shownGen.stage}</span> : null}
+      </span>
+    </p>
+  );
+}
+
+/** The output: the clip on screen, its progress while it's made, and your other takes. Only takes redraw it. */
+function VideoOutput({ viewing, setViewing }: { viewing: string | null; setViewing: (url: string | null) => void }) {
+  const takes = useVideoTakes();
+  const cancel = useGenerations((s) => s.cancel);
+  const { live, shownGen } = pickShown(takes, viewing);
+  const shown = shownGen?.outputs[0];
+  return (
         <Panel className="flex min-h-[480px] flex-col lg:sticky lg:top-6 lg:h-[calc(100dvh-190px)] lg:min-h-[560px]">
           <PanelHeader title={<span className="label text-fog">Output</span>}>
             {live.length ? (
@@ -785,8 +756,6 @@ export function VideoTool() {
             </div>
           ) : null}
         </Panel>
-      </div>
-    </div>
   );
 }
 
@@ -881,7 +850,7 @@ function Keyframes({
           <div key={m.id} className="flex items-center gap-2.5 rounded-[12px] bg-white/[0.03] p-1.5 pr-2 shadow-[inset_0_0_0_1px_var(--color-line)]">
             <span className="relative h-12 w-10 shrink-0 overflow-hidden rounded-[8px] bg-black">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.frame.url} alt="" className="size-full object-cover" />
+              <img src={previewUrl(m.frame.url, 160)} alt="" className="size-full object-cover" />
               {guide ? (
                 <span
                   aria-hidden
@@ -1038,7 +1007,7 @@ function FrameSlot({
           >
             {frame ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={frame.url} alt="" className={cn("absolute inset-0 size-full object-cover transition-[transform,opacity] duration-700 ease-[var(--ease-out-quint)] group-hover:scale-[1.04]", unused && "opacity-30 grayscale")} />
+              <img src={previewUrl(frame.url, 480)} alt="" className={cn("absolute inset-0 size-full object-cover transition-[transform,opacity] duration-700 ease-[var(--ease-out-quint)] group-hover:scale-[1.04]", unused && "opacity-30 grayscale")} />
             ) : (
               <span className={cn("absolute inset-0 flex flex-col items-center justify-center gap-1.5", needed ? "text-tungsten" : "text-haze")}>
                 {busy ? <LoaderCircle size={18} className="animate-spin" /> : <ImagePlus size={18} />}
@@ -1046,18 +1015,20 @@ function FrameSlot({
               </span>
             )}
             {frame && unused ? (
-              <span className="absolute inset-x-2 top-1/2 -translate-y-1/2 rounded-[8px] bg-black/60 px-2 py-1.5 text-center text-[10.5px] font-semibold leading-snug text-white backdrop-blur">{unusedNote}</span>
+              <span className="absolute inset-x-2 top-1/2 -translate-y-1/2 rounded-[8px] bg-black/75 px-2 py-1.5 text-center text-[10.5px] font-semibold leading-snug text-white">{unusedNote}</span>
             ) : null}
             {frame && !unused ? (
               // What the clip keeps when it's a different shape than the picture.
               <motion.span
                 aria-hidden
                 initial={false}
-                animate={{ width: `${guide?.width ?? 100}%`, height: `${guide?.height ?? 100}%`, opacity: guide ? 1 : 0 }}
-                transition={{ type: "spring", bounce: 0.12, duration: 0.5 }}
+                animate={{ opacity: guide ? 1 : 0 }}
+                transition={{ duration: 0.25 }}
+                // Its size snaps (a 999 px shadow repainted every frame of a size spring); only the fade animates.
+                style={{ width: `${guide?.width ?? 100}%`, height: `${guide?.height ?? 100}%` }}
                 className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[8px] shadow-[0_0_0_1.5px_rgb(255_255_255/0.9),0_0_0_999px_rgb(10_8_14/0.6)]"
               >
-                <span className="absolute left-1.5 top-1.5 rounded-full bg-black/60 px-1.5 py-px text-[9.5px] font-bold text-white backdrop-blur">{cropLabel}</span>
+                <span className="absolute left-1.5 top-1.5 rounded-full bg-black/70 px-1.5 py-px text-[9.5px] font-bold text-white">{cropLabel}</span>
               </motion.span>
             ) : null}
             <span className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-2 pt-6">
@@ -1065,7 +1036,7 @@ function FrameSlot({
                 <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-white">{label}</span>
                 {word ? <span className="font-mono text-[10.5px] text-white/65">@{word}</span> : null}
               </span>
-              {frame?.example ? <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[9.5px] font-semibold text-white backdrop-blur">Example</span> : null}
+              {frame?.example ? <span className="rounded-full bg-black/55 px-1.5 py-0.5 text-[9.5px] font-semibold text-white">Example</span> : null}
             </span>
           </button>
         )}

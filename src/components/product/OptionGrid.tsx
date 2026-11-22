@@ -68,6 +68,7 @@ export function OptionGrid<T extends string>({
               {active ? (
                 <motion.span
                   layoutId={`pick-${axis}`}
+                  layoutDependency={value}
                   className="pointer-events-none absolute inset-0 rounded-[12px] shadow-[inset_0_0_0_2px_var(--color-spike)]"
                   transition={{ type: "spring", bounce: 0.18, duration: 0.38 }}
                 >

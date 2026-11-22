@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { create } from "zustand";
 import { useSetupStore } from "@/lib/hooks/use-setup";
 import { KITS } from "@/lib/setup/kits";
 import type { Kit } from "@/lib/setup/types";
 import { DEMO } from "@/lib/demo/config";
+import { cn } from "@/lib/cn";
 import { Lamp } from "./parts";
 
 /**
@@ -17,7 +19,12 @@ import { Lamp } from "./parts";
  */
 
 const OWN_PILL = new Set(["voice", "lipsync"]);
+
+/** Whether this pill is up: another pill at the top of the page (models/GetToolModel) sits under it then. */
+export const useTopPills = create<{ setup: boolean }>(() => ({ setup: false }));
 const LATER = "crackio:setup-hint-later";
+/** Pages with a bar of their own along the top (Storyboard's Editor | Director switch, Motion's turn pill): the pill sits under it. */
+const OWN_TOP_BAR = ["/tools/storyboard", "/tools/motion", "/director"];
 
 function kitFor(pathname: string): Kit | null {
   // The longest matching page wins ("/tools/upscale" over "/").
@@ -40,14 +47,20 @@ export function SetupHint({ pathname }: { pathname: string }) {
   const watched = Boolean(kit && !OWN_PILL.has(kit.id) && !DEMO);
   useEffect(() => {
     if (!watched) return;
-    const s = useSetupStore.getState().snap;
-    if (!s || Date.now() - s.at > 60_000) void useSetupStore.getState().reload();
+    const { snap: s, checkedAt } = useSetupStore.getState();
+    if (!s || Date.now() - (checkedAt || s.at) > 60_000) void useSetupStore.getState().reload();
   }, [watched, pathname]);
 
-  if (!watched || !kit || !snap || later.includes(kit.id)) return null;
-  const readyOn = snap.runsOn[kit.id];
-  const cloud = Boolean(kit.cloud && snap.keys.comfy);
-  if (readyOn || cloud) return null;
+  const up = Boolean(watched && kit && snap && !later.includes(kit.id) && !snap.runsOn[kit.id] && !(kit.cloud && snap.keys.comfy));
+  return <Pill up={up} kit={kit} snap={snap} pathname={pathname} later={later} setLater={setLater} />;
+}
+
+function Pill({ up, kit, snap, pathname, later, setLater }: { up: boolean; kit: Kit | null; snap: ReturnType<typeof useSetupStore.getState>["snap"]; pathname: string; later: string[]; setLater: (v: string[]) => void }) {
+  useEffect(() => {
+    useTopPills.setState({ setup: up });
+    return () => useTopPills.setState({ setup: false });
+  }, [up]);
+  if (!up || !kit || !snap) return null;
   const job = snap.jobs.find((j) => (j.state === "running" || j.state === "queued") && j.kits.includes(kit.id));
   const best = snap.recommended[kit.id] ?? null;
   const href = `/settings/tools?${new URLSearchParams({ ...(best ? { machine: best } : {}), tool: kit.id })}`;
@@ -62,7 +75,13 @@ export function SetupHint({ pathname }: { pathname: string }) {
   };
   const step = job?.steps.find((s) => s.state === "running");
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-16 z-[60] flex justify-center px-4 lg:top-4" role="status">
+    <div
+      className={cn(
+        "pointer-events-none fixed inset-x-0 top-16 z-[60] flex justify-center px-4",
+        OWN_TOP_BAR.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ? "lg:top-[76px]" : "lg:top-4",
+      )}
+      role="status"
+    >
       <div className="pointer-events-auto flex max-w-[640px] items-center gap-3 rounded-full bg-[#1d1a22]/95 py-1.5 pl-4 pr-1.5 text-[13px] text-fog shadow-[0_12px_40px_rgb(0_0_0/0.45),inset_0_0_0_1px_rgb(255_255_255/0.08)]">
         <Lamp tone={job ? "busy" : "needs"} />
         <span className="min-w-0 truncate">

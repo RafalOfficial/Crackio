@@ -1,21 +1,21 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Aperture, Grid3x3, ImagePlus, Images, LoaderCircle, Move3d, PersonStanding, Redo2, ScanEye, Trash2, TriangleAlert, Undo2, UserRound } from "lucide-react";
+import { Aperture, Grid3x3, ImagePlus, Images, Keyboard, LoaderCircle, Move3d, PersonStanding, Redo2, ScanEye, Trash2, TriangleAlert, Undo2, UserRound } from "lucide-react";
 import { useDirector } from "@/lib/director/store";
 import { aspectById } from "@/lib/shot";
 import { ThirdsGrid } from "@/components/ui/Viewfinder";
+import { GeneratingField } from "@/components/ui/GeneratingField";
+import { Popover } from "@/components/ui/Popover";
 import { addFilesToCast, setPlaceFile } from "./intake";
-import { useLocation } from "./location";
-import { useLift } from "./lift";
-import { aboutTime, buildWorld, loadTypical, useTypical, useWorld } from "./around";
-import { useExtend } from "./extend";
+import { aboutTime, loadTypical, useExtend, useLift, useLocation, useTypical, useWorld, useWorldClock } from "./status";
+import { buildWorld, stopWorld } from "./around";
 import { CutPlayer } from "./Clips";
 import { TakeCompare, TakesLibrary, useTakesSummary } from "./Takes";
 import { TitleBar, ToolButton, ToolGroup, ToolPill } from "./TitleBar";
-import { useTakeView } from "./take-view";
+import { closeLibrary, openLibrary, useTakeView } from "./take-view";
 import { useStageView } from "./stage/view";
 
 const Stage3D = dynamic(() => import("./stage/Stage3D"), {
@@ -25,36 +25,44 @@ const Stage3D = dynamic(() => import("./stage/Stage3D"), {
 
 /**
  * The camera's screen: a title bar with its tools, and under it exactly the frame you'll get, as big as the middle
- * allows; the takes are one button away on the same screen instead of a strip under it (the user found the middle
- * crowded, with blank space all round a small picture).
+ * allows; the takes are one button away on the same screen instead of a strip under it (the middle was crowded,
+ * with blank space all round a small picture).
  */
 export function Viewport() {
-  const scene = useDirector((s) => s.scene);
+  // Only what the screen itself shows: the stage follows the set on its own, so typing the shot's words or a take's
+  // progress doesn't redraw the 3D view (every change of the set re-rendered the whole stage).
+  const aspect = useDirector((s) => s.scene.aspect);
+  const empty = useDirector((s) => !s.scene.elements.length && !s.scene.place.image);
+  const hasPlace = useDirector((s) => Boolean(s.scene.place.image));
   const canUndo = useDirector((s) => s.past.length > 0);
   const canRedo = useDirector((s) => s.future.length > 0);
   const { undo, redo, reset, toPhotoView } = useDirector.getState();
   const viewing = useTakeView((s) => s.viewing);
+  const library = useTakeView((s) => s.library);
   const model = useStageView((s) => s.model);
   const scout = useStageView((s) => s.scout);
+  const making = useLocation((s) => s.busy);
   const [thirds, setThirds] = useState(false);
-  const [library, setLibrary] = useState(false);
   const takes = useTakesSummary();
   const wrap = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
-  const a = aspectById(scene.aspect);
-  const empty = !scene.elements.length && !scene.place.image;
+  const a = aspectById(aspect);
+  const stage = useMemo(() => <Stage3D />, []);
 
-  // Fit the largest frame with the shot's aspect ratio into the available space.
-  useEffect(() => {
+  // Fit the largest frame with the shot's aspect ratio into the available space, before the first paint (measured
+  // after it, the frame was drawn at one size and then jumped to its own).
+  useLayoutEffect(() => {
     const el = wrap.current;
     if (!el) return;
     const fit = () => {
-      const pad = 0;
-      const W = el.clientWidth - pad * 2;
-      const H = el.clientHeight - pad * 2;
+      const W = el.clientWidth;
+      const H = el.clientHeight;
       const ratio = a.w / a.h;
       const w = Math.min(W, H * ratio);
-      setBox({ w: Math.max(0, Math.floor(w)), h: Math.max(0, Math.floor(w / ratio)) });
+      setBox((b) => {
+        const next = { w: Math.max(0, Math.floor(w)), h: Math.max(0, Math.floor(w / ratio)) };
+        return b.w === next.w && b.h === next.h ? b : next;
+      });
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -64,7 +72,7 @@ export function Viewport() {
 
   return (
     <div className="surface relative flex h-full min-h-0 flex-col overflow-hidden rounded-panel">
-      <TitleBar>
+      <TitleBar scroll>
         <ToolGroup>
           <ToolButton label="Undo (Ctrl+Z)" onClick={undo} disabled={!canUndo}>
             <Undo2 size={15} />
@@ -83,20 +91,22 @@ export function Viewport() {
             </ToolPill>
           </ToolGroup>
         ) : null}
-        {/* How to move: always there, quietly (it was a hint once, then gone). */}
-        <p className="mx-auto hidden min-w-0 truncate px-2 text-[11.5px] text-haze xl:block">
-          {empty
-            ? ""
-            : scout
-              ? "Drag to look around · right-drag to slide · scroll to zoom · drag people to place them · drag the orange camera"
-              : "W A S D walk · Q E up and down · arrows look · F frames the cast · drag to orbit · scroll to move in"}
-        </p>
-        <span className="flex-1 xl:hidden" />
+        {/* How to move: the whole line where the bar has room for it, else one button that shows it all (cut short on
+            the MacBook it read "W A S D walk · Q E up and down · …"). */}
+        {empty ? (
+          <span className="flex-1" />
+        ) : (
+          <>
+            <p className="mx-auto hidden min-w-0 truncate px-2 text-[11.5px] text-haze min-[1700px]:block">{scout ? SCOUT_LINE : SHOT_LINE}</p>
+            <span className="flex-1 min-[1700px]:hidden" />
+            <ControlsButton scout={scout} />
+          </>
+        )}
         <ToolGroup>
-          <TakesButton count={takes.count} live={takes.live} progress={takes.progress} fresh={takes.fresh} onClick={() => setLibrary(true)} />
+          <TakesButton count={takes.count} live={takes.live} progress={takes.progress} fresh={takes.fresh} onClick={openLibrary} />
         </ToolGroup>
         <ToolGroup>
-          {scene.place.image && !scout ? (
+          {hasPlace && !scout ? (
             <ToolButton label="Back to the photo's viewpoint" onClick={toPhotoView}>
               <ScanEye size={15} />
             </ToolButton>
@@ -119,7 +129,7 @@ export function Viewport() {
 
       <div ref={wrap} className="relative grid min-h-0 flex-1 place-items-center bg-[#0d0e11]">
         <div className="relative overflow-hidden" style={{ width: box.w, height: box.h }}>
-          {box.w > 0 ? <Stage3D /> : null}
+          {box.w > 0 ? stage : null}
           {thirds && !scout ? <ThirdsGrid opacity={0.16} /> : null}
           {model && !empty ? (
             <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-2 py-1 text-[11.5px] font-medium text-paper/90">
@@ -128,17 +138,108 @@ export function Viewport() {
           ) : null}
           <SetStatus />
           <CutPlayer />
-          <AnimatePresence>{empty ? <EmptySet /> : null}</AnimatePresence>
+          {/* Drawing the place is a generation: the generating field fills the screen while it's made (the empty set's
+              "press Create" stayed up the whole time). */}
+          <AnimatePresence>{making ? <MakingPlace key="making" /> : empty ? <EmptySet key="empty" /> : null}</AnimatePresence>
         </div>
       </div>
-      <AnimatePresence>{library ? <TakesLibrary key="library" onClose={() => setLibrary(false)} /> : null}</AnimatePresence>
+      <AnimatePresence>{library ? <TakesLibrary key="library" onClose={closeLibrary} /> : null}</AnimatePresence>
       <AnimatePresence>{viewing ? <TakeCompare key="compare" /> : null}</AnimatePresence>
     </div>
   );
 }
 
+const SHOT_LINE = "W A S D walk · Q E up and down · arrows look · F frames the cast · drag to orbit · scroll to move in";
+const SCOUT_LINE = "Drag to look around · right-drag to slide · scroll to zoom · drag people to place them · drag the orange camera";
+
+/** Every way to move, by view: through the lens, scouting, and what works on whoever is picked. */
+const CONTROLS: { title: string; rows: [string, string][] }[] = [
+  {
+    title: "Through the lens",
+    rows: [
+      ["W A S D", "Walk"],
+      ["Q  E", "Down and up"],
+      ["Arrows", "Look around"],
+      ["Drag", "Orbit the shot"],
+      ["Shift or right-drag", "Raise or lower the camera"],
+      ["Scroll", "Move in and out"],
+      ["F", "Frame the cast"],
+    ],
+  },
+  {
+    title: "Scouting",
+    rows: [
+      ["Drag", "Look around"],
+      ["Right-drag", "Slide"],
+      ["Scroll", "Zoom"],
+      ["Drag a person", "Place them"],
+      ["Drag the orange camera", "Move the shot camera"],
+    ],
+  },
+  {
+    title: "Someone picked",
+    rows: [
+      ["Arrows", "Nudge them (Shift: farther)"],
+      ["Delete", "Take them off the set"],
+      ["Esc", "Let go"],
+    ],
+  },
+  {
+    title: "Anywhere",
+    rows: [
+      ["Ctrl Z", "Undo"],
+      ["Ctrl Shift Z", "Redo"],
+    ],
+  },
+];
+
+/** The controls, all of them, one click away (the line under the title bar didn't fit on a laptop screen). */
+function ControlsButton({ scout }: { scout: boolean }) {
+  return (
+    <Popover
+      placement="bottom-start"
+      panelClassName="w-[330px]"
+      className="min-[1700px]:hidden"
+      trigger={({ open, toggle }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          title="How to move the camera and the cast"
+          className="press squircle inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] px-2.5 text-[12.5px] font-semibold text-fog hover:bg-white/[0.06] hover:text-paper aria-expanded:bg-white/[0.08] aria-expanded:text-paper"
+        >
+          <Keyboard size={14} /> Controls
+        </button>
+      )}
+    >
+      {() => (
+        <div className="space-y-3 p-3">
+          {CONTROLS.filter((g) => (scout ? g.title !== "Through the lens" : g.title !== "Scouting")).map((g) => (
+            <section key={g.title}>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-haze">{g.title}</p>
+              <dl className="grid grid-cols-[132px_1fr] items-center gap-x-3 gap-y-1.5">
+                {g.rows.map(([keys, what]) => (
+                  <div key={keys + what} className="contents">
+                    <dt>
+                      <kbd className="inline-flex min-h-6 max-w-full items-center rounded-[7px] bg-white/[0.07] px-2 py-0.5 font-mono text-[11px] font-medium leading-tight text-paper shadow-[inset_0_-1px_0_rgb(255_255_255/0.06),inset_0_0_0_1px_rgb(255_255_255/0.06)]">
+                        {keys}
+                      </kbd>
+                    </dt>
+                    <dd className="text-[12.5px] text-fog">{what}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      )}
+    </Popover>
+  );
+}
+
 /** The takes: how many, how far the ones being made are, new ones. Opens them all on the screen. */
-function TakesButton({ count, live, progress, fresh, onClick }: { count: number; live: number; progress: number; fresh: number; onClick: () => void }) {
+export function TakesButton({ count, live, progress, fresh, onClick }: { count: number; live: number; progress: number; fresh: number; onClick: () => void }) {
   return (
     <ToolPill title="Your takes: compare each with what you planned" onClick={onClick}>
       {live ? <LoaderCircle size={14} className="animate-spin text-spike" /> : <Images size={14} />}
@@ -150,15 +251,45 @@ function TakesButton({ count, live, progress, fresh, onClick }: { count: number;
   );
 }
 
-/** Time since it started, and the usual time when there is one: "0:42 · usually about 1 min". */
-function Elapsed({ expect }: { expect: number | null }) {
-  const [start] = useState(() => Date.now());
-  const [now, setNow] = useState(start);
+/** The time now, once a second while something is running (for its elapsed time and estimated progress). */
+function useTicking(on: boolean) {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!on) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
-  const s = Math.floor((now - start) / 1000);
+  }, [on]);
+  return now;
+}
+
+/** How far along a step that usually takes `expect` seconds is after `since`: never quite done until it is. */
+const estimate = (now: number, since: number | null, expect: number | null | undefined) =>
+  since && expect ? Math.min(0.95, Math.max(0.02, (now - since) / 1000 / expect)) : null;
+
+/** The place being drawn from your words: the generating field over the screen, with how long it usually takes. */
+export function MakingPlace() {
+  const since = useLocation((s) => s.since);
+  const words = useLocation((s) => s.words);
+  const typical = useTypical();
+  useEffect(loadTypical, []);
+  const now = useTicking(true);
+  const usually = (typical.photo ?? 0) + (typical.world ?? 0);
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="absolute inset-0 z-20">
+      <GeneratingField
+        stage={usually ? `Drawing the place · usually ${aboutTime(usually)} with its world` : "Drawing the place"}
+        progress={estimate(now, since, typical.photo)}
+        prompt={words}
+        since={since ?? undefined}
+      />
+    </motion.div>
+  );
+}
+
+/** Time since it started, and the usual time when there is one: "0:42 · usually about 1 min". */
+function Elapsed({ since, expect }: { since: number; expect: number | null }) {
+  const now = useTicking(true);
+  const s = Math.max(0, Math.floor((now - since) / 1000));
   return (
     <span className="tabular shrink-0 text-paper/55">
       {Math.floor(s / 60)}:{String(s % 60).padStart(2, "0")}
@@ -167,27 +298,26 @@ function Elapsed({ expect }: { expect: number | null }) {
   );
 }
 
-/** What's being built for the set (the place, its things lifted out, the world all around), or what went wrong. */
-function SetStatus() {
+/**
+ * What's being built for the set (its things lifted out, the world all around, an extend), or what went wrong. The
+ * world and an extend are drawn by a model: their pill carries a small generating field, the way every generation shows
+ * (the place is built around the picture you keep working on, so it doesn't cover the screen); finding things and
+ * measuring are analysis, with a spinner.
+ */
+export function SetStatus() {
   const lift = useLift((s) => s.busy);
-  const { busy: world, error } = useWorld();
-  const placed = useDirector((s) => Boolean(s.scene.place.image));
-  const making = useLocation((s) => s.busy);
-  const extending = useExtend((s) => s.stage);
+  const world = useWorld((s) => s.busy);
+  const error = useWorld((s) => s.error);
   const measuring = useWorld((s) => s.measuring);
+  const placed = useDirector((s) => Boolean(s.scene.place.image));
+  const extending = useExtend((s) => s.stage);
+  const worldSince = useWorldClock((s) => s.since);
   const typical = useTypical();
   useEffect(loadTypical, []);
-  const text = making
-    ? "Drawing the place"
-    : extending
-      ? extending
-      : lift
-        ? lift
-        : world
-          ? "Building the place all around you"
-          : measuring && placed
-            ? "Measuring the place so you can walk in it"
-            : null;
+  const text = extending ? extending : lift ? lift : world ? "Building the place all around you" : measuring && placed ? "Measuring the place so you can walk in it" : null;
+  const generating = Boolean(extending) || (!lift && world);
+  const now = useTicking(Boolean(world && !extending && !lift));
+  const progress = world && !extending && !lift ? estimate(now, worldSince, typical.world) : null;
   return (
     <AnimatePresence>
       {text || error ? (
@@ -195,13 +325,26 @@ function SetStatus() {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
-          className="absolute bottom-2 left-2 z-20 flex max-w-[calc(100%-16px)] items-center gap-1.5 rounded-lg bg-black/65 px-2.5 py-1.5 text-[12px] font-medium text-paper/90 backdrop-blur-sm"
+          className="absolute bottom-2 left-2 z-20 flex max-w-[calc(100%-16px)] items-center gap-2 rounded-lg bg-black/75 py-1.5 pl-1.5 pr-2.5 text-[12px] font-medium text-paper/90 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]"
         >
-          {text ? <LoaderCircle size={13} className="shrink-0 animate-spin" /> : <TriangleAlert size={13} className="shrink-0 text-tally" />}
+          {text ? (
+            generating ? (
+              <span className="relative h-5 w-8 shrink-0 overflow-hidden rounded-[6px]">
+                <GeneratingField bare progress={progress} className="rounded-[6px]" />
+              </span>
+            ) : (
+              <LoaderCircle size={13} className="ml-1 shrink-0 animate-spin" />
+            )
+          ) : (
+            <TriangleAlert size={13} className="ml-1 shrink-0 text-tally" />
+          )}
           <span className="truncate">{text ? `${text}…` : error}</span>
           {/* How long so far, and how long a place usually takes here (it said "about a minute" while it took six). */}
-          {text && (making || world) ? (
-            <Elapsed key={making ? "making" : "world"} expect={making ? (typical.photo ?? 0) + (typical.world ?? 0) : typical.world} />
+          {text && world && !extending && !lift && worldSince ? <Elapsed since={worldSince} expect={typical.world} /> : null}
+          {text && world && !extending && !lift ? (
+            <button type="button" onClick={stopWorld} title="Stop building the world (its job on the GPU stops too)" className="press shrink-0 font-semibold text-fog underline-offset-2 hover:text-paper hover:underline">
+              Stop
+            </button>
           ) : null}
           {!text && error ? (
             <button type="button" onClick={() => void buildWorld()} className="press shrink-0 font-semibold underline-offset-2 hover:underline">
@@ -215,7 +358,7 @@ function SetStatus() {
 }
 
 /** Nothing on set yet: the two ways to start. */
-function EmptySet() {
+export function EmptySet() {
   const placeInput = useRef<HTMLInputElement>(null);
   const castInput = useRef<HTMLInputElement>(null);
   return (

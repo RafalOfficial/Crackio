@@ -9,6 +9,8 @@ export type SetupComfyProps = {
   /** Called with the new status when ComfyUI gets installed or removed, or starts or stops (reload the Local page's status then). */
   onChange?: (status: SetupStatus) => void;
   className?: string;
+  /** The page around it already says what it is (Settings → Machines' heading): no eyebrow over the state. */
+  bare?: boolean;
 };
 
 const ACTIVE = new Set<SetupStatus["state"]>(["installing", "uninstalling", "starting", "stopping"]);
@@ -47,12 +49,17 @@ function useSetup() {
   }, []);
   const active = status ? ACTIVE.has(status.state) : false;
   useEffect(() => {
-    const tick = () => void load();
-    const first = setTimeout(tick, 0);
-    const id = setInterval(tick, active ? 1500 : 10000);
+    let gone = false;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    // One look at a time (the next waits for the last to answer), and none while the tab is in the background.
+    const tick = async () => {
+      if (document.visibilityState !== "hidden") await load();
+      if (!gone) t = setTimeout(tick, active ? 1500 : 10000);
+    };
+    t = setTimeout(tick, 0);
     return () => {
-      clearTimeout(first);
-      clearInterval(id);
+      gone = true;
+      clearTimeout(t);
     };
   }, [load, active]);
   const apply = useCallback((next: SetupStatus) => {
@@ -67,7 +74,7 @@ function useSetup() {
  * button that does all of it in the background (Python, ComfyUI, the right PyTorch, the Crackio bridge) with its
  * progress and log. Once installed: Start and Stop, its address, and Uninstall.
  */
-export function SetupComfy({ onChange, className }: SetupComfyProps) {
+export function SetupComfy({ onChange, className, bare = false }: SetupComfyProps) {
   const { status, error, now, apply, reload } = useSetup();
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -120,7 +127,7 @@ export function SetupComfy({ onChange, className }: SetupComfyProps) {
 
   return (
     <section className={cn("surface squircle flex flex-col gap-4 rounded-panel p-5", className)}>
-      <Header status={s} />
+      <Header status={s} bare={bare} />
 
       {busy ? (
         <Progress status={s} now={now} />
@@ -259,14 +266,14 @@ const STATE_STYLE: Record<SetupStatus["state"], { title: string; pill: string; c
   crashed: { title: "Stopped working", pill: "Crashed", className: "bg-tally/15 text-tally" },
 };
 
-function Header({ status: s }: { status: SetupStatus }) {
+function Header({ status: s, bare }: { status: SetupStatus; bare: boolean }) {
   const style = STATE_STYLE[s.state];
   const title = s.state === "not-installed" && s.partial ? "Install not finished" : style.title;
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-haze">ComfyUI on this computer</p>
-        <h2 className="mt-1 truncate font-display text-[22px] uppercase leading-tight">{title}</h2>
+        {bare ? null : <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-haze">ComfyUI on this computer</p>}
+        <h2 className={cn("truncate font-display text-[22px] uppercase leading-tight", !bare && "mt-1")}>{title}</h2>
         {s.running && s.url ? (
           <a href={s.url} target="_blank" rel="noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[13px] text-fog underline-offset-2 hover:text-paper hover:underline">
             {s.url.replace(/^https?:\/\//, "")} <ArrowUpRight size={13} />

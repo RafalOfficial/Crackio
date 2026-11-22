@@ -20,7 +20,7 @@ import { keepOutside } from "./protect";
  * Everything else keeps the original's exact pixels. Inpainting models also get a mask.
  */
 
-const WORK = path.join(DATA_DIR, "cache", "retouch");
+const WORK = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "retouch");
 /** Close-ups run a few at a time. */
 const PARALLEL = 3;
 
@@ -201,14 +201,15 @@ function matchColors(orig: Buffer, edit: Buffer, cw: number, ch: number, zones: 
  * copies, so re-drawn texture doesn't count), grown a little and feathered. With an inpainting
  * model the target areas themselves. Null when nothing visibly changed.
  */
-async function blendMask(orig: Buffer, edit: Buffer, cw: number, ch: number, zones: Box[], masked: boolean): Promise<Buffer | null> {
+async function blendMask(orig: Buffer, edit: Buffer, cw: number, ch: number, zones: Box[], masked: boolean, strict = false): Promise<Buffer | null> {
   const mw = cw >= ch ? 512 : Math.round((512 * cw) / ch);
   const mh = cw >= ch ? Math.round((512 * ch) / cw) : 512;
   const sx = mw / cw;
   const sy = mh / ch;
   const long = Math.max(mw, mh);
   // Room for a change to grow past its box (a hat above a head, longer nails).
-  const zone = zoneGrid(zones, mw, mh, sx, sy, (z) => Math.max(z[2] - z[0], z[3] - z[1]) * 0.25 + Math.max(cw, ch) * 0.02);
+  // (A redraw of the whole picture differs a little everywhere: less room, and a clearer difference, count as a change.)
+  const zone = zoneGrid(zones, mw, mh, sx, sy, (z) => Math.max(z[2] - z[0], z[3] - z[1]) * (strict ? 0.14 : 0.25) + Math.max(cw, ch) * (strict ? 0.01 : 0.02));
   let picked: Uint8Array;
   if (masked) {
     picked = zoneGrid(zones, mw, mh, sx, sy, (z) => Math.max(z[2] - z[0], z[3] - z[1]) * 0.08);
@@ -222,7 +223,7 @@ async function blendMask(orig: Buffer, edit: Buffer, cw: number, ch: number, zon
       if (!zone[p]) continue;
       room++;
       const d = Math.max(Math.abs(o[i] - e[i]), Math.abs(o[i + 1] - e[i + 1]), Math.abs(o[i + 2] - e[i + 2]));
-      if (d > 22) {
+      if (d > (strict ? 40 : 22)) {
         picked[p] = 1;
         changed++;
       }
@@ -238,7 +239,7 @@ async function blendMask(orig: Buffer, edit: Buffer, cw: number, ch: number, zon
 }
 
 /** One edited close-up, lined up, matched and masked, as a patch at its place in the picture. */
-async function patchFrom(origCrop: Buffer, edited: Buffer, cw: number, ch: number, zones: Box[], px: Px, masked: boolean): Promise<Patch | null> {
+async function patchFrom(origCrop: Buffer, edited: Buffer, cw: number, ch: number, zones: Box[], px: Px, masked: boolean, strict = false): Promise<Patch | null> {
   const meta = await sharp(edited).metadata();
   if (meta.width && meta.height && Math.abs(Math.log(meta.width / meta.height / (cw / ch))) > 0.1) {
     throw new EngineError("The model returned a close-up of a different shape, so it can't be put back in place.", "Try another model for Retouch.");
@@ -246,7 +247,7 @@ async function patchFrom(origCrop: Buffer, edited: Buffer, cw: number, ch: numbe
   let e = await rgb(edited, cw, ch);
   e = warp(e, cw, ch, await alignment(origCrop, e, cw, ch, zones));
   e = matchColors(origCrop, e, cw, ch, zones);
-  const alpha = await blendMask(origCrop, e, cw, ch, zones, masked);
+  const alpha = await blendMask(origCrop, e, cw, ch, zones, masked, strict);
   if (!alpha) return null;
   // Joined first, then scaled back to the crop's place (sharp skips a resize chained after joinChannel).
   const joined = await sharp(e, { raw: { width: cw, height: ch, channels: 3 } })
@@ -338,7 +339,7 @@ async function fitTo(data: Buffer, W: number, H: number) {
 
 /** Makes a Retouch spec on the source picture with the job's model. */
 export async function runRetouch(job: EngineJob, spec: RetouchSpec, sourcePath: string, engine: Engine, ctx: EngineContext): Promise<{ outputs: EngineOutput[]; usedPrompt: string }> {
-  const src = await sharp(await fs.readFile(sourcePath), { failOn: "none" }).rotate().removeAlpha().png().toBuffer({ resolveWithObject: true });
+  const src = await sharp(await fs.readFile(/*turbopackIgnore: true*/ sourcePath), { failOn: "none" }).rotate().removeAlpha().png().toBuffer({ resolveWithObject: true });
   const W = src.info.width;
   const H = src.info.height;
   const plan = planRetouch(spec, W, H);
@@ -347,11 +348,11 @@ export async function runRetouch(job: EngineJob, spec: RetouchSpec, sourcePath: 
   const slots = job.caps ? imageSlots(job.caps) : 1;
   const masked = Boolean(job.caps?.mask);
   const quiet = { signal: ctx.signal, progress: () => {} };
-  const dir = path.join(WORK, nanoid(10));
-  await fs.mkdir(dir, { recursive: true });
-  const last = path.join(WORK, "last");
-  await fs.rm(last, { recursive: true, force: true }).catch(() => {});
-  await fs.mkdir(last, { recursive: true }).catch(() => {});
+  const dir = path.join(/*turbopackIgnore: true*/ WORK, nanoid(10));
+  await fs.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
+  const last = path.join(/*turbopackIgnore: true*/ WORK, "last");
+  await fs.rm(/*turbopackIgnore: true*/ last, { recursive: true, force: true }).catch(() => {});
+  await fs.mkdir(/*turbopackIgnore: true*/ last, { recursive: true }).catch(() => {});
   const prompts: string[] = [];
   const total = (plan.whole ? 1 : 0) + plan.regions.length * (plan.whole ? takes : 1);
   let done = 0;
@@ -361,15 +362,54 @@ export async function runRetouch(job: EngineJob, spec: RetouchSpec, sourcePath: 
   };
 
   try {
+    // Redraw: one edit of the whole picture, at the size asked for, then each change's area is cut from it and set back
+    // into the original where it differs (lined up, colour-matched and feathered like a close-up). A close-up only sees
+    // a crop, and recoloured a lavender bunch red when asked for roses; the whole picture, with the style LoRA on, drew
+    // roses, but came back small and redrawn everywhere. This keeps the first's untouched pixels and the second's change.
+    if (spec.mode === "redraw") {
+      const all = planRetouch({ ...spec, mode: "whole" }, W, H);
+      const places = planRetouch({ ...spec, mode: "closeup" }, W, H);
+      if (!all.whole) throw new EngineError("There's nothing to change yet.", "Pin a change, or describe one under “Anything else”.");
+      ctx.progress(0.05, "Redrawing the picture with your changes");
+      const file = path.join(/*turbopackIgnore: true*/ dir, "whole.png");
+      await fs.writeFile(/*turbopackIgnore: true*/ file, src.data);
+      const { prompt, refs } = wholePrompt(all.whole, true, slots);
+      const res = await engine.run(subJob(job, { file, refs, prompt, aspect: nearestShape(W / H), count: takes }), quiet);
+      if (!res.outputs.length) throw new EngineError("The model returned no picture.");
+      ctx.progress(0.9, "Setting the changes back into your picture");
+      let landed = 0;
+      const outputs: EngineOutput[] = [];
+      for (const out of res.outputs.slice(0, takes)) {
+        const edit = await fitTo(out.data, W, H);
+        const patches: Patch[] = [];
+        for (const region of places.regions) {
+          const { left, top, width, height } = region.px;
+          const [orig, cut] = await Promise.all([
+            sharp(src.data).extract({ left, top, width, height }).removeAlpha().raw().toBuffer(),
+            sharp(edit).extract({ left, top, width, height }).png().toBuffer(),
+          ]);
+          const patch = await patchFrom(orig, cut, width, height, zonesIn(region.changes, region.px, W, H, width, height), region.px, false, true).catch(() => null);
+          if (patch) patches.push(patch);
+        }
+        landed += patches.length;
+        // A change that covers most of the picture (or general words) can't be set back as a patch: the redraw stands.
+        const base = places.whole ? edit : src.data;
+        outputs.push({ data: patches.length ? await sharp(base).composite(patches.map((p) => ({ input: p.png, left: p.left, top: p.top }))).png().toBuffer() : base, mime: "image/png" });
+      }
+      await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ last, "redraw-back.png"), res.outputs[0].data).catch(() => {});
+      if (!places.whole && !landed) throw new EngineError("The model didn't change anything visible.", "Say the change another way, or try another model.");
+      return { outputs, usedPrompt: prompt };
+    }
+
     // The whole picture first: changes that cover most of it, and general words.
     let bases: Buffer[] = Array.from({ length: takes }, () => src.data);
     if (plan.whole) {
       ctx.progress(0.05, plan.regions.length ? "Changing the whole picture" : "Editing");
-      const file = path.join(dir, "whole.png");
-      await fs.writeFile(file, src.data);
+      const file = path.join(/*turbopackIgnore: true*/ dir, "whole.png");
+      await fs.writeFile(/*turbopackIgnore: true*/ file, src.data);
       const { prompt, refs } = wholePrompt(plan.whole, spec.mode === "whole", slots);
       const boxes = plan.whole.changes.map((c) => c.box);
-      const mask = masked && spec.mode === "whole" && boxes.length && !plan.whole.extra ? await maskFile(path.join(dir, "whole-mask.png"), boxes.map((b) => [(b[0] / 1000) * W, (b[1] / 1000) * H, (b[2] / 1000) * W, (b[3] / 1000) * H] as Box), W, H, 0.06) : undefined;
+      const mask = masked && spec.mode === "whole" && boxes.length && !plan.whole.extra ? await maskFile(path.join(/*turbopackIgnore: true*/ dir, "whole-mask.png"), boxes.map((b) => [(b[0] / 1000) * W, (b[1] / 1000) * H, (b[2] / 1000) * W, (b[3] / 1000) * H] as Box), W, H, 0.06) : undefined;
       const res = await engine.run(subJob(job, { file, refs, prompt, aspect: nearestShape(W / H), count: takes, mask }), quiet);
       prompts.push(prompt);
       tick();
@@ -398,10 +438,10 @@ export async function runRetouch(job: EngineJob, spec: RetouchSpec, sourcePath: 
         const ch = Math.max(16, Math.round(height * scale));
         const cropPng = await sharp(run.base).extract({ left, top, width, height }).resize(cw, ch, { kernel: "lanczos3" }).png().toBuffer();
         const orig = await sharp(cropPng).removeAlpha().raw().toBuffer();
-        const file = path.join(dir, `close-${i}-${r}.png`);
-        await fs.writeFile(file, cropPng);
+        const file = path.join(/*turbopackIgnore: true*/ dir, `close-${i}-${r}.png`);
+        await fs.writeFile(/*turbopackIgnore: true*/ file, cropPng);
         const zones = zonesIn(region.changes, region.px, W, H, cw, ch);
-        const mask = masked ? await maskFile(path.join(dir, `close-${i}-${r}-mask.png`), zones, cw, ch, 0.08) : undefined;
+        const mask = masked ? await maskFile(path.join(/*turbopackIgnore: true*/ dir, `close-${i}-${r}-mask.png`), zones, cw, ch, 0.08) : undefined;
         let res: Awaited<ReturnType<Engine["run"]>>;
         try {
           res = await engine.run(subJob(job, { file, refs, prompt, aspect: region.aspect, count: run.count, mask }), quiet);
@@ -415,9 +455,9 @@ export async function runRetouch(job: EngineJob, spec: RetouchSpec, sourcePath: 
           patches[k][i] = await patchFrom(orig, out.data, cw, ch, zones, region.px, masked);
           // The last run's close-ups, for a look when a change didn't land (data/cache/retouch/last).
           await Promise.all([
-            fs.writeFile(path.join(last, `close-${i + 1}-sent.png`), cropPng),
-            fs.writeFile(path.join(last, `close-${i + 1}-back.png`), out.data),
-            fs.writeFile(path.join(last, `close-${i + 1}.json`), JSON.stringify({ prompt, zones, px: region.px, blended: Boolean(patches[k][i]) }, null, 1)),
+            fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ last, `close-${i + 1}-sent.png`), cropPng),
+            fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ last, `close-${i + 1}-back.png`), out.data),
+            fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ last, `close-${i + 1}.json`), JSON.stringify({ prompt, zones, px: region.px, blended: Boolean(patches[k][i]) }, null, 1)),
           ]).catch(() => {});
         }
         tick();
@@ -436,6 +476,6 @@ export async function runRetouch(job: EngineJob, spec: RetouchSpec, sourcePath: 
     }
     return { outputs, usedPrompt: prompts.join("\n\n") };
   } finally {
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => {});
   }
 }

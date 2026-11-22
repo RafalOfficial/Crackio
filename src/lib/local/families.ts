@@ -44,7 +44,7 @@ const FAMILIES: [RegExp, FamilyInfo][] = [
   [/^qwen_image/i, { key: "qwen-image", name: "Qwen-Image", maker: "Alibaba Qwen", licence: APACHE, quality: 70 }],
   [/^z_image_turbo/i, { key: "z-image-turbo", name: "Z-Image Turbo", maker: "Tongyi-MAI", licence: APACHE, quality: 75 }],
   [/^z_image/i, { key: "z-image", name: "Z-Image", maker: "Tongyi-MAI", licence: APACHE, quality: 80 }],
-  [/^krea2/i, { key: "krea-2", name: "Krea 2", maker: "Krea", licence: { name: "Krea 2 Community", commercial: "limited", note: "Free commercial use for teams under 50 seats." }, quality: 85 }],
+  [/^krea2/i, { key: "krea-2", name: "Krea 2", maker: "Krea", licence: { name: "Krea 2 Community", commercial: "limited", note: "Free commercial use below US$1M in yearly revenue." }, quality: 85 }],
   [/^ideogram4/i, { key: "ideogram-4", name: "Ideogram 4", maker: "Ideogram", licence: NC("Ideogram Non-Commercial"), quality: 88 }],
   // Oct 2026; no arena placing yet (its makers' own RealLayoutArena and LongLongTextBench only), so no quality score.
   [/^moss_image/i, { key: "moss-image", name: "MOSS-Image", maker: "OpenMOSS", licence: APACHE, blurb: "A freely licensed 5B model that sets long text and layouts cleanly; best with a detailed description of the picture." }],

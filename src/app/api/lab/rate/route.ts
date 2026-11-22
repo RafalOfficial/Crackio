@@ -19,13 +19,13 @@ const BACK = 60;
 type Pair = { id: string; meta?: unknown; [key: string]: unknown };
 type Picked = { choice: string; text?: string };
 
-const queueFile = (task: Task) => path.join(MEDIA_DIR, "feedback", task, "pairs.json");
-const picksFile = (task: Task) => path.join(DATA_DIR, "feedback", task, "choices.jsonl");
+const queueFile = (task: Task) => path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "feedback", task, "pairs.json");
+const picksFile = (task: Task) => path.join(/*turbopackIgnore: true*/ DATA_DIR, "feedback", task, "choices.jsonl");
 
 /** Each pair's latest pick (an undo clears it), the most recent last. */
 async function picks(task: Task) {
   const out = new Map<string, Picked>();
-  const text = await fs.readFile(picksFile(task), "utf8").catch(() => "");
+  const text = await fs.readFile(/*turbopackIgnore: true*/ picksFile(task), "utf8").catch(() => "");
   for (const line of text.split("\n")) {
     try {
       const { id, choice, text } = JSON.parse(line) as { id: string; choice: string; text?: string };
@@ -41,7 +41,7 @@ async function picks(task: Task) {
 export async function GET(request: Request) {
   const task = new URL(request.url).searchParams.get("task") as Task;
   if (!TASKS.includes(task)) return Response.json({ error: "Unknown task." }, { status: 400 });
-  const pairs = JSON.parse(await fs.readFile(queueFile(task), "utf8").catch(() => "[]")) as Pair[];
+  const pairs = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ queueFile(task), "utf8").catch(() => "[]")) as Pair[];
   const done = await picks(task);
   // What the models and measurements said stays out of the page: your eye only.
   const plain = ({ meta: _meta, ...p }: Pair) => p;
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
     .slice(-BACK)
     .flatMap(([id, picked]) => (byId.has(id) ? [{ ...plain(byId.get(id)!), picked }] : []));
   // A "live" file beside the queue: a round is still being made, and more pairs will join it.
-  const live = await fs.stat(path.join(path.dirname(queueFile(task)), "live")).then(
+  const live = await fs.stat(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ path.dirname(queueFile(task)), "live")).then(
     () => true,
     () => false,
   );
@@ -69,9 +69,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Your own answer needs some words (up to 2000 characters)." }, { status: 400 });
   }
   const file = picksFile(body.task);
-  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true });
   await fs.appendFile(
-    file,
+    /*turbopackIgnore: true*/ file,
     JSON.stringify({ id: body.id, choice: body.choice, ...(body.choice === "custom" ? { text } : {}), ms: body.ms ?? null, at: Date.now() }) + "\n",
   );
   return Response.json({ ok: true });

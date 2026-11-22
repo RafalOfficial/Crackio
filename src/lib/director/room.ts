@@ -7,7 +7,7 @@ import type { CameraRig, Scene } from "./types";
  * (Stage3D's WalkIn). Within `reach` of `center` in each direction (one entry per longitude: the walls, less a margin),
  * over the floor, under `top` while walking (a little above the eye the place was made from) and under the ceiling, if
  * there is one, for every other move. Zoomed or swung out past the walls, the camera saw the place from outside: a
- * tunnel, a smeared floor, then black (the user: "morphing into different dimensions of that one image").
+ * tunnel, a smeared floor, then black.
  */
 export type Room = {
   center: Vector3;

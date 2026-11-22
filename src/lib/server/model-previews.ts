@@ -62,7 +62,7 @@ async function framesOf(source: Buffer, dir: string): Promise<number | null> {
   for (let i = 0; i < pages; i++) {
     await sharp(data.subarray(i * frame, (i + 1) * frame), { raw: { width, height, channels: 4 } })
       .png({ compressionLevel: 1 })
-      .toFile(path.join(dir, `${String(i).padStart(4, "0")}.png`));
+      .toFile(path.join(/*turbopackIgnore: true*/ dir, `${String(i).padStart(4, "0")}.png`));
   }
   const delay = meta.delay?.find((d) => d > 0) ?? 67;
   return Math.max(6, Math.min(30, Math.round(1000 / delay)));
@@ -72,11 +72,11 @@ async function make(name: string, kind: PreviewKind): Promise<string | null> {
   // A trimmed one (gallery PREVIEW_TRIM) is kept under its trim, so a new trim makes it again.
   const trim = PREVIEW_TRIM[name];
   const base = trim ? `${name}.t${trimKey(trim)}` : name;
-  const file = path.join(DIR, `${base}.${kind === "clip" ? "mp4" : kind === "before" ? "before.webp" : "webp"}`);
-  if (await fs.stat(file).then((s) => s.size > 0).catch(() => false)) return file;
+  const file = path.join(/*turbopackIgnore: true*/ DIR, `${base}.${kind === "clip" ? "mp4" : kind === "before" ? "before.webp" : "webp"}`);
+  if (await fs.stat(/*turbopackIgnore: true*/ file).then((s) => s.size > 0).catch(() => false)) return file;
   const source = await fetchWebp(name, kind === "before" ? 2 : 1);
   if (!source) return null;
-  await fs.mkdir(DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
   const { top = 0, right = 0, bottom = 0, left = 0 } = trim ?? {};
   if (kind !== "clip") {
     const size = trim ? await sharp(source, { pages: 1 }).metadata() : null;
@@ -89,24 +89,24 @@ async function make(name: string, kind: PreviewKind): Promise<string | null> {
       .toBuffer()
       .catch(() => null);
     if (!still) return null;
-    await fs.writeFile(file, still);
+    await fs.writeFile(/*turbopackIgnore: true*/ file, still);
     return file;
   }
   return clipLane(async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-preview-"));
+    const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-preview-"));
     try {
       const fps = await framesOf(source, dir).catch(() => null);
       if (!fps) return null;
       const tmp = `${file}.part.mp4`;
       const run = await runFfmpeg(
-        ["-y", "-framerate", String(fps), "-i", path.join(dir, "%04d.png"), "-vf", `${trim ? `crop=iw-${left + right}:ih-${top + bottom}:${left}:${top},` : ""}scale=trunc(iw/2)*2:trunc(ih/2)*2`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "24", "-preset", "veryfast", "-movflags", "+faststart", "-an", tmp],
+        ["-y", "-framerate", String(fps), "-i", path.join(/*turbopackIgnore: true*/ dir, "%04d.png"), "-vf", `${trim ? `crop=iw-${left + right}:ih-${top + bottom}:${left}:${top},` : ""}scale=trunc(iw/2)*2:trunc(ih/2)*2`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "24", "-preset", "veryfast", "-movflags", "+faststart", "-an", tmp],
         { timeoutMs: 120_000, background: true },
       );
       if (run.code !== 0) return null;
-      await fs.rename(tmp, file);
+      await fs.rename(/*turbopackIgnore: true*/ tmp, file);
       return file;
     } finally {
-      await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+      await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true }).catch(() => undefined);
     }
   });
 }

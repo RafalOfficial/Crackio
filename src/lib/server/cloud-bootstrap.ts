@@ -25,7 +25,7 @@ export type BoxFacts = {
   cuda: string | null;
   /** A ComfyUI Crackio installed there before (its folder, port, Python). */
   installed: { dir: string; port: number; python: string } | null;
-  /** Its template starts a ComfyUI by itself (vast.ai's ComfyUI template): wait for that one instead. */
+  /** Its template starts a ComfyUI by itself (vast.ai's and RunPod's ComfyUI templates): wait for that one instead. */
   comfyComing: boolean;
 };
 
@@ -47,6 +47,10 @@ f cuda "$(nvidia-smi 2>/dev/null | grep -o 'CUDA Version: [0-9.]*' | awk '{print
 coming=0
 tr '\0' '\n' < /proc/1/environ 2>/dev/null | grep -qi '^PORTAL_CONFIG=.*comfy' && coming=1
 [ -f /opt/supervisor-scripts/comfyui.sh ] && coming=1
+# RunPod's ComfyUI template: its start script copies the ComfyUI baked into the image to /workspace on the first boot
+# (up to 30 minutes, RunPod says), then starts it.
+[ -d /opt/comfyui-baked ] && coming=1
+grep -qs 'main.py' /start.sh && coming=1
 f comfyComing "$coming"
 `;
 

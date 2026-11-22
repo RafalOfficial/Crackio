@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { DATA_DIR } from "./paths";
 import { demoOn } from "@/lib/demo/config";
+import { podShellAnswers, podShellRun } from "./runpod-shell";
 
 /**
  * SSH from this computer to a rented GPU box, through the system's own OpenSSH client (Windows 10+, macOS and Linux all
@@ -16,21 +17,31 @@ import { demoOn } from "@/lib/demo/config";
 export type SshLogin = { host: string; port: number; user: string };
 
 const SSH_DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "ssh");
-const OWN_KEY = path.join(SSH_DIR, "crackio_ed25519");
-const KNOWN_HOSTS = path.join(SSH_DIR, "known_hosts");
+const OWN_KEY = path.join(/*turbopackIgnore: true*/ SSH_DIR, "crackio_ed25519");
+const KNOWN_HOSTS = path.join(/*turbopackIgnore: true*/ SSH_DIR, "known_hosts");
 /** The usual key files, which a cloud account often has already. */
-const USUAL_KEYS = ["id_ed25519", "id_ecdsa", "id_rsa"].map((k) => path.join(os.homedir(), ".ssh", k));
+const USUAL_KEYS = ["id_ed25519", "id_ecdsa", "id_rsa"].map((k) => path.join(/*turbopackIgnore: true*/ os.homedir(), ".ssh", k));
 
-const exists = (file: string) => fs.access(file).then(() => true, () => false);
+const exists = (file: string) => fs.access(/*turbopackIgnore: true*/ file).then(() => true, () => false);
 const bin = (name: "ssh" | "ssh-keygen") => (process.platform === "win32" ? `${name}.exe` : name);
 
 export class SshError extends Error {}
+
+/**
+ * A RunPod pod with no public IP has no SSH straight in: its "login" is its JupyterLab, which runs Crackio's scripts
+ * there (runpod-shell). It works everywhere a login does, but for tunnels.
+ */
+const JUPYTER_HOST = /^([a-z0-9]{6,32})-8888\.proxy\.runpod\.net$/i;
+export const jupyterLogin = (podId: string): SshLogin => ({ host: `${podId}-8888.proxy.runpod.net`, port: 443, user: "jupyter" });
+export const viaJupyter = (login: Pick<SshLogin, "host" | "port">) => login.port === 443 && JUPYTER_HOST.test(login.host);
+const podOf = (login: Pick<SshLogin, "host">) => JUPYTER_HOST.exec(login.host)?.[1] ?? "";
 
 /**
  * Whether an SSH server answers at a login's address: its "SSH-" banner within the time. A box still starting refuses
  * or times out; a cloud's proxy port for it can take the connection and close it without a word.
  */
 export function sshAnswers(login: Pick<SshLogin, "host" | "port">, timeoutMs = 6000): Promise<boolean> {
+  if (viaJupyter(login)) return podShellAnswers(podOf(login));
   return new Promise((resolve) => {
     const s = net.connect({ host: login.host, port: login.port });
     const done = (ok: boolean) => {
@@ -58,13 +69,13 @@ async function keyFiles() {
 export async function publicKey(): Promise<{ key: string; file: string; own: boolean }> {
   const have = await keyFiles();
   const file = have[0] ?? (await makeOwnKey());
-  const line = (await fs.readFile(`${file}.pub`, "utf8")).trim();
+  const line = (await fs.readFile(/*turbopackIgnore: true*/ `${file}.pub`, "utf8")).trim();
   // A live demo gives its key without the comment (it names the server: user@host).
   return { key: demoOn() ? line.split(/\s+/).slice(0, 2).join(" ") : line, file: `${file}.pub`, own: file === OWN_KEY };
 }
 
 async function makeOwnKey() {
-  await fs.mkdir(SSH_DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ SSH_DIR, { recursive: true });
   await new Promise<void>((resolve, reject) =>
     execFile(bin("ssh-keygen"), ["-q", "-t", "ed25519", "-N", "", "-C", `crackio@${os.hostname()}`, "-f", OWN_KEY], { timeout: 30_000 }, (err) =>
       err ? reject(new SshError(`Couldn't make an SSH key (${err.message}). Install OpenSSH, or make one with ssh-keygen.`)) : resolve(),
@@ -93,7 +104,7 @@ function checked(login: SshLogin) {
 async function baseArgs(login: SshLogin) {
   checked(login);
   const keys = await keyFiles();
-  await fs.mkdir(SSH_DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ SSH_DIR, { recursive: true });
   return [
     "-p", String(login.port),
     "-o", "BatchMode=yes",
@@ -118,6 +129,14 @@ export type SshResult = { code: number; stdout: string; stderr: string };
 
 /** Run a bash script on the box (sent on stdin, so nothing in it needs quoting for the shell). */
 export async function sshRun(login: SshLogin, script: string, opts: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<SshResult> {
+  if (viaJupyter(login)) {
+    try {
+      const { code, out } = await podShellRun(podOf(login), script, opts);
+      return { code, stdout: out, stderr: code === 0 ? "" : out.slice(-2000) };
+    } catch (err) {
+      throw new SshError(`Couldn't run Crackio's setup through the pod's JupyterLab: ${(err as Error).message}`);
+    }
+  }
   const once = async (): Promise<SshResult> => {
     const args = [...(await baseArgs(login)), `${login.user}@${login.host}`, "bash -s"];
     return new Promise((resolve, reject) => {
@@ -198,6 +217,9 @@ const answers = (port: number) =>
  * drops. Returns the local port.
  */
 export async function sshTunnel(login: SshLogin, remotePort: number): Promise<number> {
+  if (viaJupyter(login)) {
+    throw new SshError("This pod has no public IP, so Crackio can't tunnel to its ComfyUI: rent it with RunPod's ComfyUI template (ComfyUI shows on 8188), or with RunPod's Public IP filter on.");
+  }
   const key = `${login.user}@${login.host}:${login.port}>${remotePort}`;
   const open = tunnels.get(key);
   if (open && open.child.exitCode === null) return open.ready;

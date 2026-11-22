@@ -77,21 +77,21 @@ export async function scoreFor(cuts: number[], total: number, pace: FilmPaceId, 
 
 /** The music under a clip: the clip's own sound kept, a little lower, the music fading out at the end. */
 export async function withScore(video: Buffer, score: Buffer, total: number): Promise<Buffer> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-score-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-score-"));
   try {
-    const v = path.join(dir, "v.mp4");
-    const a = path.join(dir, "a.wav");
-    const out = path.join(dir, "out.mp4");
-    await fs.writeFile(v, video);
-    await fs.writeFile(a, score);
+    const v = path.join(/*turbopackIgnore: true*/ dir, "v.mp4");
+    const a = path.join(/*turbopackIgnore: true*/ dir, "a.wav");
+    const out = path.join(/*turbopackIgnore: true*/ dir, "out.mp4");
+    await fs.writeFile(/*turbopackIgnore: true*/ v, video);
+    await fs.writeFile(/*turbopackIgnore: true*/ a, score);
     const fade = Math.max(0, total - 1.2).toFixed(2);
     const run = await runFfmpeg([
       "-y", "-i", v, "-i", a,
       "-filter_complex", `[0:a:0]volume=0.55[s];[1:a:0]volume=0.8,afade=t=out:st=${fade}:d=1.2[m];[s][m]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[a]`,
       "-map", "0:v:0", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out,
     ]);
-    return run.code === 0 ? fs.readFile(out) : video;
+    return run.code === 0 ? fs.readFile(/*turbopackIgnore: true*/ out) : video;
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
   }
 }

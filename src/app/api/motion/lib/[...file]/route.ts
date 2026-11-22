@@ -40,11 +40,19 @@ function locate(parts: string[]): string | null {
   return file.startsWith(root + path.sep) ? file : null;
 }
 
+// Read once per server: every render starts a fresh browser with an empty cache and asks for three.js (about 1.3 MB) again.
+const g = globalThis as unknown as { __crackioMotionLibs?: Map<string, Uint8Array> };
+const kept = (g.__crackioMotionLibs ??= new Map());
+
 export async function GET(_req: Request, ctx: RouteContext<"/api/motion/lib/[...file]">) {
   const { file: parts } = await ctx.params;
   const file = locate(parts);
-  // Ignored by the bundler: a read of a path it can't pin down makes production builds trace every file in the project.
-  const body = file ? await fs.readFile(/*turbopackIgnore: true*/ file).catch(() => null) : null;
+  let body = file ? kept.get(file) : undefined;
+  if (file && !body) {
+    // Ignored by the bundler: a read of a path it can't pin down makes production builds trace every file in the project.
+    const read = await fs.readFile(/*turbopackIgnore: true*/ file).catch(() => null);
+    if (read) kept.set(file, (body = new Uint8Array(read)));
+  }
   if (!body) return new Response("Not found", { status: 404, headers: { "Access-Control-Allow-Origin": "*" } });
-  return new Response(new Uint8Array(body), { headers: HEADERS });
+  return new Response(body.slice(), { headers: HEADERS });
 }

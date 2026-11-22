@@ -9,6 +9,7 @@ import { serverlessEndpoints } from "./serverless/endpoints";
 import { shimFor } from "./serverless/shim";
 import { comfyCloudFor } from "./serverless/comfy-cloud";
 import { demoOn } from "@/lib/demo/config";
+import { bumpEpoch } from "./epoch";
 
 /**
  * The ComfyUIs Crackio runs Local models on: the one COMFYUI_URL names (a rented GPU box, or this computer's own), the one
@@ -129,6 +130,7 @@ export async function targetById(id?: string | null): Promise<ComfyTarget> {
 /** After machines are added or removed. */
 export function forgetTargets() {
   g.__crackioComfyTargets = undefined;
+  bumpEpoch();
 }
 
 export const samePlace = (a: string, b: string) => place(a) === place(b);

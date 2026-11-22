@@ -32,6 +32,8 @@ import { Popover } from "@/components/ui/Popover";
 import { useCast } from "@/lib/hooks/use-cast";
 import { castFits, framePrefer, mentionedHandles } from "@/lib/cast/types";
 import { askForModel, useModelChoice } from "@/lib/hooks/use-model-choice";
+import { isSubmitEnter } from "@/lib/keys";
+import { calmNow } from "@/lib/motion-pref";
 
 const PLACEHOLDERS = [
   "A woman in a red coat on a rainy street at night, shot from low, neon behind her…",
@@ -155,7 +157,8 @@ export function Composer() {
     onChange: setPrompt,
     pictures: named.map(({ t, label }) => ({ token: t.token, label, src: t.r.preview.startsWith("blob:") ? t.r.preview : previewUrl(t.r.preview, 96) })),
   });
-  const showStrip = refTiles.length > 0 || Boolean(frameTiles?.start || making.start || making.end);
+  // A frame being made only shows where frames do (a clip): in Image mode it would leave an empty band.
+  const showStrip = refTiles.length > 0 || Boolean(frameTiles && (frameTiles.start || making.start || making.end));
   /** The jobs a picture can switch to from its tag. */
   const jobs: ShotRole[] =
     video?.layout === "start" || video?.layout === "start-end" ? ["start", ...(video.layout === "start-end" ? ["end" as const] : []), ...(video.refsMax ? ["ref" as const] : [])] : ["ref"];
@@ -386,7 +389,7 @@ export function Composer() {
           },
         });
       }
-      requestAnimationFrame(() => document.getElementById("recent")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      requestAnimationFrame(() => document.getElementById("recent")?.scrollIntoView({ behavior: calmNow() ? "auto" : "smooth", block: "start" }));
     } catch (err) {
       setNotice({ tone: "error", text: (err as Error).message });
     } finally {
@@ -555,7 +558,7 @@ export function Composer() {
               }}
               onKeyDown={(e) => {
                 if (mentions.onKeyDown(e)) return;
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (isSubmitEnter(e)) {
                   e.preventDefault();
                   void generate();
                 }

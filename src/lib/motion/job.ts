@@ -32,7 +32,7 @@ const LANES: Record<string, number> = { generate_image: 4, generate_video: 3, re
 /** Motion thinks as hard as the model allows: the user asked for its best, and the design happens mid-turn. */
 const EFFORT: Effort = "max";
 
-function lanes() {
+export function lanes() {
   const active = new Map<string, number>();
   const waiting = new Map<string, (() => void)[]>();
   return async function lane<T>(tool: string, fn: () => Promise<T>): Promise<T> {
@@ -51,7 +51,7 @@ function lanes() {
 }
 
 /** Batches the turn's log updates into the project file (at most every 700 ms, or right away). */
-function logWriter(projectId: string, agentMessageId: string) {
+export function logWriter(projectId: string, agentMessageId: string) {
   let pending: ((m: MotionMessage, p: MotionProject) => void)[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
   let chain: Promise<void> = Promise.resolve();
@@ -110,8 +110,8 @@ async function importAttachments(projectId: string, request: MotionMessage, dir:
     }
     const name = await uniqueName(dir, cleanName(att.name || path.basename(src), path.extname(src).slice(1).toLowerCase()));
     const dest = path.join(dir, name);
-    await fs.copyFile(src, dest);
-    await fs.chmod(dest, 0o444).catch(() => {});
+    await fs.copyFile(/*turbopackIgnore: true*/ src, dest);
+    await fs.chmod(/*turbopackIgnore: true*/ dest, 0o444).catch(() => {});
     imported.push(await describeFile(projectId, name, "upload", { turn: request.id }));
     names.push(name);
   }
@@ -193,21 +193,21 @@ async function firstMessage(project: MotionProject, request: MotionMessage, canv
 }
 
 /** The delivered file in a form every player and the Library understand. */
-async function deliverable(dir: string, name: string, signal: AbortSignal): Promise<{ name: string; data: Buffer; mime: string }> {
+export async function deliverable(dir: string, name: string, signal: AbortSignal): Promise<{ name: string; data: Buffer; mime: string }> {
   const file = path.join(dir, name);
   const ext = path.extname(name).slice(1).toLowerCase();
   const kind = kindOf(name);
-  if (kind === "video" && (ext === "mp4" || ext === "webm")) return { name, data: await fs.readFile(file), mime: `video/${ext}` };
-  if (kind === "image" && ["png", "jpg", "jpeg", "webp"].includes(ext)) return { name, data: await fs.readFile(file), mime: ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg" };
+  if (kind === "video" && (ext === "mp4" || ext === "webm")) return { name, data: await fs.readFile(/*turbopackIgnore: true*/ file), mime: `video/${ext}` };
+  if (kind === "image" && ["png", "jpg", "jpeg", "webp"].includes(ext)) return { name, data: await fs.readFile(/*turbopackIgnore: true*/ file), mime: ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg" };
   if (kind === "image") {
     const out = await uniqueName(dir, cleanName(name, "png"));
     await sharp(file).png().toFile(path.join(dir, out));
-    return { name: out, data: await fs.readFile(path.join(dir, out)), mime: "image/png" };
+    return { name: out, data: await fs.readFile(/*turbopackIgnore: true*/ path.join(dir, out)), mime: "image/png" };
   }
   const out = await uniqueName(dir, cleanName(name, "mp4"));
   const run = await runFfmpeg(["-hide_banner", "-y", "-loglevel", "error", "-i", name, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-c:a", "aac", "-movflags", "+faststart", out], { cwd: dir, signal });
   if (run.code !== 0) throw new EngineError(`Couldn't prepare ${name} for playback: ${run.stderr.trim().slice(0, 200)}`);
-  return { name: out, data: await fs.readFile(path.join(dir, out)), mime: "video/mp4" };
+  return { name: out, data: await fs.readFile(/*turbopackIgnore: true*/ path.join(dir, out)), mime: "video/mp4" };
 }
 
 export async function runMotion(gen: Generation, model: ModelAvailability, ctx: EngineContext): Promise<EngineResult> {
@@ -219,7 +219,7 @@ export async function runMotion(gen: Generation, model: ModelAvailability, ctx: 
   if (!request) throw new EngineError("Couldn't find your message in the project.");
 
   const dir = workspaceDir(projectId);
-  await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
   const log = logWriter(projectId, agentMessageId);
   ctx.progress(0.02, "Opening the project");
   const attached = await importAttachments(projectId, request, dir);

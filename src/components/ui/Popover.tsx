@@ -11,6 +11,8 @@ type Spot = { side: "top" | "bottom"; style: CSSProperties };
 const GAP = 8;
 const EDGE = 12;
 const noop = () => () => {};
+/** What the keyboard can land on inside a panel. */
+const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /**
  * The popovers open now, innermost last. One opened from inside another's panel (a picker's Cast list) keeps the outer
@@ -41,7 +43,8 @@ export function Popover({
   className,
   panelClassName,
 }: {
-  trigger: (props: { open: boolean; toggle: () => void; id: string }) => ReactNode;
+  /** `toggle` takes the click: opened from the keyboard (Enter or Space), focus moves into the panel. */
+  trigger: (props: { open: boolean; toggle: (e?: { detail?: number }) => void; id: string }) => ReactNode;
   children: (close: () => void) => ReactNode;
   placement?: Placement;
   className?: string;
@@ -60,6 +63,9 @@ export function Popover({
   const panel = useRef<HTMLDivElement>(null);
   const id = useId();
   const client = useSyncExternalStore(noop, () => true, () => false);
+  // Opened with the keyboard: focus goes into the panel once it's placed (and back to the trigger when it closes).
+  const [byKeys, setByKeys] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     if (!open) return;
@@ -77,7 +83,7 @@ export function Popover({
       // Escape closes the innermost panel only (not the dialog it opened from), once nothing inside it used the key.
       if (e.key !== "Escape" || e.defaultPrevented || openPanels[openPanels.length - 1] !== me) return;
       e.preventDefault();
-      setOpen(false);
+      close();
     };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
@@ -86,6 +92,31 @@ export function Popover({
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
+  }, [open, close]);
+
+  // The trigger says whether it's open and what it opens, for every caller.
+  useEffect(() => {
+    const button = anchor.current?.querySelector<HTMLElement>("button, [role='button']");
+    if (!button) return;
+    button.setAttribute("aria-expanded", String(open));
+    if (open) button.setAttribute("aria-controls", id);
+    else button.removeAttribute("aria-controls");
+  }, [open, id]);
+
+  // Opened from the keyboard: once placed, focus lands on what's chosen, else the first control.
+  const placed = spot !== null;
+  useEffect(() => {
+    if (!open || !placed || !byKeys) return;
+    const p = panel.current;
+    const target =
+      p?.querySelector<HTMLElement>('[aria-checked="true"],[aria-selected="true"],[aria-pressed="true"]') ?? p?.querySelector<HTMLElement>(FOCUSABLE) ?? p;
+    target?.focus({ preventScroll: true });
+  }, [open, placed, byKeys]);
+
+  // Closing with focus inside (Escape, a pick, Tab out) puts it back on the trigger, so the keyboard keeps its place.
+  useEffect(() => {
+    if (open) return;
+    if (panel.current?.contains(document.activeElement)) anchor.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
   }, [open]);
 
   // Measure before paint, then follow the trigger while the page scrolls or resizes.
@@ -115,17 +146,41 @@ export function Popover({
         maxHeight: Math.max(140, side === "top" ? above : below),
         ["--popover-max-h" as string]: `${Math.max(140, side === "top" ? above : below)}px`,
       };
-      setSpot({ side, style });
+      // The same place keeps the same object, so the panel (and a grid of pictures in it) doesn't redraw.
+      setSpot((was) =>
+        was &&
+        was.side === side &&
+        was.style.left === style.left &&
+        was.style.top === style.top &&
+        was.style.bottom === style.bottom &&
+        was.style.maxHeight === style.maxHeight
+          ? was
+          : { side, style },
+      );
     };
     place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
+    // Scrolling the page moves it along, at most once a frame; scrolling inside the panel itself doesn't.
+    let frame = 0;
+    const schedule = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        place();
+      });
+    };
+    const onScroll = (e: Event) => {
+      if (panel.current?.contains(e.target as Node)) return;
+      schedule();
+    };
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", onScroll, true);
     // Content that changes size (a menu that opens a form) is placed again, so it stays on screen.
-    const ro = new ResizeObserver(place);
+    const ro = new ResizeObserver(schedule);
     if (panel.current) ro.observe(panel.current);
     return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", onScroll, true);
       ro.disconnect();
     };
   }, [open, placement]);
@@ -137,9 +192,16 @@ export function Popover({
     <div ref={anchorRef} className={cn("relative", className)}>
       {trigger({
         open,
-        toggle: () => {
+        toggle: (e) => {
+          if (open) {
+            // Closing from its trigger: it keeps its place while it fades.
+            setOpen(false);
+            return;
+          }
+          // A click from the keyboard has no pointer detail.
+          setByKeys(e?.detail === 0);
           setSpot(null);
-          setOpen((o) => !o);
+          setOpen(true);
         },
         id,
       })}
@@ -150,18 +212,33 @@ export function Popover({
                 <motion.div
                   ref={panel}
                   id={id}
+                  role="dialog"
+                  aria-modal="false"
+                  tabIndex={-1}
+                  // Tab past the last control (or Shift+Tab before the first) leaves the panel: it closes behind you.
+                  onKeyDown={(e) => {
+                    if (e.key !== "Tab") return;
+                    const items = Array.from(panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+                    if (!items.length) return;
+                    const first = items[0];
+                    const last = items[items.length - 1];
+                    if ((!e.shiftKey && document.activeElement === last) || (e.shiftKey && document.activeElement === first)) {
+                      e.preventDefault();
+                      close();
+                    }
+                  }}
                   initial={{ opacity: 0, scale: 0.96, y: side === "top" ? 4 : -4 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.97 }}
                   transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
                   style={spot?.style ?? { top: 0, left: 0, visibility: "hidden" }}
                   className={cn(
-                    "squircle scroll-thin fixed z-[70] min-w-[200px] overflow-y-auto rounded-[20px] bg-apple-2 p-1.5 shadow-[0_0_0_1px_var(--color-line-strong),0_18px_40px_-8px_rgb(0_0_0/0.6)]",
+                    "squircle scroll-thin fixed z-[70] min-w-[200px] overflow-y-auto rounded-[20px] bg-apple-2 p-1.5 shadow-[0_0_0_1px_var(--color-line-strong),0_18px_40px_-8px_rgb(0_0_0/0.6)] outline-none",
                     side === "top" ? (end ? "origin-bottom-right" : "origin-bottom-left") : end ? "origin-top-right" : "origin-top-left",
                     panelClassName,
                   )}
                 >
-                  {children(() => setOpen(false))}
+                  {children(close)}
                 </motion.div>
               ) : null}
             </AnimatePresence>,
@@ -188,8 +265,7 @@ export function MenuItem({
   return (
     <button
       type="button"
-      role="menuitemradio"
-      aria-checked={selected}
+      aria-pressed={selected ?? undefined}
       disabled={disabled}
       onClick={onSelect}
       className={cn(

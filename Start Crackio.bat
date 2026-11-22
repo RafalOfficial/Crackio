@@ -6,6 +6,9 @@ if "%CRACKIO_PORT%"=="" set "CRACKIO_PORT=3211"
 rem Only this computer can open Crackio. Set CRACKIO_HOST=0.0.0.0 to open it to your network (it has no login).
 if "%CRACKIO_HOST%"=="" set "CRACKIO_HOST=127.0.0.1"
 set "COREPACK_ENABLE_DOWNLOAD_PROMPT=0"
+rem Node's pool for file reads, picture work and hashing has 4 threads; picture previews filled it, and plain reads (your
+rem settings) waited seconds behind them.
+if "%UV_THREADPOOL_SIZE%"=="" set "UV_THREADPOOL_SIZE=16"
 
 echo.
 echo   Crackio

@@ -28,6 +28,8 @@ import { cn } from "@/lib/cn";
 import { Media } from "@/components/ui/Media";
 import { useModelParam } from "@/lib/hooks/use-model-param";
 import { askForModel, useModelChoice } from "@/lib/hooks/use-model-choice";
+import { previewUrl } from "@/lib/media-url";
+import { useToolTakes } from "./use-tool-takes";
 
 export type Compiled = {
   prompt: string;
@@ -108,7 +110,9 @@ export function EditToolShell({
   /** An upscale's factor with the model that will run, for its time (the work grows with the picture and the factor). */
   upscaleBy?: (model: ToolModel) => number | null;
 }) {
-  const { items, submit, cancel } = useGenerations();
+  const submit = useGenerations((s) => s.submit);
+  const cancel = useGenerations((s) => s.cancel);
+  const items = useToolTakes(tool.slug);
   const { models, defaults, loaded: modelsLoaded } = useModels();
   const [source, setSource] = useState<SourceImage | null>(null);
   // Your pick for this job; a different job (upscale vs reframe) has its own (hooks/use-model-choice).
@@ -140,8 +144,8 @@ export function EditToolShell({
   const noModel = modelsLoaded && !effectiveId && !isCustomModel(model);
 
   const takes = useMemo(
-    () => (source ? items.filter((g) => g.tool === tool.slug && g.params?.sourceUrl === source.url) : []),
-    [items, source, tool.slug],
+    () => (source ? items.filter((g) => g.params?.sourceUrl === source.url) : []),
+    [items, source],
   );
   const latest = takes.find((g) => g.status === "done");
   const shown = viewing ?? latest?.outputs[0]?.url ?? null;
@@ -202,6 +206,7 @@ export function EditToolShell({
           <PanelHeader title="Settings" />
           <div className="space-y-4 p-3">
             <ModelPicker kind={kind} task={task ?? TASK[kind]} tool={tool.slug} value={model} onChange={setModel} prefer={prefer} />
+            {/* The tool's own model offered for your GPU (Angles): a pill floating at the top of the page (GetToolModel). */}
             {ownModel ? <GetToolModel id={ownModel.id} why={ownModel.why} onReady={setModel} /> : null}
             {noModel ? (
               <p className="rounded-[12px] bg-tungsten/10 px-3.5 py-3 text-[13px] leading-relaxed text-tungsten shadow-[inset_0_0_0_1px_rgb(242_181_75/0.25)]">
@@ -220,7 +225,7 @@ export function EditToolShell({
             <div className="squircle flex items-center gap-3 rounded-[16px] p-2 pr-3 shadow-[inset_0_0_0_1px_var(--color-line)]">
               {source ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={source.url} alt="" className="h-11 w-14 shrink-0 rounded-[8px] object-cover" />
+                <img src={previewUrl(source.url, 160)} alt="" decoding="async" className="h-11 w-14 shrink-0 rounded-[8px] object-cover" />
               ) : (
                 <span className="grid h-11 w-14 shrink-0 place-items-center rounded-[8px] bg-apple-2 text-haze">
                   <ImagePlus size={16} />
@@ -284,7 +289,7 @@ export function EditToolShell({
           </div>
 
           {/* Sticks to the bottom of the window on long settings, so the action is always in reach. */}
-          <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat/90 p-3 backdrop-blur-xl">
+          <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat p-3">
             {failed ? (
               <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-tally">
                 <TriangleAlert size={14} className="mt-0.5 shrink-0" />
@@ -373,15 +378,15 @@ export function EditToolShell({
                 progress={live[0].progress}
                 prompt={live[0].prompt}
                 since={live[0].createdAt}
-                backdrop={source.url}
+                backdrop={previewUrl(source.url, 960)}
                 onCancel={() => cancel(live[0].id)}
               />
             ) : null}
           </div>
           {takes.length ? (
             <div className="scrollbar-none strip-fade flex gap-2 overflow-x-auto border-t border-line p-3 pr-9">
-              {takes.map((g) => (
-                <TakeChip key={g.id} gen={g} active={g.outputs[0]?.url === shown} onClick={() => setViewing(g.outputs[0]?.url ?? null)} />
+              {takes.map((g, i) => (
+                <TakeChip key={g.id} gen={g} index={takes.length - i} active={g.outputs[0]?.url === shown} onClick={() => setViewing(g.outputs[0]?.url ?? null)} />
               ))}
             </div>
           ) : null}
@@ -399,13 +404,16 @@ function costNoun(kind: ModelKind, takes: number, edits: number) {
   return takes > 1 ? `these ${takes} edits` : "this edit";
 }
 
-function TakeChip({ gen, active, onClick }: { gen: Generation; active: boolean; onClick: () => void }) {
+function TakeChip({ gen, index, active, onClick }: { gen: Generation; index: number; active: boolean; onClick: () => void }) {
   const out = gen.outputs[0];
   const live = gen.status === "queued" || gen.status === "running";
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={!out}
+      aria-label={gen.status === "error" ? `Take ${index}, failed` : live ? `Take ${index}, being made` : `Take ${index}`}
+      aria-pressed={active}
       className={cn(
         "press squircle relative h-14 w-20 shrink-0 overflow-hidden rounded-[11px] bg-apple hover:brightness-110",
         active ? "shadow-[0_0_0_2px_var(--color-spike)]" : "shadow-[0_0_0_1px_var(--color-line)]",

@@ -15,7 +15,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/models/preview/[
   const kind: PreviewKind = v === "clip" || v === "before" ? v : "still";
   const file = await modelPreview(name, kind);
   if (!file) return new Response("Not found", { status: 404, headers: { "Cache-Control": "public, max-age=600" } });
-  const stat = await fs.stat(file).catch(() => null);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ file).catch(() => null);
   if (!stat?.isFile()) return new Response("Not found", { status: 404 });
   const size = stat.size;
   const headers: Record<string, string> = {

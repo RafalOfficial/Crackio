@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { create } from "zustand";
-import { ChevronLeft, ChevronRight, Download, History, ImageIcon, Play, TriangleAlert } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, History, ImageIcon, LoaderCircle, Play, TriangleAlert } from "lucide-react";
 import { useGenerations } from "@/lib/hooks/use-generations";
+import { loadToolTakes, useToolTakes, useToolTakesStatus } from "@/components/tools/use-tool-takes";
 import type { Generation } from "@/lib/generations/types";
 import type { Scene } from "@/lib/director/types";
 import { useDirector } from "@/lib/director/store";
@@ -13,20 +13,26 @@ import { CompareView } from "@/components/tools/CompareView";
 import { GeneratingField } from "@/components/ui/GeneratingField";
 import { posterUrl, previewSrcSet, previewUrl } from "@/lib/media-url";
 import { clipLength, isClip, PlayCut } from "./Clips";
-import { closeTake, openTake, useTakeView } from "./take-view";
+import { closeLibrary, closeTake, openTake, useTakeView, useTakesFrom } from "./take-view";
 import { useStageView } from "./stage/view";
 import { TitleBar, ToolButton, ToolGroup, ToolPill } from "./TitleBar";
 import { cn } from "@/lib/cn";
 
-/** Whose takes the Director shows: a Storyboard project's only while it's open in Storyboard, else every take. */
-export const useTakesFrom = create<{ project: string | null }>(() => ({ project: null }));
+// Whose takes the Director shows lives in take-view.ts (no 3D code there, for Storyboard); still importable from here.
+export { useTakesFrom } from "./take-view";
 
-/** Every Director take, newest first. */
+/**
+ * Every Director take, newest first: the Director's own list (components/tools/use-tool-takes), not the newest 60 of
+ * every tool, which showed "No takes yet" to someone with 260 of them.
+ */
 export function useDirectorTakes() {
-  const { items } = useGenerations();
+  const items = useToolTakes("director");
   const project = useTakesFrom((s) => s.project);
-  return useMemo(() => items.filter((g) => g.tool === "director" && (!project || g.params?.project === project)), [items, project]);
+  return useMemo(() => (project ? items.filter((g) => g.params?.project === project) : items), [items, project]);
 }
+
+/** The model a take was made with, as a caption: "Z-Image Director", without "(your GPU)" and never "Auto". */
+const modelOf = (g: Generation) => (g.modelName ?? "").replace(/\s*\((your GPU|your GPUs|this computer)\)\s*$/i, "").trim();
 
 const isLive = (g: Generation) => g.status === "queued" || g.status === "running";
 const guideOf = (g: Generation) => (typeof g.params?.guideUrl === "string" ? g.params.guideUrl : null);
@@ -38,13 +44,15 @@ const blockingOf = (g: Generation) =>
 export function useTakesSummary() {
   const takes = useDirectorTakes();
   const seen = useTakeView((s) => s.seen);
-  const live = takes.filter(isLive);
-  return {
-    count: takes.length,
-    live: live.length,
-    progress: live.length ? live.reduce((sum, g) => sum + (g.progress ?? 0), 0) / live.length : 0,
-    fresh: takes.slice(0, 4).filter((g) => g.status === "done" && !seen.includes(g.id)).length,
-  };
+  return useMemo(() => {
+    const live = takes.filter(isLive);
+    return {
+      count: takes.length,
+      live: live.length,
+      progress: live.length ? live.reduce((sum, g) => sum + (g.progress ?? 0), 0) / live.length : 0,
+      fresh: takes.slice(0, 4).filter((g) => g.status === "done" && !seen.includes(g.id)).length,
+    };
+  }, [takes, seen]);
 }
 
 type Show = "all" | "stills" | "clips";
@@ -67,13 +75,14 @@ function byDay(takes: Generation[]) {
 
 /**
  * Every take, on the camera's screen (its Takes button): by day, stills or clips, click one to compare what you planned
- * with what came back. It took the strip's place under the camera, which crowded the middle (the user).
+ * with what came back. It took the strip's place under the camera, which crowded the middle.
  */
 export function TakesLibrary({ onClose }: { onClose: () => void }) {
   const takes = useDirectorTakes();
   const viewing = useTakeView((s) => s.viewing);
   const seen = useTakeView((s) => s.seen);
   const [show, setShow] = useState<Show>("all");
+  const older = useToolTakesStatus("director");
   // Esc goes back to the camera (once no take is open over it).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -120,7 +129,7 @@ export function TakesLibrary({ onClose }: { onClose: () => void }) {
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           {byDay(shown).map((group) => (
             <section key={group.label} aria-label={group.label}>
-              <p className="sticky top-0 z-10 bg-stage/90 pb-2 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-haze backdrop-blur-sm">
+              <p className="sticky top-0 z-10 bg-stage pb-2 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-haze">
                 {group.label} <span className="tabular ml-1 text-haze/70">{group.takes.length}</span>
               </p>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2.5" role="list">
@@ -132,12 +141,26 @@ export function TakesLibrary({ onClose }: { onClose: () => void }) {
                     active={viewing === g.id}
                     fresh={g.status === "done" && !seen.includes(g.id) && takes.indexOf(g) < 4}
                     delay={Math.min(i, 12) * 0.02}
+                    enter={i < 24}
                     onClick={() => openTake(g.id)}
                   />
                 ))}
               </div>
             </section>
           ))}
+          {older.done ? null : (
+            <div className="flex justify-center pb-2 pt-4">
+              <button
+                type="button"
+                onClick={() => void loadToolTakes("director", true)}
+                disabled={older.loading}
+                className="press squircle inline-flex h-9 items-center gap-2 rounded-[12px] bg-white/[0.06] px-4 text-[12.5px] font-semibold text-fog hover:bg-white/[0.1] hover:text-paper disabled:opacity-60"
+              >
+                {older.loading ? <LoaderCircle size={14} className="animate-spin" /> : <History size={14} />}
+                {older.error ? "Couldn't load older takes · Try again" : older.loading ? "Loading older takes" : "Show older takes"}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid flex-1 place-items-center px-6 text-center">
@@ -161,27 +184,29 @@ function liveBackdrop(g: Generation) {
 }
 
 /** One take: its picture (or what's being made, and how far), its number and age, how many results, new or failed. */
-function TakeTile({ g, number, active, fresh, delay, onClick }: { g: Generation; number: number; active: boolean; fresh: boolean; delay: number; onClick: () => void }) {
+function TakeTile({ g, number, active, fresh, delay, enter, onClick }: { g: Generation; number: number; active: boolean; fresh: boolean; delay: number; enter: boolean; onClick: () => void }) {
   const out = g.outputs[0];
   const guide = guideOf(g);
   const live = isLive(g);
+  const model = modelOf(g);
   return (
     <motion.button
       type="button"
       role="listitem"
-      initial={{ opacity: 0, y: 6 }}
+      aria-label={g.status === "error" ? `Take ${number}, failed` : `Take ${number}${model ? `, ${model}` : ""}`}
+      initial={enter ? { opacity: 0, y: 6 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay }}
       onClick={onClick}
       title={g.status === "error" ? g.error : "Compare what you planned with what came back"}
       className={cn(
-        "press group relative w-full overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,rgb(255_255_255/0.05),rgb(255_255_255/0.015))] text-left transition-shadow duration-200",
+        "press group relative w-full overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,rgb(255_255_255/0.05),rgb(255_255_255/0.015))] text-left transition-shadow duration-200 [content-visibility:auto]",
         active ? "shadow-[0_0_0_2px_var(--color-spike)]" : "shadow-[0_0_0_1px_rgb(255_255_255/0.07)] hover:shadow-[0_0_0_1px_rgb(255_255_255/0.22),0_18px_40px_-18px_rgb(0_0_0/0.9)]",
       )}
       style={{ aspectRatio: aspectRatioOf(g) }}
     >
       {/* Clipped by a clip-path: with a squircle and only overflow-hidden, Chrome left the blurred pictures and the dot
-          field square at the corners, outside the rounded outline (the user). */}
+          field square at the corners, outside the rounded outline. */}
       <span className="absolute inset-0 overflow-hidden rounded-[14px] [clip-path:inset(0_round_14px)]">
         {out?.kind === "video" ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -202,21 +227,21 @@ function TakeTile({ g, number, active, fresh, delay, onClick }: { g: Generation;
           <img src={previewUrl(g.params.startUrl, 480)} alt="" className="size-full object-cover opacity-35 blur-[1px]" />
         ) : guide ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={guide} alt="" className="size-full object-cover opacity-35 blur-[1px]" />
+          <img src={previewUrl(guide, 480)} alt="" loading="lazy" decoding="async" className="size-full object-cover opacity-35 blur-[1px]" />
         ) : null}
 
         <span className="absolute inset-x-2 top-2 flex items-center gap-1">
           {fresh ? <span className="rounded-full bg-spike px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.06em] text-spike-ink">New</span> : null}
           {isClip(g) ? (
-            <span className="flex items-center gap-1 rounded-full bg-black/60 px-1.5 py-px text-[10.5px] font-semibold text-paper backdrop-blur-sm">
+            <span className="flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-px text-[10.5px] font-semibold text-paper">
               <Play size={9} fill="currentColor" /> {clipLength(g)}s
             </span>
           ) : null}
-          {g.outputs.length > 1 ? <span className="tabular ml-auto rounded-full bg-black/60 px-1.5 py-px text-[10.5px] font-semibold text-paper backdrop-blur-sm">×{g.outputs.length}</span> : null}
+          {g.outputs.length > 1 ? <span className="tabular ml-auto rounded-full bg-black/70 px-1.5 py-px text-[10.5px] font-semibold text-paper">×{g.outputs.length}</span> : null}
         </span>
 
         {live ? (
-          // On its way: the generating look every generation has, the Library's included (the user); it fits itself to
+          // On its way: the generating look every generation has, the Library's included; it fits itself to
           // the tile. No Cancel of its own here (a button inside the tile's button); the take's viewer has it.
           <GeneratingField stage={g.stage} progress={g.progress} since={g.createdAt} backdrop={liveBackdrop(g)} />
         ) : g.status === "error" ? (
@@ -229,10 +254,11 @@ function TakeTile({ g, number, active, fresh, delay, onClick }: { g: Generation;
             <span className="min-w-0">
               <span className="tabular block text-[12.5px] font-semibold text-paper">Take {number}</span>
               <span className="block truncate text-[11px] text-paper/60">
-                {g.modelName ?? "Auto"} · {ago(g.createdAt)}
+                {model ? `${model} · ` : ""}
+                {ago(g.createdAt)}
               </span>
             </span>
-            <span className="shrink-0 translate-y-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-paper opacity-0 backdrop-blur-sm transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+            <span className="shrink-0 translate-y-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-paper opacity-0 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.14)] transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
               Compare
             </span>
           </span>
@@ -317,7 +343,7 @@ export function TakeCompare() {
           </ToolButton>
         </ToolGroup>
         <span className="hidden min-w-0 items-center gap-1.5 truncate whitespace-nowrap px-1 text-[12px] text-haze md:flex">
-          <span className="truncate text-fog">{gen.modelName ?? "Auto"}</span>
+          {modelOf(gen) ? <span className="truncate text-fog">{modelOf(gen)}</span> : null}
           {out ? <span className="tabular shrink-0 rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold text-fog">{sizeLabel(out.width, out.height)}</span> : null}
           <span className="shrink-0">· {ago(gen.createdAt)}</span>
         </span>
@@ -341,6 +367,7 @@ export function TakeCompare() {
               onClick={() => {
                 useDirector.getState().loadScene(scene);
                 closeTake();
+                closeLibrary();
               }}
               className="whitespace-nowrap"
             >
@@ -388,7 +415,7 @@ export function TakeCompare() {
             labels={[model && blocking ? (typeof gen.params?.compUrl === "string" ? "Composite" : "Model's view") : "Planned", "Result"]}
             overlay={
               isLive(gen) ? (
-                <GeneratingField stage={gen.stage} progress={gen.progress} prompt={words} since={gen.createdAt} backdrop={guide} onCancel={() => void cancel(gen.id)} />
+                <GeneratingField stage={gen.stage} progress={gen.progress} prompt={words} since={gen.createdAt} backdrop={previewUrl(guide, 960)} onCancel={() => void cancel(gen.id)} />
               ) : gen.status === "error" ? (
                 <div className="absolute inset-0 grid place-items-center bg-black/55 p-6 text-center">
                   <p className="max-w-[420px] text-[13px] leading-relaxed text-tally">

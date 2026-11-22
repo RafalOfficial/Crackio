@@ -8,6 +8,8 @@ import { Check, Clapperboard, Copy, Download, ShieldCheck, Trash, TriangleAlert 
 import type { Generation } from "@/lib/generations/types";
 import { aspectById } from "@/lib/shot";
 import { useGenerations } from "@/lib/hooks/use-generations";
+import { useShallow } from "zustand/react/shallow";
+import { previewUrl } from "@/lib/media-url";
 import { useHandoff } from "@/lib/hooks/use-handoff";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { Media } from "@/components/ui/Media";
@@ -38,6 +40,9 @@ const shotsOf = (g: Generation) => (Array.isArray(g.params?.shots) ? (g.params.s
  * Product Studio's right side: the take you're looking at, big, with the idea behind it; every
  * take in a strip below. Before the first take, the pick you touched last, shown on many products.
  */
+/** A light copy of one of Crackio's pictures for a backdrop or a chip (anything else passes through). */
+const lite = (url: string | undefined, width: number) => (url ? previewUrl(url, width) : url);
+
 export function ProductOutput({
   focus,
   mine,
@@ -49,7 +54,8 @@ export function ProductOutput({
   onFilm?: (p: FilmPicture) => void;
 }) {
   const router = useRouter();
-  const items = useGenerations((s) => s.items);
+  // Product Studio's picture takes only: a job elsewhere doesn't redraw the output.
+  const items = useGenerations(useShallow((s) => s.items.filter((g) => g.tool === "product" && g.params?.kind !== "video")));
   const remove = useGenerations((s) => s.remove);
   const cancel = useGenerations((s) => s.cancel);
   const send = useHandoff((s) => s.send);
@@ -195,7 +201,7 @@ export function ProductOutput({
                 aria-label="Show this take"
               >
                 {o ? <Media media={o} slot="chip" className="size-full object-cover" /> : null}
-                {live(t.gen) ? <GeneratingField bare progress={t.gen.progress} backdrop={t.gen.references[0]?.url} /> : null}
+                {live(t.gen) ? <GeneratingField bare progress={t.gen.progress} backdrop={lite(t.gen.references[0]?.url, 160)} /> : null}
                 {t.gen.status === "error" ? <TriangleAlert size={14} className="absolute inset-0 m-auto text-tally" /> : null}
               </button>
             );
@@ -233,7 +239,7 @@ function Working({ gen, onCancel }: { gen: Generation; onCancel: () => void }) {
   const stage = gen.stage ?? "";
   const at = Math.max(0, steps.findIndex((s) => s.match.test(stage)));
   const label = /re-shoot/i.test(stage) ? "Re-shooting one take" : /saving/i.test(stage) ? "Almost there" : !stage || /queued|starting/i.test(stage) ? "Getting ready" : steps[at].label;
-  const product = gen.references[0]?.url;
+  const product = lite(gen.references[0]?.url, 960);
   return (
     <GeneratingField
       stage={`${label}… · ${Math.min(at + 1, steps.length)} of ${steps.length}`}

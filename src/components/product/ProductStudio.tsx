@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { Clapperboard, Image as ImageIcon, LoaderCircle, Minus, Plus, Type } from "lucide-react";
 import { toolBySlug } from "@/lib/tools";
@@ -39,7 +39,7 @@ import {
   type StudioSpec,
 } from "@/lib/product/vocab";
 import { contextFor, previewSamples, previewSrc, sampleFor, tileSample, type PreviewAxis, type PreviewContext, type SampleId } from "@/lib/product/previews";
-import { Step } from "./Step";
+import { Step, bringIntoView } from "./Step";
 import { WhoPicker, type WhoChoice } from "./WhoPicker";
 import { FilmMode } from "./film/FilmMode";
 import type { FilmPicture } from "./film/PicturePicker";
@@ -139,7 +139,6 @@ function ImageMode({ hidden, onFilm, shootFor }: { hidden: boolean; onFilm: (p: 
   const stepRefs = useRef<Partial<Record<StepId, HTMLElement | null>>>({});
   const timers = useRef<number[]>([]);
   useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
-  const [placeholder, setPlaceholder] = useState(0);
   const notesField = useRef<HTMLTextAreaElement>(null);
   const mentions = useMentions({ textarea: notesField, value: notes, onChange: setNotes });
 
@@ -172,11 +171,18 @@ function ImageMode({ hidden, onFilm, shootFor }: { hidden: boolean; onFilm: (p: 
   const mine = photos[0]?.sample ?? sampleFor(category);
 
   const ideas = PLACEHOLDERS.find(([re]) => category && re.test(category))?.[1] ?? GENERIC;
+  // The example in the empty notes box changes every few seconds: written straight into the box, so the studio doesn't
+  // redraw every 4 s.
   useEffect(() => {
     if (notes) return;
-    const t = setInterval(() => setPlaceholder((p) => p + 1), 4200);
+    const el = notesField.current;
+    let i = 0;
+    const t = setInterval(() => {
+      i += 1;
+      if (el) el.placeholder = ideas[i % ideas.length];
+    }, 4200);
     return () => clearInterval(t);
-  }, [notes]);
+  }, [notes, ideas]);
 
   // The model that will run: your pick, or what Auto resolves to (one that can see your product).
   const autoId = model === "auto" ? resolveAutoId("image", models, defaults, PREFER) : null;
@@ -221,7 +227,7 @@ function ImageMode({ hidden, onFilm, shootFor }: { hidden: boolean; onFilm: (p: 
     const next = list.slice(list.indexOf(from) + 1).find((s) => !nextDone.includes(s)) ?? list.find((s) => !nextDone.includes(s)) ?? null;
     later(() => {
       setOpenStep(next);
-      if (next) later(() => stepRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "start" }), 360);
+      if (next) later(() => bringIntoView(stepRefs.current[next]), 360);
     }, 200);
   }
 
@@ -415,7 +421,7 @@ function ImageMode({ hidden, onFilm, shootFor }: { hidden: boolean; onFilm: (p: 
                 onChange={(e) => setNotes(e.target.value)}
                 onKeyDown={(e) => void mentions.onKeyDown(e)}
                 rows={2}
-                placeholder={ideas[placeholder % ideas.length]}
+                placeholder={ideas[0]}
                 className="w-full resize-none rounded-[14px] bg-white/[0.03] px-3.5 py-3 text-[14px] leading-relaxed outline-none shadow-[inset_0_0_0_1px_var(--color-line)] placeholder:text-haze focus:shadow-[inset_0_0_0_1px_var(--color-line-strong)]"
               />
               {mentions.menu}
@@ -439,7 +445,7 @@ function ImageMode({ hidden, onFilm, shootFor }: { hidden: boolean; onFilm: (p: 
                         active ? "text-[#16131b]" : "bg-white/[0.04] text-fog hover:bg-white/[0.08] hover:text-paper",
                       )}
                     >
-                      {active ? <motion.span layoutId="format-pill" className="absolute inset-0 rounded-[12px] bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
+                      {active ? <motion.span layoutId="format-pill" layoutDependency={format} className="absolute inset-0 rounded-[12px] bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
                       <span className="relative">
                         <RatioGlyph ratio={r.w / r.h} />
                       </span>
@@ -491,7 +497,7 @@ function ImageMode({ hidden, onFilm, shootFor }: { hidden: boolean; onFilm: (p: 
           </div>
 
           {/* Sticks to the bottom of the window while you scroll the picks, so Shoot is always in reach. */}
-          <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat/90 p-3 backdrop-blur-xl">
+          <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat p-3 shadow-[0_-14px_28px_-18px_rgb(0_0_0/0.7)]">
             {error ? <p className="text-[12.5px] text-tally">{error}</p> : null}
             <div className="flex min-h-5 items-center justify-between gap-3">
               {photos.length ? (
@@ -562,19 +568,22 @@ export function ProductStudio() {
   const tool = toolBySlug("product")!;
   // The mode lives in the address (?mode=video), so a reload, a shared link or Back opens the same one.
   const params = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const mode: Mode = params.get("mode") === "video" ? "video" : "image";
   const [incoming, setIncoming] = useState<FilmPicture | null>(null);
   // "Shoot one" from Video mode: Image mode opens on a creator shot in Story format.
   const [shootFor, setShootFor] = useState(0);
+  // Video mode stays mounted (hidden) once opened, so going back to Image and returning keeps your picks.
+  const [filmed, setFilmed] = useState(mode === "video");
+  if (mode === "video" && !filmed) setFilmed(true);
 
   function switchTo(next: Mode) {
     const q = new URLSearchParams(params.toString());
     if (next === "video") q.set("mode", "video");
     else q.delete("mode");
-    router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Next's router follows replaceState (useSearchParams updates): no navigation, no refetch.
+    window.history.replaceState(null, "", q.size ? `${pathname}?${q}` : pathname);
+    if (window.scrollY > 120) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
@@ -601,7 +610,7 @@ export function ProductStudio() {
             switchTo("video");
           }}
         />
-        {mode === "video" || incoming ? (
+        {filmed || incoming ? (
           <div className={cn(mode !== "video" && "hidden")}>
             <FilmMode
               incoming={incoming}
@@ -634,7 +643,7 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
           onClick={() => onChange(o.id)}
           className={cn("relative flex h-10 items-center gap-2 rounded-full px-5 text-[13.5px] font-bold transition-colors", mode === o.id ? "text-[#16131b]" : "text-fog hover:text-paper")}
         >
-          {mode === o.id ? <motion.span layoutId="studio-mode" className="absolute inset-0 rounded-full bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
+          {mode === o.id ? <motion.span layoutId="studio-mode" layoutDependency={mode} className="absolute inset-0 rounded-full bg-paper" transition={{ type: "spring", bounce: 0.18, duration: 0.38 }} /> : null}
           <span className="relative">{o.icon}</span>
           <span className="relative">{o.label}</span>
         </button>

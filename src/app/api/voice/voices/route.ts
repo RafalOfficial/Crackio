@@ -26,9 +26,9 @@ export async function POST(request: Request) {
   if (!body.success) return Response.json({ error: "Name the voice and say what it says." }, { status: 400 });
   const b = body.data;
   if (b.source === "clone" && !b.consent) return Response.json({ error: "Confirm the voice is yours, or that its owner agreed." }, { status: 400 });
-  const file = path.join(scratchDir, b.file);
-  if (!(await fs.stat(file).catch(() => null))) return Response.json({ error: "That clip is gone. Add it again." }, { status: 404 });
+  const file = path.join(/*turbopackIgnore: true*/ scratchDir, b.file);
+  if (!(await fs.stat(/*turbopackIgnore: true*/ file).catch(() => null))) return Response.json({ error: "That clip is gone. Add it again." }, { status: 404 });
   const voice = await addVoice({ name: b.name, desc: b.desc, text: b.text, sampleFile: file, source: b.source, consent: b.consent, language: b.language });
-  await fs.rm(file, { force: true });
+  await fs.rm(/*turbopackIgnore: true*/ file, { force: true });
   return Response.json({ voice }, { status: 201 });
 }

@@ -236,7 +236,7 @@ export async function texts(target: ComfyTarget, graph: Record<string, unknown>,
  * A voice sample (an upload or a recording): a clean mono WAV of up to 30 seconds without the silence around it, how good
  * it is to clone from, and the words it says when a machine can hear them.
  */
-export async function readSample(file: string, signal: AbortSignal) {
+export async function readSample(file: string, signal: AbortSignal, opts: { /** false: its words are known already, so no machine is asked to type them out. */ hear?: boolean } = {}) {
   const name = `${nanoid(10)}.wav`;
   const out = await scratchPath(name);
   await toWav(file, out, { rate: 24000, maxSeconds: 30, trim: true, signal });
@@ -244,7 +244,7 @@ export async function readSample(file: string, signal: AbortSignal) {
   if (look.seconds < 2) throw new VoiceSetupError("That clip has almost no speech in it. Use 10 to 30 seconds of someone talking.");
   let text = "";
   // Typing it out needs only Qwen3-ASR (its aligner times words, which a sample doesn't need).
-  const place = await machineWith((m) => m.files.some((f) => /qwen3-asr/i.test(f)));
+  const place = opts.hear === false ? null : await machineWith((m) => m.files.some((f) => /qwen3-asr/i.test(f)));
   if (place?.target) {
     const t = place.target;
     try {
@@ -286,8 +286,8 @@ export async function previewVoice(file: string, sampleText: string, model: Voic
   if (!m.can.clone) throw new VoiceSetupError(`${m.name} can't clone voices: it speaks in voices of its own.`);
   const place = await machineFor(model);
   if (!place) throw new VoiceSetupError(`${m.name} isn't on any of your GPUs yet. Get it under Voice models, then try again.`, 409);
-  const src = path.join(scratchDir, file);
-  if (!(await fs.stat(src).catch(() => null))) throw new VoiceSetupError("That clip is gone. Add it again.", 404);
+  const src = path.join(/*turbopackIgnore: true*/ scratchDir, file);
+  if (!(await fs.stat(/*turbopackIgnore: true*/ src).catch(() => null))) throw new VoiceSetupError("That clip is gone. Add it again.", 404);
   const variant = m.variants.find((v) => place.machine.files.includes(v.file.name)) ?? m.variants[0];
   const said = line.trim().slice(0, 300) || "Hi! This is how I sound now. Pretty close, right?";
   const up = await withTarget(place.target, () => uploadFile(src, signal, "voice"));
@@ -306,13 +306,13 @@ export async function previewVoice(file: string, sampleText: string, model: Voic
   );
   const f = files.find((x) => x.filename.includes("voice-preview"));
   if (!f) throw new EngineError(`${m.name} made no sound.`);
-  const raw = path.join(DATA_DIR, "cache", "voice", `${nanoid(8)}${path.extname(f.filename)}`);
-  await fs.mkdir(path.dirname(raw), { recursive: true });
-  await fs.writeFile(raw, (await withTarget(place.target, () => downloadOutput(f, signal))).data);
+  const raw = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "voice", `${nanoid(8)}${path.extname(f.filename)}`);
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(/*turbopackIgnore: true*/ raw), { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ raw, (await withTarget(place.target, () => downloadOutput(f, signal))).data);
   const name = `${nanoid(10)}.wav`;
   const out = await scratchPath(name);
   await toWav(raw, out, { rate: 24000, signal });
-  await fs.rm(raw, { force: true });
+  await fs.rm(/*turbopackIgnore: true*/ raw, { force: true });
   return { url: scratchUrl(name), file: name, peaks: await peaksOf(out, 90), seconds: (await lookAt(out)).seconds, model: m.name, gpu: place.machine.gpu ?? place.machine.label };
 }
 
@@ -333,18 +333,18 @@ export async function designVoice(description: string, line: string, signal: Abo
     graph[`save${i}`] = { class_type: "SaveAudio", inputs: { audio: [`say${i}`, 0], filename_prefix: `crackio/voice-design-${i}` } };
   });
   const files = await texts(place.target, graph, "Voice · designing", signal);
-  const tmp = path.join(DATA_DIR, "cache", "voice");
-  await fs.mkdir(tmp, { recursive: true });
+  const tmp = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "voice");
+  await fs.mkdir(/*turbopackIgnore: true*/ tmp, { recursive: true });
   return Promise.all(
     [0, 1, 2].map(async (i) => {
       const f = files.find((x) => x.filename.includes(`voice-design-${i}`));
       if (!f) throw new EngineError("VoxCPM2 made no sound.");
-      const raw = path.join(tmp, `${nanoid(8)}${path.extname(f.filename)}`);
-      await fs.writeFile(raw, (await withTarget(place.target!, () => downloadOutput(f, signal))).data);
+      const raw = path.join(/*turbopackIgnore: true*/ tmp, `${nanoid(8)}${path.extname(f.filename)}`);
+      await fs.writeFile(/*turbopackIgnore: true*/ raw, (await withTarget(place.target!, () => downloadOutput(f, signal))).data);
       const name = `${nanoid(10)}.wav`;
       const out = await scratchPath(name);
       await toWav(raw, out, { rate: 24000, signal });
-      await fs.rm(raw, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ raw, { force: true });
       return { url: scratchUrl(name), file: name, peaks: await peaksOf(out, 90), text: words, seconds: (await lookAt(out)).seconds };
     }),
   );

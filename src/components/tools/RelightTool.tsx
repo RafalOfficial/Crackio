@@ -2,30 +2,12 @@
 
 import { useRef, useState } from "react";
 import { toolBySlug } from "@/lib/tools";
-import { LIGHT_SETUPS, MOODS, kelvinPhrase, kelvinToRgb } from "@/lib/director/vocab";
+import { LIGHT_SETUPS, MOODS, kelvinToRgb } from "@/lib/director/vocab";
+import { describeLight, relightPrompt, type Light } from "@/lib/relight";
 import { Slider } from "@/components/ui/Slider";
+import { Switch } from "@/components/ui/Panel";
 import { ControlSection, EditToolShell } from "./EditToolShell";
 import { cn } from "@/lib/cn";
-
-type Light = { azimuth: number; elevation: number; softness: number; kelvin: number; mood: string | null; background: boolean };
-
-/** Light direction relative to the viewer (camera at 0°), in words. */
-export function describeLight(l: Light) {
-  const az = ((((l.azimuth + 180) % 360) + 360) % 360) - 180;
-  const side = az > 0 ? "the right" : "the left";
-  const a = Math.abs(az);
-  let dir: string;
-  if (l.elevation >= 72) dir = "a hard top light from directly above";
-  else if (l.elevation <= -10) dir = "an eerie light from below the subject";
-  else if (a < 22) dir = "a frontal key light from the camera's direction";
-  else if (a < 67) dir = `a key light from ${side} at about 45 degrees${l.elevation > 38 ? ", high enough to leave a small triangle of light on the shadow-side cheek" : ""}`;
-  else if (a < 112) dir = `a side light from ${side}, leaving the other side in shadow`;
-  else if (a < 157) dir = `a rim light from behind on ${side}, outlining the subject's edges`;
-  else dir = "a strong backlight from directly behind the subject";
-  const quality = l.softness < 0.25 ? "hard light with crisp, defined shadows" : l.softness < 0.6 ? "medium-soft light" : "very soft, diffused light with gentle shadows";
-  const mood = MOODS.find((m) => m.id === l.mood);
-  return `${dir}; ${quality}; ${kelvinPhrase(l.kelvin)}${mood ? `; ${mood.phrase}` : ""}`;
-}
 
 export function RelightTool() {
   const tool = toolBySlug("relight")!;
@@ -39,9 +21,7 @@ export function RelightTool() {
       actionLabel="Relight"
       compile={() => ({
         summary: `Relight · ${describeLight(light).split(";")[0]}`,
-        prompt: `Relight image 1 with ${describeLight(light)}. Keep the subject, pose, expression, composition, framing, colors of objects and every detail identical; change only the lighting: light direction, shadows, highlights, contrast and color temperature${
-          light.background ? ", including how the background is lit" : ", leaving the background lighting as it is"
-        }. Make the new light physically consistent across skin, fabric and surfaces. Photorealistic, no text or watermarks.`,
+        prompt: relightPrompt(light),
         params: { light },
       })}
       controls={() => (
@@ -73,7 +53,7 @@ export function RelightTool() {
 
           <ControlSection title="Fine-tune">
             <div className="space-y-4 rounded-[14px] bg-flat p-3.5">
-              <Slider label="Height" value={light.elevation} min={-20} max={85} onChange={(elevation) => set({ elevation })} format={(v) => `${Math.round(v)}°`} hint={["From below", "From above"]} />
+              <Slider label="Height" value={light.elevation} min={-20} max={85} origin={0} onChange={(elevation) => set({ elevation })} format={(v) => `${Math.round(v)}°`} hint={["From below", "From above"]} />
               <Slider
                 label="Softness"
                 value={light.softness}
@@ -106,7 +86,7 @@ export function RelightTool() {
                   onClick={() => set(light.mood === m.id ? { mood: null } : { mood: m.id, kelvin: m.kelvin, softness: m.softness })}
                   aria-pressed={light.mood === m.id}
                   title={m.plain}
-                  className={cn("rounded-[10px] p-1 text-center", light.mood === m.id ? "bg-apple-2 shadow-[inset_0_0_0_1.5px_var(--color-spike)]" : "hover:bg-apple-2/70")}
+                  className={cn("press squircle rounded-[10px] p-1 text-center", light.mood === m.id ? "bg-apple-2 shadow-[inset_0_0_0_1.5px_var(--color-spike)]" : "hover:bg-apple-2/70")}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={`/assets/vocab-mood-${m.id}.webp`} alt="" className="aspect-square w-full rounded-[7px] object-cover" />
@@ -116,13 +96,13 @@ export function RelightTool() {
             </div>
           </ControlSection>
 
-          <label className="mt-5 flex items-center justify-between gap-3 rounded-[12px] bg-flat px-3.5 py-3 text-[13px]">
+          <div className="mt-5 flex items-center justify-between gap-3 rounded-[12px] bg-flat px-3.5 py-3 text-[13px]">
             <span>
               <span className="block font-semibold">Relight the background too</span>
               <span className="text-[12px] text-haze">Off keeps the background&rsquo;s light as it is.</span>
             </span>
-            <input type="checkbox" checked={light.background} onChange={(e) => set({ background: e.target.checked })} className="size-4 accent-[var(--color-spike)]" />
-          </label>
+            <Switch checked={light.background} onChange={(v) => set({ background: v })} title="Relight the background too" />
+          </div>
         </>
       )}
     />
@@ -148,15 +128,26 @@ function LightRing({ azimuth, kelvin, onChange }: { azimuth: number; kelvin: num
     <svg
       ref={ref}
       viewBox="-90 -90 180 180"
-      className="mx-auto w-full max-w-[260px] cursor-grab touch-none rounded-[14px] bg-flat active:cursor-grabbing"
+      className="mx-auto w-full max-w-[260px] cursor-grab touch-none rounded-[14px] bg-flat outline-none focus-visible:shadow-[0_0_0_2px_var(--color-spike)] active:cursor-grabbing"
       onPointerDown={(e) => {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
         set(e);
       }}
       onPointerMove={(e) => e.buttons && set(e)}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 15 : 5;
+        const turn = e.key === "ArrowRight" || e.key === "ArrowUp" ? step : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -step : 0;
+        if (!turn) return;
+        e.preventDefault();
+        onChange(((((azimuth + turn + 180) % 360) + 360) % 360) - 180);
+      }}
+      tabIndex={0}
       role="slider"
       aria-label="Light direction"
+      aria-valuemin={-180}
+      aria-valuemax={180}
       aria-valuenow={azimuth}
+      aria-valuetext={Math.abs(azimuth) < 15 ? "From the front" : Math.abs(azimuth) > 160 ? "From behind" : `${Math.abs(Math.round(azimuth))} degrees ${azimuth > 0 ? "right" : "left"}`}
     >
       <defs>
         <radialGradient id="ring-head" cx={round2(0.5 + Math.sin(rad) * 0.35)} cy={round2(0.5 + Math.cos(rad) * 0.35)}>

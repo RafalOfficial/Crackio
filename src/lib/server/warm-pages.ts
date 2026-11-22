@@ -17,7 +17,7 @@ export function warmPagesSoon() {
  * Every page in the sidebar, in its order. (A list, not a scan of src/app: a folder scan here makes
  * the build trace the whole project.) Pages with a [param] compile on their first visit.
  */
-const PAGES = ["/", "/create", "/video", "/templates", "/library", ...TOOLS.map((t) => t.href), "/settings/connections", "/settings/models"];
+const PAGES = ["/", "/create", "/video", "/templates", "/library", ...TOOLS.map((t) => t.href), "/settings/accounts", "/settings/tools"];
 
 async function warmPages() {
   const origin = process.env.__NEXT_PRIVATE_ORIGIN || `http://localhost:${process.env.PORT || 3000}`;

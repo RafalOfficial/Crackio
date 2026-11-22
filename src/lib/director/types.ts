@@ -1,4 +1,5 @@
 import type { AspectId } from "@/lib/shot";
+import type { Timeline } from "./timeline";
 
 /** What a scene element is. It decides its default size and how the prompt talks about it. */
 export type ElementKind = "person" | "animal" | "object" | "product" | "vehicle";
@@ -114,6 +115,11 @@ export type PlacePhoto = {
 export type Place = {
   /** Optional photo of the location. `view` appears once its 3D set has been built. */
   image?: { url: string; width: number; height: number; view?: PlaceView };
+  /**
+   * Director video mode: a video as the place, filmed again along the Camera path you set (server/director-video). Its
+   * first frame is `image` (the 3D set is built from it as from a photo); the timeline is the video's length.
+   */
+  video?: PlaceVideo;
   /** More photos from the same spot, facing other ways (two back to back, three or four all around). */
   more?: PlacePhoto[];
   /** Words for the location: "rainy side street at night". */
@@ -124,6 +130,19 @@ export type Place = {
   lifted?: boolean;
   /** The place all around the photo's spot as one 360 picture (equirectangular, 21:9: 154 degrees of latitude); see server/world. */
   world?: PlaceWorld;
+};
+
+/** A video as the place (Director video mode): as uploaded, and what it is (24 fps on the timeline, at most 10 s filmed). */
+export type PlaceVideo = {
+  url: string;
+  width: number;
+  height: number;
+  fps: number;
+  frames: number;
+  duration: number;
+  audio?: boolean;
+  /** How far the video's middle is from its camera (set units, measured by MoGe-3): the camera turns round that point. */
+  focus?: number;
 };
 
 /** How far everything in the world is (server/world-depth): the stage builds it as a place to walk into. */
@@ -139,6 +158,11 @@ export type PlaceWorld = {
   light?: WorldLight;
   /** Its light was put on the set once (after that the light is yours). */
   lit?: boolean;
+  /**
+   * The photo as the stage shows it where it looks (Director v2 shows the photo's own pixels there, sharper than the
+   * world's copy): set once Fix this spot changed part of it; the place's own photo until then.
+   */
+  photo?: { url: string; width: number; height: number };
 };
 
 export type CameraRig = {
@@ -187,4 +211,6 @@ export type Scene = {
   aspect: AspectId;
   /** Anything else, in the person's own words (any language). */
   notes: string;
+  /** Keys that make the set a moving shot (lib/director/timeline). None: a still. */
+  timeline?: Timeline;
 };

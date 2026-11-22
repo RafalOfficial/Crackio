@@ -6,6 +6,7 @@ import { Check, Copy, Download, MessageSquareQuote, ShieldCheck, Trash, Triangle
 import type { Generation } from "@/lib/generations/types";
 import { aspectById } from "@/lib/shot";
 import { useGenerations } from "@/lib/hooks/use-generations";
+import { useShallow } from "zustand/react/shallow";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { Media } from "@/components/ui/Media";
 import { GeneratingField } from "@/components/ui/GeneratingField";
@@ -34,7 +35,8 @@ export const isFilmTake = (g: Generation) => g.tool === "product" && g.params?.k
  * every take in a strip below. Before the first take, the pick you touched last, filmed on samples.
  */
 export function FilmOutput({ focus, like }: { focus: { axis: FilmAxis; id: string }; like: string | null }) {
-  const items = useGenerations((s) => s.items);
+  // Video mode's takes only: a job elsewhere doesn't redraw the output.
+  const items = useGenerations(useShallow((s) => s.items.filter(isFilmTake)));
   const remove = useGenerations((s) => s.remove);
   const cancel = useGenerations((s) => s.cancel);
   const [pick, setPick] = useState<string | null>(null);

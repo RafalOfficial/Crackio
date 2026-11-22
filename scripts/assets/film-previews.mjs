@@ -469,30 +469,6 @@ async function pool(tasks, limit) {
 const tasks = [];
 if (command === "stills") {
   for (const s of STILLS.filter((x) => !wanted.length || wanted.includes(x.id))) tasks.push({ label: `still ${s.id}`, run: () => still(s) });
-} else if (command === "voices") {
-  // A short sample of every preset voice, so you can hear one before you pick it (xAI's speech, on your Grok sign-in).
-  const VOICE_IDS = ["ara", "eve", "aurora", "carina", "celeste", "iris", "liora", "luna", "ursa", "leo", "rex", "sal", "atlas", "orion", "cosmo", "kepler", "lux"];
-  const os = await import("node:os");
-  const auth = JSON.parse(await fs.readFile(path.join(os.homedir(), ".grok", "auth.json"), "utf8"));
-  const token = Object.values(auth).find((e) => e && e.key)?.key;
-  await fs.mkdir(path.join(outDir, "voices"), { recursive: true });
-  for (const id of VOICE_IDS.filter((v) => !wanted.length || wanted.includes(v))) {
-    tasks.push({
-      label: `voice ${id}`,
-      run: async () => {
-        const dest = path.join(outDir, "voices", `${id}.mp3`);
-        if (!force && (await exists(dest))) return;
-        const res = await fetch("https://api.x.ai/v1/tts", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ text: "Okay, so I've been using this every single morning… and honestly? I'm not going back.", voice_id: id, language: "en", output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 64000 } }),
-        });
-        if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 200)}`);
-        await fs.writeFile(dest, Buffer.from(await res.arrayBuffer()));
-        console.log(`voice ${id}`);
-      },
-    });
-  }
 } else if (command === "clips") {
   // <axis>, <axis>:<id> or <axis>:<id>:<still>; nothing means every clip still missing.
   for (const [axis, options] of Object.entries(CLIPS)) {

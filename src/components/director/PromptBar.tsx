@@ -1,23 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown, Clapperboard, Copy, CornerDownLeft, Expand, LoaderCircle, Mountain, PersonStanding, ScrollText, TriangleAlert, X } from "lucide-react";
 import { useDirector } from "@/lib/director/store";
-import { useCompiled } from "@/lib/director/use-compiled";
+import { compiledOf } from "@/lib/director/use-compiled";
 import { briefPictures, compileScene, swapPrompt } from "@/lib/director/compile";
+import type { Scene } from "@/lib/director/types";
 import { useGenerations } from "@/lib/hooks/use-generations";
 import { aspectById, sizeFor } from "@/lib/shot";
 import { captureShot } from "./stage/capture";
+import { agentShoot } from "./agent-hook";
 import { useShotModel } from "./shot-model";
-import { useModelChoice } from "@/lib/hooks/use-model-choice";
+import { askForModel, useModelChoice } from "@/lib/hooks/use-model-choice";
 import { useModelsStore } from "@/lib/hooks/use-models";
 import { usePlaceModel } from "./place-model";
 import { generateLocation, useLocation } from "./location";
 import { extendPlace, useExtend } from "./extend";
 import { arrangeFromWords, useArrange } from "./arrange";
 import { aboutTime, loadTypical, useTypical } from "./around";
-import { DIRECTOR_MODELS, SHOT_MODELS } from "./models";
+import { DIRECTOR_MODELS, PLACE_CHOICES, SHOT_CHOICES, shotCast, shotModelOf } from "./models";
+import { useStageView } from "./stage/view";
+import { useFeel } from "@/lib/director/feel";
+import { flatPhotos, photoMeters } from "@/lib/director/moge-scale";
 import { shotSizeFor, useDepthFigures, useDirectorShot, usePlaceSize, useShotSize, type DepthFigures } from "./shot-model";
 import { useModelInfo } from "@/lib/hooks/use-custom-models";
 import { lorasFor, setLora, useModelLoras } from "@/lib/hooks/use-model-loras";
@@ -27,7 +32,9 @@ import { LocalTimeLine } from "@/components/models/LocalTimeLine";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { ChipButton, GLASS_CHIP } from "@/components/dashboard/ComposerControls";
 import { copyText } from "@/lib/clipboard";
+import { previewUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
+import { useTakeView } from "./take-view";
 
 async function uploadBlob(blob: Blob, name: string) {
   const body = new FormData();
@@ -38,35 +45,45 @@ async function uploadBlob(blob: Blob, name: string) {
   return data.items[0].url;
 }
 
+/** The swap as the server writes it for a model that takes the shot and up to four subjects' pictures. */
+function briefOf(scene: Scene) {
+  const subjects = briefPictures(scene, 99).subjects.slice(0, 4);
+  const pictures = new Map(subjects.map((s, i) => [s.el.id, { image: i + 2, sheet: s.sheet, matched: Boolean(s.el.cast?.sheet || s.el.views?.length) }]));
+  return { prompt: swapPrompt(scene, pictures), subjects };
+}
+
 /**
  * Notes, model and the one button. What's sent: the place as your camera sees it (what the photo doesn't show filled
  * in), a colored stand-in where each subject stands, each subject's own picture from the side the camera sees it, and
  * a prompt written from the set. Crackio fits that to what the model takes when the take runs (server/director).
  */
-export function PromptBar() {
+/**
+ * `lean`: Director v2 leaves Extend out (Fix this spot replaces it). `phone`: the Director full screen on a phone, the
+ * bar floating over the stage: upright, the words over a row of chips with a smaller Shoot; sideways, all on one line.
+ */
+export function PromptBar({ lean = false, phone = null }: { lean?: boolean; phone?: "portrait" | "landscape" | null } = {}) {
   const scene = useDirector((s) => s.scene);
   const { setScene } = useDirector.getState();
-  const compiled = useCompiled();
-  // The swap as the server writes it for a model that takes the shot and up to four subjects' pictures.
-  const brief = useMemo(() => {
-    const subjects = briefPictures(scene, 99).subjects.slice(0, 4);
-    const pictures = new Map(subjects.map((s, i) => [s.el.id, { image: i + 2, sheet: s.sheet, matched: Boolean(s.el.cast?.sheet || s.el.views?.length) }]));
-    return { prompt: swapPrompt(scene, pictures), subjects };
-  }, [scene]);
+  // Checked a moment behind the typing (React renders the key first): compiling the set on every key made typing lag.
+  const settled = useDeferredValue(scene);
+  const compiled = compiledOf(settled);
+  const [showPrompt, setShowPrompt] = useState(false);
+  // Written only while it's shown (Shoot writes its own from the set as it is then).
+  const brief = useMemo(() => (showPrompt ? briefOf(settled) : null), [settled, showPrompt]);
   const submit = useGenerations((s) => s.submit);
   // The place's model as you chose it (with none, the first ready one: placeDefault below); the cast's drawings too.
   const [model] = useModelChoice("image", "edit", { first: DIRECTOR_MODELS });
-  // Shots are drawn by the ControlNet model: the set's depth and the words, no pictures to copy (models.ts).
+  // Shots keep the place's own pixels (an image model edits the camera view) unless a ControlNet redraw is picked (models.ts).
   const models = useModelsStore((s) => s.models);
   const shotChoice = useDirectorShot((s) => s.model);
-  // Nothing chosen: the first Director shot model that’s ready (Z-Image Director, else Qwen Director), as the place does.
-  const shotModel = SHOT_MODELS.includes(shotChoice) ? shotChoice : (SHOT_MODELS.find((id) => models.find((m) => m.id === id)?.available) ?? SHOT_MODELS[0]);
+  // Nothing chosen: the first shot model that’s ready (Qwen-Image 2.1 first), as the place does.
+  const shotModel = shotModelOf(shotChoice, models);
   // The sizes the shot model draws at (its own list, 4K where it offers it).
   const resolution = useModelInfo(shotModel).caps?.resolution;
   const picked = useShotSize((s) => s.size);
   const shotSize = shotSizeFor(resolution, picked);
   // With nothing chosen yet (a new studio, a fresh install), the place is made with the first of the Director's place
-  // models that's ready, not a "Choose a model" step: no Auto and no guessing, just what's there (the user). A choice
+  // models that's ready, not a "Choose a model" step: no Auto and no guessing, just what's there. A choice
   // made in a picker still wins.
   const placeDefault = model !== "auto" ? model : (DIRECTOR_MODELS.find((id) => models.find((m) => m.id === id)?.available) ?? model);
   useEffect(() => useShotModel.setState({ model: placeDefault }), [placeDefault]);
@@ -80,7 +97,7 @@ export function PromptBar() {
   const shown: Mode =
     mode === "environment" && hasPlace
       ? "generate"
-      : mode === "extend" && !scene.place.image?.view
+      : mode === "extend" && (lean || !scene.place.image?.view)
         ? hasPlace
           ? "generate"
           : "environment"
@@ -101,7 +118,7 @@ export function PromptBar() {
   const working = shown === "environment" ? location.busy : shown === "extend" ? Boolean(extending.stage) : shown === "arrange" ? arranging.busy : busy;
   const words = shown === "environment" ? placeWords : shown === "extend" ? extendWords : shown === "arrange" ? arrangeWords : scene.notes;
   const setWords = (v: string) =>
-    shown === "environment" ? setPlaceWords(v) : shown === "extend" ? setExtendWords(v) : shown === "arrange" ? setArrangeWords(v) : setScene({ notes: v });
+    shown === "environment" ? setPlaceWords(v) : shown === "extend" ? setExtendWords(v) : shown === "arrange" ? setArrangeWords(v) : setScene({ notes: v }, "typing");
   const go = () => {
     if (shown === "environment") {
       if (placeWords.trim()) void generateLocation(placeWords);
@@ -121,28 +138,43 @@ export function PromptBar() {
     } else void shoot();
   };
   const [error, setError] = useState<string | null>(null);
-  const [showPrompt, setShowPrompt] = useState(false);
   const [copied, setCopied] = useState(false);
+  // The set's checks wait until there's a set to check, or you tried to shoot: on an empty set they nagged at once.
+  const [tried, setTried] = useState(false);
+  const viewingTake = useTakeView((s) => Boolean(s.viewing));
+  const sideways = phone === "landscape";
 
   async function shoot() {
     if (busy) return;
+    setTried(true);
     if (!scene.elements.length && !scene.notes.trim() && !scene.place.image && !scene.place.text.trim()) {
       setError("Add a place or someone to the set, or describe the shot in the notes.");
+      return;
+    }
+    // No shot model on your GPUs and none picked: its picker opens (your Comfy key's models are there too) rather than
+    // sending a shot nothing can make.
+    if (shotModel === "auto") {
+      if (!askForModel("image")) setError("Pick the model to shoot with, next to the words.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
       const final = compileScene(scene);
-      const size = sizeFor(scene.aspect, 1536);
+      const brief = briefOf(scene);
+      // Kept, the camera view is the picture the model edits: captured at the size it's drawn at (2K's long edge).
+      const how = shotCast(shotModel);
+      const size = sizeFor(scene.aspect, how === "real" ? 2048 : 1536);
       const shot = await captureShot(size.width, size.height);
-      const [guideUrl, blockingUrl, depthUrl, plateUrl, idsUrl, lookUrl] = await Promise.all([
+      const [guideUrl, blockingUrl, depthUrl, plateUrl, idsUrl, lookUrl, setUrl, cutsUrl] = await Promise.all([
         uploadBlob(shot.guide, "guide.png"),
         uploadBlob(shot.blocking, "blocking.png"),
         uploadBlob(shot.depth, "depth.png"),
         uploadBlob(shot.plate, "plate.png"),
         uploadBlob(shot.ids, "ids.png"),
         uploadBlob(shot.look, "look.png"),
+        shot.set ? uploadBlob(shot.set, "set.png") : Promise.resolve(undefined),
+        uploadBlob(shot.cuts, "cuts.png"),
       ]);
       const summary = [final.sheet.map((s) => s.value).join(" · "), scene.notes.trim()].filter(Boolean).join(" — ");
       await submit({
@@ -161,13 +193,18 @@ export function PromptBar() {
           guideUrl,
           blockingUrl,
           depthUrl,
-          comp: { plateUrl, idsUrl, lookUrl, boxes: shot.boxes },
-          // Drawn through a ControlNet (server/director-fresh `runDirectorControl`): the depth of the view the camera sees
-          // holds the camera and everyone's marks, the words say who is where. "fresh" (the pieces as reference pictures,
-          // 2026-10-29) and "swap" and "real" remain for comparison.
-          cast: "control",
+          comp: { plateUrl, idsUrl, lookUrl, cutsUrl, ...(setUrl ? { setUrl } : {}), boxes: shot.boxes },
+          // "real" (server/director-real): the camera view edited, the challenge winner's way, so the place keeps its own
+          // pixels and look. "control" (server/director-fresh `runDirectorControl`): redrawn through a ControlNet on the
+          // depth of the view. "fresh" and "swap" remain for comparison.
+          cast: how,
           figures: { auto: "auto", none: false, soft: "auto", "stand-ins": true }[useDepthFigures.getState().figures] ?? "auto",
           options: { resolution: shotSize, loras: lorasFor(shotModel) },
+          // The place is the photo's own 3D set (Director v2, Stage3D PhotoSet): a Camera moved off the photo's spot is
+          // re-shot from the photo (server/director-real).
+          photoSet: useStageView.getState().v2 && useFeel.getState().place === "3d" && Boolean(scene.place.image?.view), mogeMeters: scene.place.image ? photoMeters.get(scene.place.image.url) : undefined,
+          // MoGe-3 measured the photo flat (a painting) and the stage kept MoGe-2's relief: re-shot from the stage's view.
+          ...(scene.place.image && flatPhotos.has(scene.place.image.url) ? { photoFlat: true } : {}),
           placeModel: usePlaceModel.getState().model ?? undefined,
           // The place came from the surround (Stage3D): real pictures' pixels, nothing to redraw.
           surround: Boolean(scene.place.image),
@@ -183,7 +220,15 @@ export function PromptBar() {
     }
   }
 
+  // An agent's Director (agent-hook): this Shoot, its last error and its model, reachable from Crackio's hidden page.
+  useEffect(() => {
+    agentShoot.run = shoot;
+    agentShoot.error = error;
+    agentShoot.model = shotModel;
+  });
+
   const warning = compiled.warnings[0];
+  const nag = Boolean(warning) && !viewingTake && (tried || scene.elements.length > 0 || Boolean(scene.place.image));
 
   return (
     <div className="relative">
@@ -201,7 +246,7 @@ export function PromptBar() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={async () => {
-                    if (!(await copyText(brief.prompt))) return;
+                    if (!brief || !(await copyText(brief.prompt))) return;
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1400);
                   }}
@@ -214,13 +259,13 @@ export function PromptBar() {
                 </button>
               </div>
             </div>
-            <p className="scroll-thin mt-2 max-h-[34vh] overflow-y-auto text-[13px] leading-relaxed text-paper/90">{brief.prompt}</p>
+            <p className="scroll-thin mt-2 max-h-[34vh] overflow-y-auto text-[13px] leading-relaxed text-paper/90">{brief?.prompt}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="inline-flex h-8 items-center rounded-lg bg-flat px-2 text-[12px] text-fog">Image 1: your shot, with a stand-in for each subject</span>
-              {brief.subjects.map((x, i) => (
+              {brief?.subjects.map((x, i) => (
                 <span key={x.el.id} className="inline-flex items-center gap-1.5 rounded-lg bg-flat py-1 pl-1 pr-2 text-[12px] text-fog">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={x.url} alt="" className="checker size-6 rounded-md object-cover" />
+                  <img src={previewUrl(x.url, 96)} alt="" decoding="async" className="checker size-6 rounded-md object-cover" />
                   Image {i + 2}: {x.el.name}
                   {x.el.cast?.sheet || x.el.views?.length ? ", from the side your camera sees" : ""}
                 </span>
@@ -234,9 +279,9 @@ export function PromptBar() {
       </AnimatePresence>
 
       {/* Like Home's prompt bar: the words first and big, the settings in a row of chips under them, the button on the
-          right. A warning floats over it instead of making it taller (the button didn't grow with it: the user). */}
+          right. A warning floats over it instead of making it taller (the button didn't grow with it). */}
       <AnimatePresence>
-        {(shown === "generate" && (warning || error)) || (shown === "environment" && location.error) || (shown === "extend" && extending.error) || (shown === "arrange" && arranging.error) ? (
+        {(shown === "generate" && (error || nag)) || (shown === "environment" && location.error) || (shown === "extend" && extending.error) || (shown === "arrange" && arranging.error) ? (
           <motion.p
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -253,20 +298,23 @@ export function PromptBar() {
           </motion.p>
         ) : null}
       </AnimatePresence>
-      <div className="smoked-glass squircle rounded-[26px] p-2">
-        <div className="flex items-stretch gap-2">
-          <div className="min-w-0 flex-1">
+      <div className={cn("smoked-glass squircle", phone ? "rounded-[22px] p-1.5" : "rounded-[26px] p-2")}>
+        <div className={cn("flex gap-2", sideways ? "items-center" : "items-stretch")}>
+          <div className={cn("min-w-0 flex-1", sideways && "flex items-center gap-1.5")}>
             <label className="sr-only" htmlFor="director-notes">
               {MODES[shown].label}
             </label>
-            <div className="relative">
+            <div className={cn("relative", sideways && "min-w-0 flex-1")}>
               {/* The example is one line, faded out where it would run on: a native placeholder wrapped onto a second
-                  line under the chips (the user). The box grows only with lines you type, up to --words-max (the
+                  line under the chips. The box grows only with lines you type, up to --words-max (the
                   camera column sets it: until the screen's top is level with the side panels'). */}
               {words ? null : (
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden whitespace-nowrap px-3 pt-3 text-[15px] leading-relaxed text-haze [mask-image:linear-gradient(to_right,#000_calc(100%-64px),transparent)]"
+                  className={cn(
+                    "pointer-events-none absolute inset-x-0 top-0 overflow-hidden whitespace-nowrap px-3 leading-relaxed text-haze [mask-image:linear-gradient(to_right,#000_calc(100%-64px),transparent)]",
+                    phone ? "pt-2.5 text-[16px]" : "pt-3 text-[15px]",
+                  )}
                 >
                   {MODES[shown].placeholder}
                 </span>
@@ -282,43 +330,61 @@ export function PromptBar() {
                   }
                 }}
                 rows={1}
-                className="block max-h-[var(--words-max,160px)] min-h-[48px] w-full resize-none bg-transparent px-3 pb-2 pt-3 text-[15px] leading-relaxed text-paper outline-none [field-sizing:content] [scrollbar-width:thin]"
+                className={cn(
+                  "block w-full resize-none bg-transparent px-3 leading-relaxed text-paper outline-none [field-sizing:content] [scrollbar-width:thin]",
+                  // 16 px on a phone: Safari zooms the page into any smaller box you tap.
+                  phone === "landscape"
+                    ? "max-h-[64px] min-h-[42px] pb-2 pt-2.5 text-[16px]"
+                    : phone
+                      ? "max-h-[96px] min-h-[44px] pb-1.5 pt-2.5 text-[16px]"
+                      : "max-h-[var(--words-max,160px)] min-h-[48px] pb-2 pt-3 text-[15px]",
+                )}
               />
             </div>
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-1 pb-0.5">
+            <div
+              className={cn(
+                "flex items-center gap-x-1.5 gap-y-1",
+                phone ? "flex-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "flex-wrap px-1 pb-0.5",
+                sideways ? "max-w-[55%] shrink-0" : phone && "px-1 pb-0.5",
+              )}
+            >
               <ModeSwitch
-                modes={[...(hasPlace ? (scene.place.image?.view ? (["extend"] as const) : []) : (["environment"] as const)), ...(cast ? (["arrange"] as const) : []), "generate"]}
+                modes={[...(hasPlace ? (scene.place.image?.view && !lean ? (["extend"] as const) : []) : (["environment"] as const)), ...(cast ? (["arrange"] as const) : []), "generate"]}
                 value={shown}
                 onChange={setMode}
               />
               {shown === "generate" ? (
                 <>
                   {/* The shot model: its card says whether it's on your GPUs, and gets it when it isn't. */}
-                  <ModelPicker kind="image" task="image" only={SHOT_MODELS} value={shotModel} onChange={(m) => useDirectorShot.setState({ model: m })} placement="top-start" variant="chip" chipClassName={GLASS_CHIP} surface="glass" />
+                  <ModelPicker kind="image" task="image" only={SHOT_CHOICES} value={shotModel} onChange={(m) => useDirectorShot.setState({ model: m })} placement="top-start" variant="chip" chipClassName={GLASS_CHIP} surface="glass" />
                   <SizeMenu size={shotSize} choices={resolution?.choices ?? []} modelId={shotModel} />
-                  <ChipButton onClick={() => setShowPrompt((v) => !v)} aria-expanded={showPrompt} title="See the prompt Crackio writes from the set" className={showPrompt ? "bg-white/[0.08]" : undefined}>
-                    <ScrollText size={14} />
-                    <span className="hidden sm:inline">Prompt</span>
-                  </ChipButton>
+                  {sideways ? null : (
+                    <ChipButton onClick={() => setShowPrompt((v) => !v)} aria-expanded={showPrompt} title="See the prompt Crackio writes from the set" className={showPrompt ? "bg-white/[0.08]" : undefined}>
+                      <ScrollText size={14} />
+                      {phone ? null : <span className="hidden sm:inline">Prompt</span>}
+                    </ChipButton>
+                  )}
                   {/* How long a shot takes at this size on your machine, and how it's drawn (natively, or enlarged). */}
-                  <LocalTimeLine
-                    modelId={shotModel}
-                    count={count}
-                    references={0}
-                    resolution={shotSize}
-                    ratio={aspectById(scene.aspect).w / aspectById(scene.aspect).h}
-                    className="px-2"
-                  />
+                  {sideways ? null : (
+                    <LocalTimeLine
+                      modelId={shotModel}
+                      count={count}
+                      references={0}
+                      resolution={shotSize}
+                      ratio={aspectById(scene.aspect).w / aspectById(scene.aspect).h}
+                      className={phone ? "shrink-0 whitespace-nowrap px-1.5" : "px-2"}
+                    />
+                  )}
                 </>
               ) : shown === "arrange" ? (
-                <span className="min-w-0 flex-1 basis-[150px] truncate px-2 text-[12px] text-haze">{working ? "Arranging the set from your words…" : MODES.arrange.note}</span>
+                <span className="min-w-0 flex-1 basis-0 truncate px-2 text-[12px] text-haze">{working ? "Arranging the set from your words…" : MODES.arrange.note}</span>
               ) : (
                 <>
                   {/* The place is made (and extended) with the place's model. */}
                   <ModelPicker
                     kind="image"
                     task="edit"
-                    only={DIRECTOR_MODELS}
+                    only={PLACE_CHOICES}
                     value={placeModelId}
                     onChange={(m) => usePlaceModel.setState({ model: m })}
                     placement="top-start"
@@ -328,7 +394,7 @@ export function PromptBar() {
                   />
                   <PlaceSizeMenu modelId={placeModelId} />
                   {/* Cut short rather than dropped onto a row of its own (that made the bar taller). */}
-                  <span className="min-w-0 flex-1 basis-[150px] truncate px-2 text-[12px] text-haze">
+                  <span className="min-w-0 flex-1 basis-0 truncate px-2 text-[12px] text-haze">
                     {working ? `${shown === "extend" ? extending.stage : "Drawing the place"}…` : `${MODES[shown].note}${eta ? `, ${eta}` : ""}`}
                   </span>
                 </>
@@ -340,12 +406,25 @@ export function PromptBar() {
             onClick={go}
             disabled={working}
             title={`${MODES[shown].action} (Enter)`}
-            className="lip squircle flex min-h-[96px] w-[118px] shrink-0 flex-col items-center justify-center gap-1.5 self-stretch rounded-[20px] bg-spike px-4 text-spike-ink transition-[background-color,transform,box-shadow] duration-150 [--lip-glow:0_10px_32px_-10px_rgb(255_91_46/0.5)] [--lip:var(--color-spike-lip)] hover:bg-spike-hi hover:[--lip-glow:0_12px_38px_-10px_rgb(255_91_46/0.62)] disabled:opacity-80 sm:w-[136px]"
+            className={cn(
+              "lip squircle flex shrink-0 flex-col items-center justify-center bg-spike text-spike-ink transition-[background-color,transform,box-shadow] duration-150 [--lip-glow:0_10px_32px_-10px_rgb(255_91_46/0.5)] [--lip:var(--color-spike-lip)] hover:bg-spike-hi hover:[--lip-glow:0_12px_38px_-10px_rgb(255_91_46/0.62)] disabled:opacity-80",
+              sideways
+                ? "h-11 w-[92px] rounded-[15px] px-3"
+                : phone
+                  ? "min-h-[72px] w-[84px] gap-1 self-stretch rounded-[18px] px-3"
+                  : "min-h-[96px] w-[118px] gap-1.5 self-stretch rounded-[20px] px-4 sm:w-[136px]",
+            )}
           >
-            {working ? <LoaderCircle size={20} className="animate-spin" /> : <span className="font-display text-[21px] leading-none">{MODES[shown].action}</span>}
-            <span className="flex items-center gap-1 text-[11.5px] font-bold opacity-75">
-              {MODES[shown].icon} <CornerDownLeft size={11} />
-            </span>
+            {working ? (
+              <LoaderCircle size={phone ? 18 : 20} className="animate-spin" />
+            ) : (
+              <span className={cn("font-display leading-none", phone ? "text-[17px]" : "text-[21px]")}>{MODES[shown].action}</span>
+            )}
+            {phone ? null : (
+              <span className="flex items-center gap-1 text-[11.5px] font-bold opacity-75">
+                {MODES[shown].icon} <CornerDownLeft size={11} />
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -471,7 +550,7 @@ function SizeMenu({ size, choices, modelId }: { size: string; choices: { value: 
   const figures = shownFigures(useDepthFigures((s) => s.figures));
   const people = FIGURES.find((f) => f.id === figures);
   const loras = useModelLoras((s) => s.byModel[modelId]?.length ?? 0);
-  const label = `${list.find((c) => String(c.value) === size)?.label ?? size.toUpperCase()}${figures !== "auto" && people && !SHOT_MODELS.includes(modelId) ? ` · ${people.short}` : ""}${loras ? ` · ${loras} LoRA${loras > 1 ? "s" : ""}` : ""}`;
+  const label = `${list.find((c) => String(c.value) === size)?.label ?? size.toUpperCase()}${figures !== "auto" && people && !SHOT_CHOICES.includes(modelId) ? ` · ${people.short}` : ""}${loras ? ` · ${loras} LoRA${loras > 1 ? "s" : ""}` : ""}`;
   return (
     <Popover
       placement="top-start"
@@ -505,7 +584,7 @@ function SizeMenu({ size, choices, modelId }: { size: string; choices: { value: 
               {c.label}
             </MenuItem>
           ))}
-          {SHOT_MODELS.includes(modelId) ? null : <FiguresChoice close={close} />}
+          {SHOT_CHOICES.includes(modelId) ? null : <FiguresChoice close={close} />}
           <LoraChoice modelId={modelId} />
         </div>
       )}
@@ -521,19 +600,36 @@ function SizeMenu({ size, choices, modelId }: { size: string; choices: { value: 
  */
 function LoraChoice({ modelId }: { modelId: string }) {
   const [files, setFiles] = useState<{ file: string; machines: string[] }[] | null>(null);
+  const [unreached, setUnreached] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const picks = useModelLoras((s) => s.byModel[modelId]);
   const library = useLoraLibrary((s) => s.library);
+  const retry = useCallback(() => {
+    setFiles(null);
+    setUnreached(false);
+    setAttempt((a) => a + 1);
+  }, []);
   useEffect(() => {
     loadLoraLibrary();
     let live = true;
-    void fetch("/api/local/loras")
+    const ctrl = new AbortController();
+    // Machines that are off never answer: after 8 s it says so (the menu said "Looking…" for ever).
+    const slow = setTimeout(() => ctrl.abort(), 8000);
+    void fetch("/api/local/loras", { signal: ctrl.signal })
       .then((r) => r.json())
       .then((d: { files?: { file: string; machines: string[] }[] }) => live && setFiles(d.files ?? []))
-      .catch(() => live && setFiles([]));
+      .catch(() => {
+        if (!live) return;
+        setUnreached(true);
+        setFiles([]);
+      })
+      .finally(() => clearTimeout(slow));
     return () => {
       live = false;
+      clearTimeout(slow);
+      ctrl.abort();
     };
-  }, []);
+  }, [attempt]);
   // The library's id for the model: "local:tpl:qwen-image-2.1" is "tpl-qwen-image-2.1", "local:flux3-klein" "flux3-klein".
   // The Director model is Z-Image Turbo underneath: its LoRAs are Z-Image Turbo’s.
   const libraryId = modelId === "local:z-image-director" ? "z-image-turbo" : modelId === "local:qwen-director" ? "tpl-qwen-image-2.1" : modelId.replace(/^local:/, "").replace(/^tpl:/, "tpl-");
@@ -548,6 +644,13 @@ function LoraChoice({ modelId }: { modelId: string }) {
       <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-haze">LoRAs</p>
       {files === null ? (
         <p className="px-2.5 pb-2 text-[12px] text-haze">Looking on your ComfyUI…</p>
+      ) : unreached ? (
+        <p className="flex items-center justify-between gap-2 px-2.5 pb-2 text-[12px] leading-snug text-haze">
+          Your ComfyUI didn&rsquo;t answer.
+          <button type="button" onClick={retry} className="press shrink-0 font-semibold text-fog underline-offset-2 hover:text-paper hover:underline">
+            Try again
+          </button>
+        </p>
       ) : fits.length === 0 ? (
         <p className="px-2.5 pb-2 text-[12px] leading-snug text-haze">None for this model yet: get them from the model picker&rsquo;s LoRAs.</p>
       ) : (
@@ -602,7 +705,7 @@ const FIGURES: { id: DepthFigures; label: string; short: string; when: string }[
 ];
 
 /**
- * "On their marks" is gone from the menu (it came out worst every time: the user), and so is anything a browser kept from
+ * "On their marks" is gone from the menu (it came out worst every time in testing), and so is anything a browser kept from
  * older menus (the stick figures): a choice of either counts as Auto.
  */
 const shownFigures = (f: DepthFigures): DepthFigures => (f !== "soft" && FIGURES.some((x) => x.id === f) ? f : "auto");

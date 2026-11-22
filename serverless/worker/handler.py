@@ -12,6 +12,8 @@ Job input ("action", default "run"):
   list  what this worker holds: model files (folder/name/bytes), node classes and their modules, GPU, ComfyUI version.
   fetch {files: [{url, folder, name, bytes?}]}: model files downloaded once into the network volume (HF_TOKEN for gated
         Hugging Face repos), skipped when already there at the right size.
+  delete {files: [{folder, name}]}: model files removed from the network volume (a model no tool uses any more), so the
+        volume (paid per GB) stays small.
 
 No keys come in a job: Hugging Face's token is the endpoint's HF_TOKEN; files move through presigned URLs.
 """
@@ -42,6 +44,7 @@ INLINE_MAX = 6 * 1024 * 1024
 FOLDERS = [
     "checkpoints", "diffusion_models", "text_encoders", "vae", "loras", "upscale_models", "latent_upscale_models",
     "controlnet", "clip_vision", "model_patches", "audio_encoders", "style_models", "embeddings", "sam3",
+    "geometry_estimation",
 ]
 
 _proc = None
@@ -169,6 +172,7 @@ def queue_and_collect(job, inp, started, ready, warm):
             return {"error": {"kind": "invalid", "status": r.status_code, "body": r.text[:4000]}}
         prompt_id = r.json().get("prompt_id", prompt_id)
         last = 0.0
+        last_train = 0.0
         ws.settimeout(15)
         while True:
             try:
@@ -188,6 +192,13 @@ def queue_and_collect(job, inp, started, ready, warm):
             if kind == "progress" and time.time() - last > 1:
                 last = time.time()
                 runpod.serverless.progress_update(job, json.dumps({"node": data.get("node"), "value": data.get("value"), "max": data.get("max")}))
+            elif kind == "crackio.train" and time.time() - last_train > 2:
+                # Crackio's LoRA trainer (the bridge's train.py): its step, loss, speed and last log lines, passed on as
+                # they come (the loss history is long and comes with the job's answer).
+                last_train = time.time()
+                said = {k: v for k, v in data.items() if k != "losses"}
+                said["log"] = (said.get("log") or [])[-15:]
+                runpod.serverless.progress_update(job, json.dumps({"crackio_train": said}))
             elif kind == "executing" and data.get("node") is None and data.get("prompt_id") == prompt_id:
                 break
             elif kind in ("execution_error", "execution_interrupted"):
@@ -276,6 +287,26 @@ def fetch(inp):
     return {"results": results, "files": files()}
 
 
+def delete(inp):
+    results = []
+    for f in inp.get("files") or []:
+        if f.get("folder") not in FOLDERS:
+            results.append({"name": f.get("name"), "state": "failed", "error": "not a model folder"})
+            continue
+        try:
+            path = inside(os.path.join(MODELS, f["folder"]), f["name"])
+            if os.path.isfile(path):
+                gb = os.path.getsize(path) / 1e9
+                os.remove(path)
+                print(f"[delete] {f['name']}: {gb:.2f} GB freed", flush=True)
+                results.append({"name": f["name"], "state": "deleted", "gb": round(gb, 2)})
+            else:
+                results.append({"name": f["name"], "state": "missing"})
+        except Exception as e:  # noqa: BLE001
+            results.append({"name": f.get("name"), "state": "failed", "error": str(e)[:300]})
+    return {"results": results, "files": files()}
+
+
 def handler(job):
     inp = job.get("input") or {}
     action = inp.get("action", "run")
@@ -283,6 +314,8 @@ def handler(job):
         return list_all()
     if action == "fetch":
         return fetch(inp)
+    if action == "delete":
+        return delete(inp)
     return run(job, inp)
 
 

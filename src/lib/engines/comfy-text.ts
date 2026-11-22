@@ -26,31 +26,51 @@ export const LOCAL_LLMS = [
 
 type LocalLlm = (typeof LOCAL_LLMS)[number];
 
-type Found = { target: ComfyTarget; llm: LocalLlm } | null;
-const picked = new Map<boolean, { at: number; found: Found; eight: boolean }>();
+type Place = { target: ComfyTarget; llm: LocalLlm };
+type Found = Place | null;
+const picked = new Map<boolean, { at: number; found: Place[]; eight: boolean; runOn?: string }>();
 
 /**
- * The ComfyUI Crackio knows with a language model on it (one that reads pictures when `vision`), or null. With several,
- * the one with the biggest card: a 6 GB card takes a minute over what a 5090 writes in seconds. Asked often (every model
+ * The ComfyUIs Crackio knows with a language model on them (one that reads pictures when `vision`) that answer now,
+ * the biggest card first: a 6 GB card takes a minute over what a 5090 writes in seconds. Asked often (every model
  * list), so the answer is kept for half a minute.
+ *
+ * A machine that's switched off takes no turn. Its list of files and its card are still remembered from when it was
+ * on, and by those a rented box that had just been stopped once "won" every caption of a training run that was going
+ * on another, online machine: thirty questions to a box that wasn't there, and a LoRA trained with no captions.
  */
-export async function localLlm(vision = false): Promise<Found> {
+export async function localLlms(vision = false): Promise<Place[]> {
   // Pictures: the Qwen3-VL picked in Settings (4B unless 8B) first.
-  const eight = vision && (await getSettings()).localVision === "8b";
+  const settings = await getSettings();
+  const eight = vision && settings.localVision === "8b";
+  const runOn = settings.runOn;
   const hit = picked.get(vision);
-  if (hit && Date.now() - hit.at < 30_000 && hit.eight === eight) return hit.found;
+  if (hit && Date.now() - hit.at < 30_000 && hit.eight === eight && hit.runOn === runOn) return hit.found;
+  const { machineLook } = await import("@/lib/server/machine-probe");
   const vl = (l: LocalLlm) => (l.vision ? (eight ? !l.file.includes("_4b") : l.file.includes("_4b")) : false);
   const wanted = LOCAL_LLMS.filter((l) => !vision || l.vision).sort((a, b) => Number(vl(b)) - Number(vl(a)));
   const found: { target: ComfyTarget; llm: LocalLlm; vram: number }[] = [];
   for (const target of await comfyTargets().catch(() => [])) {
+    // A billed machine (RunPod Serverless, Comfy Cloud) only when it's the one chosen under Run on: there each question
+    // starts a paid worker, while a GPU of your own answers for free.
+    if (target.metered && target.id !== runOn) continue;
+    if (!(await machineLook(target).catch(() => null))?.stats) continue;
     const have = await withTarget(target, () => installedFiles()).catch(() => new Set<string>());
     const llm = wanted.find((l) => have.has(`text_encoders/${l.file}`));
     if (llm) found.push({ target, llm, vram: await withTarget(target, () => vramGb()) });
   }
   found.sort((a, b) => b.vram - a.vram || LOCAL_LLMS.indexOf(a.llm) - LOCAL_LLMS.indexOf(b.llm));
-  const best: Found = found[0] ? { target: found[0].target, llm: found[0].llm } : null;
-  picked.set(vision, { at: Date.now(), found: best, eight });
-  return best;
+  const all = found.map(({ target, llm }) => ({ target, llm }));
+  picked.set(vision, { at: Date.now(), found: all, eight, runOn });
+  return all;
+}
+
+/** The next question looks at the machines again (a model's files have just arrived, a machine has just come up). */
+export const forgetLocalLlms = () => picked.clear();
+
+/** The first of them (see localLlms), or null: the machine a question goes to unless it asks for another. */
+export async function localLlm(vision = false): Promise<Found> {
+  return (await localLlms(vision))[0] ?? null;
 }
 
 /** Each ComfyUI's card memory as last seen: a box busy rendering can miss the question, and shouldn't lose its turn for it. */
@@ -86,7 +106,9 @@ async function call(route: string, init: RequestInit & { signal: AbortSignal }) 
 /** Hands ComfyUI a picture for LoadImage; returns its name there. */
 async function upload(data: Buffer, signal: AbortSignal) {
   const form = new FormData();
-  form.append("image", new Blob([new Uint8Array(data)]), `crackio-text-${Date.now()}.png`);
+  // A name of its own: several pictures of one question go up at once, and with the clock alone two sent in the same
+  // millisecond shared a name, so the second replaced the first and the model saw one picture twice.
+  form.append("image", new Blob([new Uint8Array(data)]), `crackio-text-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`);
   form.append("overwrite", "true");
   const res = await call("/upload/image", { method: "POST", body: form, signal });
   const j = (await res.json().catch(() => ({}))) as { name?: string; subfolder?: string };
@@ -140,9 +162,26 @@ const sheetNote = (n: number) =>
  * several become one labelled contact sheet (see contactSheet), and the prompt says how they're numbered. It goes to the
  * front of ComfyUI's line: a few seconds of text shouldn't wait out a render.
  */
-export async function localText(input: { system: string; prompt: string; images?: Buffer[]; maxTokens?: number; signal: AbortSignal }): Promise<string> {
-  const found = (input.images?.length ? await localLlm(true) : null) ?? (await localLlm());
-  if (!found) throw new EngineError("No language model on your ComfyUI yet.", `Put ${LOCAL_LLMS[0].name} or ${LOCAL_LLMS[1].name} in its text_encoders folder, or add a Comfy API key in Settings → Accounts.`);
+export async function localText(input: { system: string; prompt: string; images?: Buffer[]; maxTokens?: number; signal: AbortSignal; /** The machine to ask first (a training run's own): its pictures are there, and it's known to be on. */ machine?: string }): Promise<string> {
+  let places = input.images?.length ? await localLlms(true) : [];
+  if (!places.length) places = await localLlms();
+  if (!places.length) throw new EngineError("No language model on a ComfyUI that's on.", `Put ${LOCAL_LLMS[0].name} or ${LOCAL_LLMS[1].name} in its text_encoders folder, or add a Comfy API key in Settings → Accounts.`);
+  places = [...places].sort((a, b) => Number(b.target.id === input.machine) - Number(a.target.id === input.machine));
+  let last: unknown = null;
+  // A machine that doesn't answer hands the question to the next one (three at most), and is looked for again next time.
+  for (const found of places.slice(0, 3)) {
+    try {
+      return await localTextOn(found, input);
+    } catch (err) {
+      if (input.signal.aborted || !(err instanceof EngineError) || !/isn't answering/i.test(err.message)) throw err;
+      last = err;
+      picked.clear();
+    }
+  }
+  throw last;
+}
+
+function localTextOn(found: Place, input: { system: string; prompt: string; images?: Buffer[]; maxTokens?: number; signal: AbortSignal }): Promise<string> {
   return withTarget(found.target, async () => {
     const { signal } = input;
     const pictures = found.llm.vision ? (input.images ?? []) : [];
@@ -213,11 +252,12 @@ async function answer(graph: Graph, model: string, signal: AbortSignal) {
  * (no contact sheet), and answers a check in about half a second on an RTX 5090. `judge` is Crackio's own fine-tune
  * for swap checks (a LoRA on top).
  */
-/** Crackio's fine-tunes of LFM3-VL, by their name in the bridge: the swap judge, Retouch's eyes, and the voice in Talk. */
-export type Lfm3Lora = "none" | "judge" | "retouch" | "chat";
+/** Crackio's fine-tunes of LFM3-VL, by their name in the bridge: the swap judge, Retouch's eyes, the voice in Talk, and
+ * the prompt enhancer. */
+export type Lfm3Lora = "none" | "judge" | "retouch" | "chat" | "enhance";
 export const LFM3 = { file: "lfm3-vl-2b.safetensors", lora: (name: Exclude<Lfm3Lora, "none">) => `lfm3-vl-2b-lora-${name}.safetensors`, name: "LFM3-VL 2B" };
 /** The fine-tune a catalog LFM3 model runs with (local:lfm3-judge → judge). */
-export const lfm3LoraOf = (model: string): Lfm3Lora => (model === "lfm3-judge" ? "judge" : model === "lfm3-retouch" ? "retouch" : "none");
+export const lfm3LoraOf = (model: string): Lfm3Lora => (model === "lfm3-judge" ? "judge" : model === "lfm3-retouch" ? "retouch" : model === "lfm3-enhance" ? "enhance" : "none");
 
 // On globalThis: the server's start-up (refine's warmTextModels) and its requests load this module apart. `gen` counts
 // forgetLfm3() calls, so a look that started before one doesn't write back what it saw.
@@ -283,7 +323,7 @@ function lookForLfm3(lora: Lfm3Lora): Promise<ComfyTarget | null> {
 }
 
 /**
- * Who Talk's voice is: a person with a life of their own (the user's pick), named after the voice, who says they're an AI
+ * Who Talk's voice is: a person with a life of their own (the persona picked in testing), named after the voice, who says they're an AI
  * only when asked straight out. The chat fine-tune learns its replies under this prompt, names varied.
  */
 const chatStyle = (name?: string) =>

@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { FolderInput, Trash, TriangleAlert, X } from "lucide-react";
 import { Popover } from "@/components/ui/Popover";
-import { useShell } from "@/components/shell/shell-store";
 import { MoveMenu } from "./MoveMenu";
 import { ProjectIcon } from "./ProjectIcon";
 import { useDropTarget, type DragState, type FolderInfo } from "./folders";
@@ -55,7 +54,6 @@ export function LibraryDock({
   dock: ReactNode;
   viewer?: { info: boolean };
 }) {
-  const collapsed = useShell((s) => s.collapsed);
   const client = useSyncExternalStore(noop, () => true, () => false);
   const folder = toast?.folder ? (folders.find((f) => f.id === toast.folder!.id) ?? toast.folder) : undefined;
   if (!client) return null;
@@ -65,7 +63,7 @@ export function LibraryDock({
         "pointer-events-none fixed inset-x-0 flex flex-col items-center gap-2.5 px-4",
         viewer
           ? cn("bottom-[132px] z-[65]", viewer.info && "lg:right-[384px]")
-          : cn("bottom-5 z-40", collapsed ? "lg:left-[68px]" : "lg:left-[var(--sidebar-w)]"),
+          : "bottom-5 z-40 lg:left-[var(--sidebar-w)]",
       )}
     >
       <AnimatePresence mode="popLayout">

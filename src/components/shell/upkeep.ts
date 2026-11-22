@@ -22,21 +22,23 @@ export function usePauseHiddenMedia(pathname: string) {
   }, [pathname]);
 }
 
+/** The Library's folders and every take, fetched once ahead of opening it (the server readies their light copies). */
+export function warmLibrary() {
+  if (!useLibrary.getState().loaded) void useLibrary.getState().load();
+}
+
 /**
- * Once the first page has settled, quietly fetch what the other tabs show, so opening them is
- * instant: the Library's folders and every take (the server gets their light copies ready
- * meanwhile). The pages themselves are prefetched by the sidebar's links in production.
+ * Quietly fetch what the Library shows, so opening it is instant: right away when you point at it in the rail
+ * (warmLibrary), else once the first page has long settled, so it never competes with that page's own pictures and
+ * data. The pages themselves are prefetched by the rail's links in production.
  */
 export function useWarmup() {
   useEffect(() => {
     let idle: number | undefined;
-    const go = () => {
-      if (!useLibrary.getState().loaded) void useLibrary.getState().load();
-    };
     const t = setTimeout(() => {
-      if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(go, { timeout: 5000 });
-      else go();
-    }, 2500);
+      if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(warmLibrary, { timeout: 8000 });
+      else warmLibrary();
+    }, 9000);
     return () => {
       clearTimeout(t);
       if (idle !== undefined) window.cancelIdleCallback(idle);

@@ -7,31 +7,92 @@ import { LoaderCircle } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { setUp, stopSetUp, useSetup } from "@/lib/hooks/use-setup";
 import { KITS, kitById } from "@/lib/setup/kits";
+import { ADDONS } from "@/lib/addons";
 import type { KitId, SetupJob, SetupMachine, SetupSnapshot } from "@/lib/setup/types";
 import { cn } from "@/lib/cn";
 import { Heading, KitMark, Lamp, Loading, MachineStrip, ProblemCard, Progress, Verdict, useHrefWith } from "./parts";
 import { ToolBoard } from "./ToolBoard";
+import { AddonBoard, addonStatus } from "./AddonBoard";
 import { bytesText, fits, gbText, settable, toolWords, toolsInOrder, pickMachine, countReady } from "./words";
 
 /**
  * Settings → Tools: every tool on one machine, what it needs there and one button that gets it. The machine is the page's
- * context (?machine=); "All" shows every tool on every machine at once.
+ * context (?machine=); "All" shows every tool on every machine at once. The switch under the title turns the board to
+ * the add-ons (?view=addons; lib/addons): the small extras a tool can do without, each got by itself.
  */
 export function ToolsView() {
   const params = useSearchParams();
   const asked = params.get("machine");
   const focus = params.get("tool");
-  const { snap, error } = useSetup();
+  // ?model= (Settings → Models' "Set up on …"): the tool's sheet opens with that model picked.
+  const model = params.get("model");
+  // The sheet and the model chooser read every part's model options: the full snapshot here.
+  const { snap, error } = useSetup(true, { full: true });
   if (!snap) return error ? <ProblemCard title="Crackio couldn't look at your machines" why={error} /> : <Loading rows={8} />;
-  const all = asked === "all";
-  const m = all ? null : pickMachine(snap, asked);
+  const addons = params.get("view") === "addons";
+  // Add-ons are looked at one machine at a time.
+  const all = asked === "all" && !addons;
+  const m = all ? null : pickMachine(snap, asked === "all" ? null : asked);
   return (
     <div>
-      <Verdict title="Tools" facts={m ? machineFacts(m) : "Every tool on every machine. Pick one to set things up there."} />
-      <div className="mt-6">
-        <MachineStrip snap={snap} selected={m?.id ?? null} all allOn={all} />
+      <Verdict
+        title="Tools"
+        facts={addons ? "Small add-ons that make a tool better. One click gets one." : m ? machineFacts(m) : "Every tool on every machine. Pick one to set things up there."}
+      />
+      <div className="mt-5">
+        <ViewSwitch addons={addons} />
       </div>
-      {all ? <AllMachines snap={snap} /> : m ? <MachineTools snap={snap} m={m} focus={focus} /> : <NoMachines />}
+      <div className="mt-5">
+        <MachineStrip snap={snap} selected={m?.id ?? null} all={!addons} allOn={all} />
+      </div>
+      {all ? <AllMachines snap={snap} /> : !m ? <NoMachines /> : addons ? <MachineAddons snap={snap} m={m} /> : <MachineTools snap={snap} m={m} focus={focus} model={model} />}
+    </div>
+  );
+}
+
+/** The page's two sides: the tools, and the add-ons that make them better. */
+function ViewSwitch({ addons }: { addons: boolean }) {
+  const hrefWith = useHrefWith();
+  const side = (label: string, count: number, on: boolean, href: string) => (
+    <Link
+      href={href}
+      replace
+      scroll={false}
+      role="tab"
+      aria-selected={on}
+      className={cn(
+        "press squircle inline-flex h-9 items-center gap-2 rounded-[10px] px-4 text-[13.5px] font-semibold transition-colors",
+        on ? "bg-white/[0.11] text-paper shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]" : "text-fog hover:text-paper",
+      )}
+    >
+      {label}
+      <span className={cn("text-[12px] font-medium tabular", on ? "text-fog" : "text-haze")}>{count}</span>
+    </Link>
+  );
+  return (
+    <div role="tablist" aria-label="What to set up" className="squircle inline-flex gap-1 rounded-[13px] bg-white/[0.04] p-1 shadow-[inset_0_0_0_1px_var(--color-line)]">
+      {side("Tools", KITS.length, !addons, hrefWith("view", null))}
+      {side("Add-ons", ADDONS.length, addons, hrefWith("view", "addons"))}
+    </div>
+  );
+}
+
+function MachineAddons({ snap, m }: { snap: SetupSnapshot; m: SetupMachine }) {
+  const jobs = snap.jobs.filter((j) => j.machine === m.id || (m.kind === "this-computer" && j.machine === "this-computer"));
+  const live = jobs.find((j) => j.state === "running" || j.state === "queued") ?? null;
+  const recent = !live ? (jobs.find((j) => j.finishedAt && snap.at - j.finishedAt < 10 * 60_000 && j.state !== "done") ?? null) : null;
+  const ready = m.online ? ADDONS.filter((a) => addonStatus(m, a)?.state === "ready").length : 0;
+  return (
+    <div className="mt-6 space-y-5">
+      <p className="text-[13px] text-haze">
+        {ready} of {ADDONS.length} ready on {m.label}
+      </p>
+      {!m.online ? (
+        <ProblemCard title={`${m.label} isn't answering`} why={m.kind === "rented" ? "Stopped, or given back? Start it at your cloud and Crackio connects again by itself." : "Start its ComfyUI and Crackio finds it again."} />
+      ) : null}
+      {m.metered ? <ProblemCard tone="needs" title="Pay per job" why="This endpoint brings its own models and bills each job. Add-ons are set up on your own GPUs." /> : null}
+      {live ? <JobPanel job={live} /> : recent ? <JobPanel job={recent} /> : null}
+      <AddonBoard m={m} live={live} />
     </div>
   );
 }
@@ -62,7 +123,7 @@ function NoMachines() {
   );
 }
 
-function MachineTools({ snap, m, focus }: { snap: SetupSnapshot; m: SetupMachine; focus: string | null }) {
+function MachineTools({ snap, m, focus, model }: { snap: SetupSnapshot; m: SetupMachine; focus: string | null; model: string | null }) {
   const rows = toolsInOrder(m);
   const jobs = snap.jobs.filter((j) => j.machine === m.id || (m.kind === "this-computer" && j.machine === "this-computer"));
   const live = jobs.find((j) => j.state === "running" || j.state === "queued") ?? null;
@@ -115,7 +176,7 @@ function MachineTools({ snap, m, focus }: { snap: SetupSnapshot; m: SetupMachine
         </div>
       ) : null}
       {error ? <ProblemCard title="That didn't start" why={error} /> : null}
-      <ToolBoard rows={rows} ctx={{ m, snap, live }} focus={focus} />
+      <ToolBoard rows={rows} ctx={{ m, snap, live }} focus={focus} model={model} />
     </div>
   );
 }

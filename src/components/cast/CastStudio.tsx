@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Copy, ImagePlus, LoaderCircle, Package, PawPrint, Plus, RefreshCw, Sparkles, Trash, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
 import { ToolTile } from "@/components/ui/ToolTile";
 import { Button } from "@/components/ui/Button";
-import { useCast } from "@/lib/hooks/use-cast";
+import { useCast, useCastStore } from "@/lib/hooks/use-cast";
+import { previewSrcSet, previewUrl } from "@/lib/media-url";
 import { useUploads } from "@/lib/hooks/use-uploads";
 import { useModels } from "@/lib/hooks/use-models";
 import { askForModel, useModelChoice } from "@/lib/hooks/use-model-choice";
@@ -72,7 +73,7 @@ const KIND_COPY: Record<CastKind, { photos: string; describe: string; name: stri
 
 /** Cast: make a person, animal, character or object once, from photos or words, and call them into any shot with @name. */
 export function CastStudio() {
-  const { items, loaded } = useCast();
+  const { items, loaded, error } = useCast();
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<CastKind | "all">("all");
@@ -117,11 +118,30 @@ export function CastStudio() {
         </div>
       ) : null}
 
-      {!loaded ? (
-        <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="skeleton aspect-[4/5] rounded-card" />
-          ))}
+      {!loaded || (error && items.length === 0) ? (
+        <div className="relative mt-10">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className={cn("aspect-[4/5] rounded-card", error ? "bg-white/[0.03]" : "skeleton")} />
+            ))}
+          </div>
+          {loaded && error ? (
+            <div role="alert" className="absolute inset-x-0 top-6 flex justify-center px-4">
+              <p className="flex max-w-full items-center gap-2 rounded-full bg-apple-2 py-1.5 pl-3 pr-1.5 text-[13px] text-paper shadow-[0_0_0_1px_var(--color-line-strong),0_14px_36px_-12px_rgb(0_0_0/0.85)]">
+                <TriangleAlert size={14} className="shrink-0 text-tally" />
+                <span className="truncate" title={error}>
+                  Your cast didn&rsquo;t load
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void useCastStore.getState().load()}
+                  className="press squircle shrink-0 rounded-full bg-white/[0.08] px-3 py-1 text-[12.5px] font-semibold hover:bg-white/[0.14]"
+                >
+                  Try again
+                </button>
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : items.length === 0 ? (
         <EmptyState onCreate={() => setCreating(true)} />
@@ -213,13 +233,17 @@ function CharacterCard({ c, onOpen }: { c: Character; onOpen: () => void }) {
   const cover = c.portrait ?? c.previous?.portrait ?? c.photos[0];
   const Icon = KIND_ICON[c.kind];
   return (
-    <button type="button" onClick={onOpen} className="group block w-full text-left">
-      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-apple">
+    <button type="button" onClick={onOpen} className="group block w-full text-left focus-visible:outline-none">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-apple shadow-[0_0_0_1px_transparent] transition-shadow duration-200 group-hover:shadow-[0_0_0_1px_rgb(255_255_255/0.2),0_22px_44px_-22px_rgb(0_0_0/0.9)] group-focus-visible:shadow-[0_0_0_2px_var(--color-spike)]">
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={cover}
+            src={previewUrl(cover, 480)}
+            srcSet={previewSrcSet(cover, [320, 480, 720])}
+            sizes="(min-width: 1280px) 260px, (min-width: 1024px) 24vw, (min-width: 640px) 31vw, 46vw"
             alt={c.name}
+            loading="lazy"
+            decoding="async"
             className={cn(
               "size-full object-cover transition-[transform,filter] duration-700 ease-[var(--ease-out-quint)] group-hover:scale-[1.03]",
               !c.portrait && !c.previous?.portrait && "scale-105 blur-md brightness-75",
@@ -229,7 +253,7 @@ function CharacterCard({ c, onOpen }: { c: Character; onOpen: () => void }) {
           <div className="skeleton absolute inset-0" />
         )}
         {c.status === "building" ? (
-          <GeneratingField stage={c.sheet || c.portrait ? "Almost there" : c.photos.length ? "Drawing the sheet" : "Drawing them"} progress={c.progress} backdrop={cover} />
+          <GeneratingField stage={c.sheet || c.portrait ? "Almost there" : c.photos.length ? "Drawing the sheet" : "Drawing them"} progress={c.progress} backdrop={cover ? previewUrl(cover, 480) : null} />
         ) : null}
         <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-paper/90 ring-1 ring-white/10">
           <Icon size={11} />
@@ -444,7 +468,7 @@ function NewMember({ onDone, onCancel }: { onDone: (c: Character) => void; onCan
             {refs.map((r) => (
               <div key={r.id} className="group relative aspect-[4/5] overflow-hidden rounded-[13px] bg-apple">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={r.preview} alt={r.name} className={cn("size-full object-cover", r.status === "uploading" && "opacity-50")} />
+                <img src={previewUrl(r.preview, 320)} alt={r.name} decoding="async" className={cn("size-full object-cover", r.status === "uploading" && "opacity-50")} />
                 {r.status === "uploading" ? <LoaderCircle size={18} className="absolute inset-0 m-auto animate-spin text-paper" /> : null}
                 {r.status === "error" ? <TriangleAlert size={16} className="absolute inset-0 m-auto text-tally" aria-label={r.error} /> : null}
                 <button
@@ -626,7 +650,7 @@ function CharacterDetail({ c, onClose }: { c: Character; onClose: () => void }) 
           <div className="skeleton relative aspect-[3/2] w-[min(100%,640px)] rounded-[16px] opacity-50" />
         )}
         {building && c.status !== "error" ? (
-          <GeneratingField stage={!c.portrait && !c.photos.length ? `Drawing ${KIND_COPY[c.kind].face}` : "Drawing the sides"} progress={c.progress} backdrop={sheet} />
+          <GeneratingField stage={!c.portrait && !c.photos.length ? `Drawing ${KIND_COPY[c.kind].face}` : "Drawing the sides"} progress={c.progress} backdrop={sheet ? previewUrl(sheet, 960) : null} />
         ) : null}
         {c.status === "error" ? (
           <p className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-black/70 px-4 py-2 text-[13px] font-semibold text-paper shadow-[0_0_0_1px_var(--color-line)]">
@@ -651,7 +675,7 @@ function CharacterDetail({ c, onClose }: { c: Character; onClose: () => void }) 
           <header className="flex items-start gap-3 px-5 pb-2 pt-5">
             {face ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={face} alt="" className="size-12 shrink-0 rounded-[14px] object-cover shadow-[0_0_0_1px_var(--color-line)]" />
+              <img src={previewUrl(face, 160)} alt="" decoding="async" className="size-12 shrink-0 rounded-[14px] object-cover shadow-[0_0_0_1px_var(--color-line)]" />
             ) : (
               <span className="grid size-12 shrink-0 place-items-center rounded-[14px] bg-white/[0.05] text-haze">
                 <Icon size={18} />
@@ -756,7 +780,7 @@ function CharacterDetail({ c, onClose }: { c: Character; onClose: () => void }) 
                           <span className="flex gap-1.5">
                             {c.photos.map((url) => (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img key={url} src={url} alt="" className="size-8 rounded-[8px] object-cover shadow-[0_0_0_1px_var(--color-line)]" />
+                              <img key={url} src={previewUrl(url, 160)} alt="" decoding="async" className="size-8 rounded-[8px] object-cover shadow-[0_0_0_1px_var(--color-line)]" />
                             ))}
                           </span>
                         ) : (
@@ -973,6 +997,13 @@ function CloseButton({ onClick, autoFocus }: { onClick: () => void; autoFocus?: 
 /** A native modal dialog: Escape and a click outside close it, and focus stays inside. */
 function Modal({ open, onClose, label, wide = true, children }: { open: boolean; onClose: () => void; label: string; wide?: boolean; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Hidden with its page (Next keeps visited pages mounted, hidden), a modal still made everything else inert.
+  useLayoutEffect(() => {
+    const d = ref.current;
+    return () => {
+      if (d?.open) d.close();
+    };
+  }, []);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -991,8 +1022,8 @@ function Modal({ open, onClose, label, wide = true, children }: { open: boolean;
       onClose={(e) => e.target === e.currentTarget && onClose()}
       onClick={(e) => e.target === e.currentTarget && onClose()}
       className={cn(
-        "m-auto max-h-[calc(100dvh-2rem)] overflow-hidden rounded-panel bg-flat p-0 text-paper shadow-[0_0_0_1px_var(--color-line-strong),0_40px_120px_-20px_rgb(0_0_0/0.9)] backdrop:bg-black/80",
-        wide ? "w-[min(1260px,calc(100vw-2rem))]" : "w-[min(680px,calc(100vw-2rem))]",
+        "max-h-[calc(100dvh-2rem)] overflow-hidden rounded-panel bg-flat p-0 text-paper shadow-[0_0_0_1px_var(--color-line-strong),0_40px_120px_-20px_rgb(0_0_0/0.9)] backdrop:bg-black/80",
+        wide ? "m-auto w-[min(1260px,calc(100vw-2rem))]" : "mx-auto mb-auto mt-[max(1rem,6vh)] max-h-[calc(100dvh-max(1rem,6vh)-1rem)] w-[min(680px,calc(100vw-2rem))]",
       )}
     >
       {open ? children : null}

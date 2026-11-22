@@ -172,7 +172,7 @@ function ownerOf(sheetPath: string) {
 
 /** Whether a finished sheet came out in two rows, as a long thing's sheet is asked to (a model may still draw a row of three). */
 export async function sheetLayoutOf(sheetPath: string): Promise<Character["sheetLayout"]> {
-  return rows(await look(await fs.readFile(sheetPath))) ? "rows" : undefined;
+  return rows(await look(await fs.readFile(/*turbopackIgnore: true*/ sheetPath))) ? "rows" : undefined;
 }
 
 /* ------------------------------------------------------------------ views drawn one by one */
@@ -265,7 +265,7 @@ async function cutOut(src: Buffer, room: number) {
  */
 export async function assembleSheet(files: string[]): Promise<{ data: Buffer; layout?: "rows" }> {
   const H = 1000;
-  const cuts = await Promise.all(files.map(async (file) => cutOut(await fs.readFile(file), 0.1)));
+  const cuts = await Promise.all(files.map(async (file) => cutOut(await fs.readFile(/*turbopackIgnore: true*/ file), 0.1)));
   // Panels a touch apart in tone read as one set: each is matched to their average backdrop.
   const mean = (k: keyof Rgb) => Math.round(cuts.reduce((s, c) => s + c.backdrop[k], 0) / cuts.length);
   const backdrop = { r: mean("r"), g: mean("g"), b: mean("b") };
@@ -339,9 +339,9 @@ export async function sheetViews(sheetPath: string, owner = ownerOf(sheetPath)):
   const drawn = owner?.views?.map((v) => owner.viewPictures?.[v]);
   if (owner && drawn?.length && drawn.every(Boolean)) {
     const files = drawn.map((url) => urlToPath(url!)).filter((f): f is string => Boolean(f));
-    if (files.length === drawn.length) return Promise.all(files.map(async (f) => (await cutOut(await fs.readFile(f), 0.06)).data));
+    if (files.length === drawn.length) return Promise.all(files.map(async (f) => (await cutOut(await fs.readFile(/*turbopackIgnore: true*/ f), 0.06)).data));
   }
-  const src = await fs.readFile(sheetPath);
+  const src = await fs.readFile(/*turbopackIgnore: true*/ sheetPath);
   const seen = await look(src);
   const boxes = (owner?.sheetLayout === "rows" ? rows(seen) : null) ?? columns(seen);
   const { dominant } = await sharp(src).stats();

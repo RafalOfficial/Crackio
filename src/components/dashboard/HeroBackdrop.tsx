@@ -41,7 +41,10 @@ export function useHeroBackdrops() {
   const order = useSyncExternalStore(noop, playOrder, () => null);
   const [step, setStep] = useState(0);
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set());
+  // How long this frame has been up while the hero was on screen: the time before the last pause (`held`), plus since
+  // it came back (`shownAt`). The timer bar pauses the same way, so the frame changes exactly as the bar fills.
   const shownAt = useRef(0);
+  const held = useRef(0);
 
   const at = (k: number) => (order ? BACKDROPS[order[k % order.length]] : null);
   const current = at(step);
@@ -49,14 +52,23 @@ export function useHeroBackdrops() {
   const showing = !!current && loaded.has(current.id);
 
   useEffect(() => {
-    if (showing) shownAt.current = performance.now();
+    if (!showing) return;
+    shownAt.current = performance.now();
+    held.current = 0;
   }, [showing, step]);
+  useEffect(() => {
+    if (!showing || !live) return;
+    shownAt.current = performance.now();
+    return () => {
+      held.current += performance.now() - shownAt.current;
+    };
+  }, [showing, live, step]);
 
   // Move on once this frame has held long enough and the next one is ready to show.
   const nextReady = !!next && loaded.has(next.id);
   useEffect(() => {
     if (!live || !showing || !nextReady) return;
-    const t = setTimeout(() => setStep((s) => s + 1), Math.max(0, HOLD - (performance.now() - shownAt.current)));
+    const t = setTimeout(() => setStep((s) => s + 1), Math.max(0, HOLD - held.current - (performance.now() - shownAt.current)));
     return () => clearTimeout(t);
   }, [live, showing, nextReady, step]);
 

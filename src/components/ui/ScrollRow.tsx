@@ -3,8 +3,9 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { calmNow } from "@/lib/motion-pref";
 
-const scrollMotion = (): ScrollBehavior => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+const scrollMotion = (): ScrollBehavior => (calmNow() ? "auto" : "smooth");
 
 /**
  * Controls on one line at any width. When they don't all fit, the row scrolls sideways (swipe,

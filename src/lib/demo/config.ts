@@ -83,8 +83,8 @@ export const DEMO_PAGES: Record<DemoTool, string[]> = {
 /** Whether a page address belongs to the demo (`/templates` also covers `/templates/<id>`). */
 export function demoPage(pathname: string, tools = demoTools()): boolean {
   if (pathname === "/" || pathname === "/library" || pathname === "/demo") return true;
-  // The full demo's Connections: the visitor's own keys and machines.
-  if (pathname === "/settings/connections" && demoFull()) return true;
+  // The full demo's Accounts (once Connections, whose old address still leads there): the visitor's own keys and machines.
+  if ((pathname === "/settings/accounts" || pathname === "/settings/connections") && demoFull()) return true;
   for (const tool of tools) {
     for (const base of DEMO_PAGES[tool]) if (pathname === base || pathname.startsWith(`${base}/`)) return true;
   }

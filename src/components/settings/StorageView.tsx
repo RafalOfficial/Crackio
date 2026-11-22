@@ -8,8 +8,33 @@ import { useSetup, announce } from "@/lib/hooks/use-setup";
 import { KITS } from "@/lib/setup/kits";
 import { CAP_WARN_AT, GB, formatBytes, type StorageAction, type StorageModel, type StorageReport } from "@/lib/storage/types";
 import { cn } from "@/lib/cn";
-import { Heading, Loading, MachineStrip, ProblemCard, Tape, Verdict } from "./parts";
+import { ConfirmButton, Heading, Loading, MachineStrip, ProblemCard, Tape, Verdict } from "./parts";
 import { pickMachine } from "./words";
+
+/**
+ * Each machine's last report, kept for this tab (sessionStorage too, for a reload): a big model folder takes a minute to
+ * measure, and meanwhile the page shows what it found last time, dimmed, instead of an empty skeleton.
+ */
+const reports = new Map<string, StorageReport>();
+const KEPT = "crackio:storage-report:";
+function keptReport(machine: string): StorageReport | null {
+  const had = reports.get(machine);
+  if (had) return had;
+  try {
+    const raw = sessionStorage.getItem(KEPT + machine);
+    return raw ? (JSON.parse(raw) as StorageReport) : null;
+  } catch {
+    return null;
+  }
+}
+function keepReport(machine: string, report: StorageReport) {
+  reports.set(machine, report);
+  try {
+    sessionStorage.setItem(KEPT + machine, JSON.stringify(report));
+  } catch {
+    // Private windows or a full storage: this tab still keeps it in memory.
+  }
+}
 
 /**
  * Settings → Storage: each drive and how full it is, where downloads go, the most Crackio may keep, one-click ways to
@@ -21,6 +46,8 @@ export function StorageView() {
   const { snap } = useSetup();
   const m = pickMachine(snap, params.get("machine"));
   const [report, setReport] = useState<StorageReport | null>(null);
+  // Whether the report shown was measured on this visit (else it's the last one, kept, while a new one is measured).
+  const [fresh, setFresh] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const id = m?.id ?? null;
@@ -34,22 +61,36 @@ export function StorageView() {
   const load = useCallback(async () => {
     if (!id) return;
     const got = await measure(id);
-    if (got.report) setReport(got.report);
+    if (got.report) {
+      keepReport(id, got.report);
+      setReport(got.report);
+      setFresh(true);
+    }
     setError(got.error);
   }, [id, measure]);
 
-  // A new machine shows its own report, not the last one's, until it's measured.
+  // A new machine shows its own report (its last one, while it's measured again), never the other machine's.
   const [shownFor, setShownFor] = useState(id);
   if (shownFor !== id) {
     setShownFor(id);
     setReport(null);
+    setFresh(false);
   }
   useEffect(() => {
     if (!id) return;
     let live = true;
+    // After the first paint (the server has no kept report, so the page it drew and this one agree).
+    void Promise.resolve().then(() => {
+      const last = keptReport(id);
+      if (live && last) setReport((r) => r ?? last);
+    });
     measure(id).then((got) => {
       if (!live) return;
-      if (got.report) setReport(got.report);
+      if (got.report) {
+        keepReport(id, got.report);
+        setReport(got.report);
+        setFresh(true);
+      }
       setError(got.error);
     });
     return () => {
@@ -100,8 +141,8 @@ export function StorageView() {
         title="Storage"
         facts={
           r
-            ? `${r.downloads.freeBytes != null ? `${formatBytes(r.downloads.freeBytes)} free where ${m.label} downloads models` : "Free space unknown"} · Crackio keeps ${formatBytes(r.cap.usedBytes)} there`
-            : `Measuring ${m.label}…`
+            ? `${r.downloads.freeBytes != null ? `${formatBytes(r.downloads.freeBytes)} free where ${m.label} downloads models` : "Free space unknown"} · Crackio keeps ${formatBytes(r.cap.usedBytes)} there${fresh ? "" : " · measuring again…"}`
+            : `Measuring ${m.label}… big model folders take a minute`
         }
       />
       <div className="mt-6">
@@ -119,7 +160,7 @@ export function StorageView() {
           <ProblemCard tone="needs" title="Pay per job" why="This endpoint keeps its models on its own volume; Crackio doesn't manage its space." />
         </div>
       ) : (
-        <div className="mt-8 space-y-10">
+        <div className={cn("mt-8 space-y-10 transition-opacity duration-300", !fresh && "opacity-60")} aria-busy={!fresh || undefined}>
           <section className="space-y-4">
             {r.drives.map((d) => (
               <DriveBar key={d.path} d={d} cap={d === downloadDrive ? r.cap : null} />
@@ -129,7 +170,8 @@ export function StorageView() {
 
           <section className="space-y-3">
             <Heading title="Where downloads go" note="New models land here. What's already in ComfyUI's own folders stays usable." />
-            <DownloadFolder r={r} busy={busy === "root"} onSet={(path) => void act("root", { action: "set-root", machine: m.id, path })} />
+            {/* Keyed by the folder: going back to the default (or another machine) starts the field from what's saved now. */}
+            <DownloadFolder key={`${m.id}:${r.downloads.root ?? "default"}`} r={r} busy={busy === "root"} onSet={(path) => void act("root", { action: "set-root", machine: m.id, path })} />
           </section>
 
           <section className="space-y-3">
@@ -387,10 +429,9 @@ function Unused({ report, busy, onRemove, onRemoveAll }: { report: StorageReport
               </span>
             </span>
             <span className="text-[13px] tabular text-fog">{formatBytes(x.freesBytes)}</span>
-            <Button variant="ghost" size="sm" onClick={() => onRemove(x)} disabled={Boolean(busy)}>
-              {busy === `rm:${x.id}` ? <LoaderCircle size={14} className="animate-spin" /> : null}
+            <ConfirmButton confirm={`Remove · frees ${formatBytes(x.freesBytes)}`} onConfirm={() => onRemove(x)} disabled={Boolean(busy)} busy={busy === `rm:${x.id}`}>
               Remove
-            </Button>
+            </ConfirmButton>
           </li>
         ))}
       </ul>

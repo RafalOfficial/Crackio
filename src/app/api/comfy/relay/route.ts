@@ -1,5 +1,6 @@
 import { relayFor } from "@/lib/server/comfy-relay";
 import { ourHost } from "@/lib/server/our-host";
+import { targetById } from "@/lib/server/comfy-targets";
 
 /**
  * The ComfyUI page's frame: the port on this computer that relays one machine's ComfyUI interface (`?machine=` its id from
@@ -13,6 +14,9 @@ export async function GET(request: Request) {
   }
   const machine = new URL(request.url).searchParams.get("machine");
   if (!machine || machine.length > 120) return Response.json({ error: "Which machine?" }, { status: 400 });
+  // Only a machine Crackio knows, and never a billed one (RunPod, Comfy Cloud: they're not relayed to the ComfyUI page).
+  const t = await targetById(machine);
+  if (t.id !== machine || t.metered || t.serverless) return Response.json({ error: "No such machine." }, { status: 404 });
   const host = (request.headers.get("host") ?? "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
   const everywhere = !/^(localhost|127\.0\.0\.1|::1)$/i.test(host);
   try {

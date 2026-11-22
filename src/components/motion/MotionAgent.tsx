@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useModels } from "@/lib/hooks/use-models";
 import {
   AudioLines,
@@ -48,6 +48,7 @@ import { AspectGlyph } from "@/components/ui/AspectGlyph";
 import { ChipButton, GLASS_CHIP } from "@/components/dashboard/ComposerControls";
 import { CompositionPlayer, type PlayerComposition } from "./CompositionPlayer";
 import { Prose } from "./Prose";
+import { posterUrl, previewUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
 
 type Attachment = { url: string; kind: "image" | "video" | "audio" | "file"; name: string; width?: number; height?: number; file?: string };
@@ -60,6 +61,8 @@ type Message = {
   text: string;
   attachments?: Attachment[];
   generationId?: string;
+  /** A turn worked by an agent outside Crackio (the MCP's motion tool): who, whether it's still at it, and its last sign of life. */
+  agent?: { client: string; open: boolean; at: number };
   log?: LogEntry[];
   output?: { name: string; url: string; kind: "video" | "image" };
   compositionId?: string;
@@ -142,6 +145,48 @@ async function readProject(id: string) {
   return res.ok ? ((await res.json()) as { project: Project; jobs: Record<string, Job> }) : null;
 }
 
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * A fresh read of the project, keeping every part that didn't change as the very object it was: the messages, files and
+ * pieces nobody touched don't redraw, and a read where nothing changed redraws nothing at all.
+ */
+function shareProject(prev: Project | null, next: Project): Project {
+  if (!prev || prev.id !== next.id) return next;
+  const messages = next.messages.map((m) => {
+    const p = prev.messages.find((x) => x.id === m.id);
+    return p && same(p, m) ? p : m;
+  });
+  const files = same(prev.files, next.files) ? prev.files : next.files;
+  // A piece is never rewritten under its id: the same ids and lengths are the same pieces.
+  const compositions =
+    prev.compositions.length === next.compositions.length && prev.compositions.every((c, i) => c.id === next.compositions[i].id && c.html.length === next.compositions[i].html.length)
+      ? prev.compositions
+      : next.compositions;
+  const unchanged =
+    prev.updatedAt === next.updatedAt &&
+    prev.title === next.title &&
+    messages.length === prev.messages.length &&
+    messages.every((m, i) => m === prev.messages[i]) &&
+    files === prev.files &&
+    compositions === prev.compositions;
+  return unchanged ? prev : { ...next, messages, files, compositions };
+}
+
+function shareJobs(prev: Record<string, Job>, next: Record<string, Job>) {
+  const out: Record<string, Job> = {};
+  let changed = Object.keys(prev).length !== Object.keys(next).length;
+  for (const [id, job] of Object.entries(next)) {
+    const was = prev[id];
+    if (was && same(was, job)) out[id] = was;
+    else {
+      out[id] = job;
+      changed = true;
+    }
+  }
+  return changed ? out : prev;
+}
+
 /**
  * Motion: an agent with real tools. It generates images and clips on your GPU or Comfy key, designs motion
  * graphics as code, edits with ffmpeg, checks its own work and renders on this computer. Laid out like Director and
@@ -156,6 +201,8 @@ export function MotionAgent() {
   const [picked, setPicked] = useState<{ key: string; over: string } | null>(null);
   const [aspect, setAspect] = useState<Aspect>("auto");
   const [tab, setTab] = useState<"chat" | "files">("chat");
+  // Until the newest project is read, the stage and the thread wait as placeholders (not the empty "What should we make?").
+  const [ready, setReady] = useState(false);
 
   const loadProjects = useCallback(async () => {
     const list = await listProjects();
@@ -163,41 +210,76 @@ export function MotionAgent() {
     return list;
   }, []);
 
-  const loadProject = useCallback(async (id: string) => {
-    const data = await readProject(id);
-    if (data) {
-      setProject(data.project);
-      setJobs(data.jobs);
-    }
-    return data;
+  const apply = useCallback((data: { project: Project; jobs: Record<string, Job> }) => {
+    setProject((prev) => shareProject(prev, data.project));
+    setJobs((prev) => shareJobs(prev, data.jobs));
+    setReady(true);
   }, []);
+
+  const loadProject = useCallback(
+    async (id: string) => {
+      const data = await readProject(id);
+      if (data) apply(data);
+      return data;
+    },
+    [apply],
+  );
 
   // Open the most recent project.
   useEffect(() => {
-    void listProjects().then((list) => {
-      setProjects(list);
-      if (list[0]) setProjectId((id) => id ?? list[0].id);
-    });
+    void listProjects()
+      .then((list) => {
+        setProjects(list);
+        // A link to a project (an agent's "open" link) opens that one; else the most recent.
+        const asked = new URLSearchParams(window.location.search).get("project");
+        const first = list.find((p) => p.id === asked) ?? list[0];
+        if (first) setProjectId((id) => id ?? first.id);
+        else setReady(true);
+      })
+      .catch(() => setReady(true));
   }, []);
 
-  // Follow the open project, quickly while a turn is running.
-  const running = Object.values(jobs).some(live);
+  // Follow the open project: every 1.2 s while a turn runs; otherwise a slow look while the page is in view (a turn
+  // started from another tab shows up) and none while it's hidden. Coming back to the page looks at once.
+  // (An outside agent's turn has no job of Crackio's to watch: it's open, and it moved in the last ten minutes.)
+  const outside = project?.messages.findLast((m) => m.role === "agent")?.agent;
+  const agentAt = outside?.open ? outside.at : 0;
+  const [agentLive, setAgentLive] = useState(false);
+  useEffect(() => {
+    const check = () => setAgentLive(agentAt > 0 && Date.now() - agentAt < 10 * 60_000);
+    check();
+    const t = window.setInterval(check, 30_000);
+    return () => window.clearInterval(t);
+  }, [agentAt]);
+  const running = Object.values(jobs).some(live) || agentLive;
   useEffect(() => {
     if (!projectId) return;
     let alive = true;
-    const pull = () =>
-      void readProject(projectId).then((data) => {
-        if (!alive || !data) return;
-        setProject(data.project);
-        setJobs(data.jobs);
-      });
-    pull();
-    const t = setInterval(pull, running ? 1200 : 8000);
+    let busy = false;
+    let timer: number | undefined;
+    const pull = async () => {
+      window.clearTimeout(timer);
+      if (busy) return;
+      busy = true;
+      const data = await readProject(projectId).catch(() => null);
+      busy = false;
+      if (!alive) return;
+      if (data) apply(data);
+      if (document.visibilityState === "visible") timer = window.setTimeout(() => void pull(), running ? 1200 : 15000);
+    };
+    const onShow = () => {
+      if (document.visibilityState === "visible") void pull();
+    };
+    void pull();
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", onShow);
     return () => {
       alive = false;
-      clearInterval(t);
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("focus", onShow);
     };
-  }, [projectId, running]);
+  }, [projectId, running, apply]);
 
   const files = project?.files ?? [];
   const latestAgent = [...(project?.messages ?? [])].reverse().find((m) => m.role === "agent");
@@ -209,10 +291,27 @@ export function MotionAgent() {
   const legacy = project?.compositions.filter((c) => !c.file) ?? [];
   const auto = lastOutput ? fileKey(lastOutput.name) : files.length ? fileKey(files.at(-1)!.name) : legacy.length ? `comp:${legacy.at(-1)!.id}` : "";
   const selected = picked && picked.over === auto ? picked.key : auto;
-  const open = (key: string) => setPicked({ key, over: auto });
+  const open = useCallback((key: string) => setPicked({ key, over: auto }), [auto]);
+
+  // The stage keeps clear of the bar floating over its foot, however tall the bar grows (attachments, a long brief).
+  const stageWrap = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const wrap = stageWrap.current;
+    const el = bar.current;
+    if (!wrap || !el) return;
+    const fit = () => wrap.style.setProperty("--composer", `${Math.ceil(wrap.getBoundingClientRect().bottom - el.getBoundingClientRect().top)}px`);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
 
   async function send(input: { text: string; attachments: Attachment[]; aspect: Aspect; model: string }) {
     let id = projectId;
+    // Only a new project (or its first message, which names it) changes the list of projects.
+    const renames = !id || !project?.messages.length;
     if (!id) {
       const res = await fetch("/api/motion/projects", { method: "POST" });
       id = ((await res.json()) as { project: Project }).project.id;
@@ -224,11 +323,12 @@ export function MotionAgent() {
       body: JSON.stringify(input),
     });
     const data = (await res.json()) as { project?: Project; error?: string };
-    if (!data.project) throw new Error(data.error ?? "Couldn't send that.");
-    setProject(data.project);
+    const sent = data.project;
+    if (!sent) throw new Error(data.error ?? "Couldn't send that.");
+    setProject((prev) => shareProject(prev, sent));
     setTab("chat");
     void loadProject(id);
-    void loadProjects();
+    if (renames) void loadProjects();
   }
 
   function newProject() {
@@ -263,7 +363,13 @@ export function MotionAgent() {
           onNew={newProject}
         />
         <div className="flex min-w-0 flex-1 justify-center">
-          <AnimatePresence>{latestAgent?.generationId && live(latestJob) ? <TurnPill key="turn" job={latestJob!} id={latestAgent.generationId} /> : null}</AnimatePresence>
+          <AnimatePresence>
+            {latestAgent?.generationId && live(latestJob) ? (
+              <TurnPill key="turn" job={latestJob!} id={latestAgent.generationId} />
+            ) : agentLive && latestAgent?.agent ? (
+              <AgentPill key="agent" client={latestAgent.agent.client} doing={latestAgent.log?.findLast((e) => e.kind === "step" && e.status === "running")} />
+            ) : null}
+          </AnimatePresence>
         </div>
         <button
           onClick={newProject}
@@ -284,16 +390,16 @@ export function MotionAgent() {
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         {/* The stage, with Home's glass bar floating over its foot. */}
-        <div className="relative flex min-h-[78dvh] min-w-0 flex-1 flex-col lg:min-h-0">
-          <Stage project={project} files={files} selected={selected} job={latestJob} jobId={latestAgent?.generationId} />
-          <div className="absolute inset-x-3 bottom-3 z-20 sm:inset-x-5 sm:bottom-5">
+        <div ref={stageWrap} className="relative flex min-h-[78dvh] min-w-0 flex-1 flex-col lg:min-h-0">
+          <Stage project={project} files={files} selected={selected} job={latestJob} ready={ready} />
+          <div ref={bar} className="absolute inset-x-3 bottom-3 z-20 sm:inset-x-5 sm:bottom-5">
             <Composer busy={live(latestJob)} onSend={send} aspect={aspect} setAspect={setAspect} />
           </div>
         </div>
 
         <SidePanel tab={tab} setTab={setTab} files={files.length + legacy.length}>
           {tab === "chat" ? (
-            <Thread project={project} jobs={jobs} files={files} selected={selected} onOpen={open} />
+            <Thread project={project} jobs={jobs} files={files} selected={selected} onOpen={open} ready={ready} />
           ) : (
             <FilesPanel files={files} legacy={legacy} outputs={outputs} selected={selected} onOpen={open} />
           )}
@@ -325,6 +431,31 @@ function TurnPill({ job, id }: { job: Job; id: string }) {
   );
 }
 
+/** An agent outside Crackio (Claude Code, Codex… through the MCP) is working in this project: who, and on what. */
+function AgentPill({ client, doing }: { client: string; doing?: LogEntry }) {
+  const name = client
+    .split(/[-_ ]+/)
+    .map((w) => w.slice(0, 1).toUpperCase() + w.slice(1))
+    .join(" ");
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+      className="flex min-w-0 max-w-full items-center gap-2.5 rounded-full bg-white/[0.04] py-1.5 pl-3.5 pr-4 shadow-[inset_0_0_0_1px_var(--color-line)]"
+    >
+      <span className="motion-dots shrink-0" aria-hidden>
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="truncate text-[12.5px] font-medium text-paper">{doing?.kind === "step" ? doing.title : `${name} is working here`}</span>
+      {doing ? <span className="hidden shrink-0 text-[11.5px] text-haze sm:inline">{name}</span> : null}
+    </motion.div>
+  );
+}
+
 function ProjectSwitcher({
   projects,
   current,
@@ -338,6 +469,10 @@ function ProjectSwitcher({
   onRemove: (id: string) => void;
   onNew: () => void;
 }) {
+  // Deleting takes the project's folder of files with it: a second click on "Delete?" does it.
+  const [arming, setArming] = useState<string | null>(null);
+  const disarm = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(disarm.current), []);
   return (
     <Popover
       placement="bottom-start"
@@ -377,8 +512,24 @@ function ProjectSwitcher({
                 >
                   <span className="truncate">{p.title}</span>
                 </MenuItem>
-                <button onClick={() => onRemove(p.id)} className="grid size-7 shrink-0 place-items-center rounded-md text-haze opacity-0 hover:text-tally group-hover:opacity-100" aria-label={`Delete ${p.title}`}>
-                  <Trash size={12} />
+                <button
+                  onClick={() => {
+                    if (arming !== p.id) {
+                      setArming(p.id);
+                      window.clearTimeout(disarm.current);
+                      disarm.current = window.setTimeout(() => setArming(null), 2500);
+                      return;
+                    }
+                    setArming(null);
+                    onRemove(p.id);
+                  }}
+                  className={cn(
+                    "grid h-7 shrink-0 place-items-center rounded-md",
+                    arming === p.id ? "bg-tally/15 px-2 text-[11.5px] font-semibold text-tally" : "w-7 text-haze opacity-0 hover:text-tally focus-visible:opacity-100 group-hover:opacity-100",
+                  )}
+                  aria-label={arming === p.id ? `Delete ${p.title} and its files` : `Delete ${p.title}`}
+                >
+                  {arming === p.id ? "Delete?" : <Trash size={12} />}
                 </button>
               </div>
             ))}
@@ -411,7 +562,7 @@ function SidePanel({ tab, setTab, files, children }: { tab: "chat" | "files"; se
               className={cn("relative flex flex-1 items-center justify-center gap-1.5 rounded-[10px] text-[12.5px] font-semibold transition-colors", tab === id ? "text-paper" : "text-fog hover:text-paper")}
             >
               {tab === id ? (
-                <motion.span layoutId="motion-panel-tab" className="absolute inset-0 rounded-[10px] bg-white/[0.1] shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_1px_2px_rgb(0_0_0/0.25)]" transition={{ type: "spring", bounce: 0.18, duration: 0.4 }} />
+                <motion.span layoutId="motion-panel-tab" layoutDependency={tab} className="absolute inset-0 rounded-[10px] bg-white/[0.1] shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_1px_2px_rgb(0_0_0/0.25)]" transition={{ type: "spring", bounce: 0.18, duration: 0.4 }} />
               ) : null}
               <Icon size={13} className="relative" />
               <span className="relative">{label}</span>
@@ -433,20 +584,47 @@ function Thread({
   files,
   selected,
   onOpen,
+  ready,
 }: {
   project: Project | null;
   jobs: Record<string, Job>;
   files: ProjectFile[];
   selected: string;
   onOpen: (key: string) => void;
+  ready: boolean;
 }) {
-  const end = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const atEnd = useRef(true);
+  const first = useRef(true);
+  const [behind, setBehind] = useState(false);
   const last = project?.messages.at(-1);
-  const pulse = `${project?.messages.length ?? 0}:${last?.log?.length ?? 0}:${last?.text.length ?? 0}`;
-  // Newer browsers return a promise from scrollIntoView; an effect may only return a cleanup.
+  const pulse = `${project?.id ?? ""}:${project?.messages.length ?? 0}:${last?.log?.length ?? 0}:${last?.text.length ?? 0}`;
+  // Opening the thread lands at its end at once; new steps follow it only while you're reading the end, and otherwise
+  // wait under a pill instead of pulling you away from what you're reading.
   useEffect(() => {
-    void end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = box.current;
+    if (!el) return;
+    if (first.current || atEnd.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: first.current ? "instant" : "smooth" });
+      first.current = false;
+    } else setBehind(true);
   }, [pulse]);
+
+  if (!ready) {
+    return (
+      <div className="min-h-0 flex-1 space-y-4 px-4 py-4" aria-hidden>
+        <div className="skeleton ml-auto h-10 w-2/3 rounded-[18px]" />
+        <div className="flex gap-2.5">
+          <span className="skeleton size-6 shrink-0 rounded-[8px]" />
+          <div className="flex-1 space-y-2">
+            <div className="skeleton h-4 w-5/6 rounded" />
+            <div className="skeleton h-4 w-2/3 rounded" />
+            <div className="skeleton h-4 w-3/4 rounded" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!project || !project.messages.length) {
     return (
@@ -463,7 +641,16 @@ function Thread({
   }
 
   return (
-    <div className="scroll-thin min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={box}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          if (atEnd.current && behind) setBehind(false);
+        }}
+        className="scroll-thin min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4"
+      >
       {project.messages.map((m) =>
         m.role === "user" ? (
           <div key={m.id} className="flex flex-col items-end gap-1.5">
@@ -477,31 +664,44 @@ function Thread({
             {m.text ? <p className="max-w-[88%] whitespace-pre-wrap rounded-[18px] rounded-br-[6px] bg-white/[0.07] px-3.5 py-2.5 text-[13.5px] leading-relaxed">{m.text}</p> : null}
           </div>
         ) : (
-          <AgentTurn key={m.id} m={m} job={m.generationId ? jobs[m.generationId] : undefined} files={files} project={project} selected={selected} onOpen={onOpen} />
+          <AgentTurn key={m.id} m={m} job={m.generationId ? jobs[m.generationId] : undefined} files={files} compositions={project.compositions} selected={selected} onOpen={onOpen} />
         ),
       )}
-      <div ref={end} />
+      </div>
+      {behind ? (
+        <button
+          type="button"
+          onClick={() => {
+            box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" });
+            setBehind(false);
+          }}
+          className="press absolute bottom-3 left-1/2 inline-flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full bg-paper px-3 text-[12px] font-semibold text-[#16131b] shadow-[0_8px_24px_-8px_rgb(0_0_0/0.7)] hover:bg-white"
+        >
+          <ChevronDown size={13} /> New steps
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function AgentTurn({
+/** One turn of the agent: memoized, so a poll that only moves another turn (or nothing) doesn't redraw this one. */
+const AgentTurn = memo(function AgentTurn({
   m,
   job,
   files,
-  project,
+  compositions,
   selected,
   onOpen,
 }: {
   m: Message;
   job?: Job;
   files: ProjectFile[];
-  project: Project;
+  compositions: Composition[];
   selected: string;
   onOpen: (key: string) => void;
 }) {
   const log = m.log ?? [];
-  const legacy = m.compositionId ? project.compositions.findIndex((c) => c.id === m.compositionId) : -1;
+  const legacy = m.compositionId ? compositions.findIndex((c) => c.id === m.compositionId) : -1;
   const output = m.output ? files.find((f) => f.name === m.output!.name) : undefined;
   // The delivery itself shows as the card below, not as a step.
   const shown = log.filter((e) => e.kind === "note" || e.tool !== "finish");
@@ -549,7 +749,7 @@ function AgentTurn({
               onClick={() => onOpen(`comp:${m.compositionId}`)}
               className={cn("press inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-semibold", selected === `comp:${m.compositionId}` ? "bg-white/[0.12] text-paper" : "bg-white/[0.05] text-fog hover:text-paper")}
             >
-              <Film size={12} /> v{legacy + 1} · {project.compositions[legacy].duration}s
+              <Film size={12} /> v{legacy + 1} · {compositions[legacy].duration}s
             </button>
             {job?.output ? (
               <a href={job.output} download className="press inline-flex h-7 items-center gap-1.5 rounded-full bg-white/[0.05] px-2.5 text-[11.5px] font-semibold text-fog hover:text-paper">
@@ -561,7 +761,7 @@ function AgentTurn({
       </div>
     </div>
   );
-}
+});
 
 function Step({ e, files, selected, onOpen }: { e: Extract<LogEntry, { kind: "step" }>; files: ProjectFile[]; selected: string; onOpen: (key: string) => void }) {
   const Icon = TOOL_ICON[e.tool] ?? Wand2;
@@ -601,7 +801,10 @@ function Step({ e, files, selected, onOpen }: { e: Extract<LogEntry, { kind: "st
 
 function OutputCard({ name, url, file, active, onOpen }: { name: string; url: string; file?: ProjectFile; active: boolean; onOpen: () => void }) {
   const ratio = file?.width && file?.height ? file.width / file.height : 16 / 9;
-  const still = file?.poster ?? (file?.kind === "image" ? file.url : undefined);
+  const original = file?.poster ?? (file?.kind === "image" ? file.url : undefined);
+  // A light copy at the card's size (the panel is at most 440 px wide, 2× on a Retina screen); a clip without a still
+  // shows its opening frame instead of loading a video player.
+  const still = original ? previewUrl(original, 960) : posterUrl(url, 960);
   return (
     <div className="pt-0.5">
       <button
@@ -735,8 +938,15 @@ function FilesPanel({
 }
 
 /** One file in the bin: its picture (or a clip's frame), what it is, and how long. */
+/** A file's picture at the size it's shown: its light copy, or a clip's opening frame (never a video player per tile). */
+function stillOf(f: { kind: string; url: string; poster?: string }, width: number) {
+  if (f.kind === "image") return previewUrl(f.url, width);
+  if (f.poster) return previewUrl(f.poster, width);
+  return f.kind === "video" ? posterUrl(f.url, width) : undefined;
+}
+
 function FileCard({ f, final, active, onClick }: { f: ProjectFile; final: boolean; active: boolean; onClick: () => void }) {
-  const still = f.kind === "image" ? f.url : f.poster;
+  const still = stillOf(f, 480);
   return (
     <button
       onClick={onClick}
@@ -771,7 +981,7 @@ function FileCard({ f, final, active, onClick }: { f: ProjectFile; final: boolea
 
 /* ---------------------------------------------------------------- Stage */
 
-function Stage({ project, files, selected, job, jobId }: { project: Project | null; files: ProjectFile[]; selected: string; job?: Job; jobId?: string }) {
+function Stage({ project, files, selected, job, ready }: { project: Project | null; files: ProjectFile[]; selected: string; job?: Job; ready: boolean }) {
   const [liveView, setLiveView] = useState(false);
   const file = selected.startsWith("file:") ? files.find((f) => f.name === selected.slice(5)) : undefined;
   const comp = selected.startsWith("comp:")
@@ -808,7 +1018,7 @@ function Stage({ project, files, selected, job, jobId }: { project: Project | nu
                     onClick={() => setLiveView(t === "live")}
                     className={cn("relative h-7 rounded-full px-3 text-[12px] font-semibold transition-colors", (t === "live") === liveView ? "text-paper" : "text-fog hover:text-paper")}
                   >
-                    {(t === "live") === liveView ? <motion.span layoutId="motion-view" className="absolute inset-0 rounded-full bg-white/[0.12]" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} /> : null}
+                    {(t === "live") === liveView ? <motion.span layoutId="motion-view" layoutDependency={liveView} className="absolute inset-0 rounded-full bg-white/[0.12]" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} /> : null}
                     <span className="relative">{t === "live" ? "Live" : "Video"}</span>
                   </button>
                 ))}
@@ -825,28 +1035,18 @@ function Stage({ project, files, selected, job, jobId }: { project: Project | nu
 
       <div className="relative min-h-0 flex-1">
         {showing ? (
-          // The piece sits above the glass bar, never under it.
-          <div className="absolute inset-x-4 bottom-[178px] top-0 sm:inset-x-6 sm:bottom-[150px]">
+          // The piece sits above the glass bar, never under it, however tall the bar is.
+          <div className="absolute inset-x-4 top-0 sm:inset-x-6" style={{ bottom: "calc(var(--composer, 150px) + 16px)" }}>
             {comp ? <CompositionPlayer composition={comp} className="absolute inset-0" /> : <Viewer f={file!} />}
+          </div>
+        ) : !ready ? (
+          <div className="absolute inset-x-4 top-4 sm:inset-x-6" style={{ bottom: "calc(var(--composer, 150px) + 16px)" }} aria-hidden>
+            <div className="skeleton size-full rounded-[14px]" />
           </div>
         ) : (
           <StageEmpty job={job} />
         )}
-
-        <AnimatePresence>
-          {job && live(job) && jobId && showing ? (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              className="absolute inset-x-0 top-2 mx-auto flex w-fit max-w-[92%] items-center gap-3 rounded-full border border-white/15 bg-black/65 py-1.5 pl-3 pr-1.5"
-            >
-              <LoaderCircle size={14} className="shrink-0 animate-spin text-[var(--color-tool-motion)]" />
-              <span className="truncate text-[12px] font-medium text-paper">{job.stage ?? "Working"}</span>
-              <CancelButton id={jobId} />
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+        {/* A running turn shows once, in the top bar (what it's doing, and Cancel). */}
       </div>
     </section>
   );
@@ -934,7 +1134,7 @@ function TextViewer({ f }: { f: ProjectFile }) {
 function StageEmpty({ job }: { job?: Job }) {
   if (live(job)) {
     return (
-      <div className="grid h-full place-items-center pb-[150px]">
+      <div className="grid h-full place-items-center" style={{ paddingBottom: "var(--composer, 150px)" }}>
         <div className="max-w-[380px] text-center">
           <div className="mx-auto grid size-14 place-items-center rounded-[18px] bg-white/[0.04] shadow-[inset_0_0_0_1px_var(--color-line)]">
             <LoaderCircle size={22} className="animate-spin text-[var(--color-tool-motion)]" />
@@ -947,7 +1147,7 @@ function StageEmpty({ job }: { job?: Job }) {
   }
   return (
     <div className="scroll-thin absolute inset-0 overflow-y-auto px-4 sm:px-8">
-      <div className="mx-auto flex min-h-full max-w-[760px] flex-col justify-center pb-[190px] pt-10 text-center sm:pb-[170px]">
+      <div className="mx-auto flex min-h-full max-w-[760px] flex-col justify-center pt-10 text-center" style={{ paddingBottom: "calc(var(--composer, 150px) + 20px)" }}>
         <h1 className="font-display text-[40px] leading-[1.02] sm:text-[56px]">What should we make?</h1>
         <p className="mx-auto mt-3 max-w-[60ch] text-[14.5px] leading-relaxed text-fog">
           Motion plans each piece and builds it in code: type, graphics, 3D, camera moves and sound. It makes pictures and clips on your GPU or your Comfy key only
@@ -976,7 +1176,7 @@ function StageEmpty({ job }: { job?: Job }) {
 }
 
 function FileTile({ f, size, active, onClick }: { f: ProjectFile; size: number; active?: boolean; onClick: () => void }) {
-  const still = f.kind === "image" ? f.url : f.poster;
+  const still = stillOf(f, size * 2);
   return (
     <button
       onClick={onClick}
@@ -1002,12 +1202,18 @@ function FileTile({ f, size, active, onClick }: { f: ProjectFile; size: number; 
 }
 
 function Thumb({ a, size, onRemove, onClick }: { a: Attachment; size: number; onRemove?: () => void; onClick?: () => void }) {
+  const still = a.kind === "image" ? previewUrl(a.url, size * 2) : a.kind === "video" ? posterUrl(a.url, size * 2) : undefined;
   const body: ReactNode =
     a.kind === "image" ? (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={a.url} alt="" className="size-full object-cover" />
+      <img src={still} alt="" className="size-full object-cover" />
     ) : a.kind === "video" ? (
-      <video src={`${a.url}#t=0.1`} muted playsInline preload="metadata" className="size-full object-cover" />
+      still ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={still} alt="" className="size-full object-cover" />
+      ) : (
+        <video src={`${a.url}#t=0.1`} muted playsInline preload="metadata" className="size-full object-cover" />
+      )
     ) : (
       <span className={cn("grid size-full place-items-center px-1 text-center", a.kind === "audio" ? "bg-gradient-to-br from-[#7aa2ff]/25 to-[#f0abfc]/20" : "")}>
         <span className="flex flex-col items-center gap-0.5">
@@ -1079,9 +1285,10 @@ function Composer({
     return () => window.removeEventListener("motion:prompt", onIdea);
   }, []);
 
+  // The brief grows with what you write (field-sizing does it in CSS where the browser can; this measures elsewhere).
   useEffect(() => {
     const el = area.current;
-    if (!el) return;
+    if (!el || CSS.supports?.("field-sizing", "content")) return;
     el.style.height = "0px";
     el.style.height = `${Math.min(Math.max(el.scrollHeight, 60), 200)}px`;
   }, [text]);
@@ -1173,7 +1380,7 @@ function Composer({
             }}
             rows={2}
             placeholder={busy ? "Ask for a change, or queue the next piece…" : "Describe anything: an ad from my photos, a trailer from my clips, a lyric video, an explainer…"}
-            className="block min-h-[60px] w-full resize-none bg-transparent px-3 pb-2 pt-3 text-[16px] leading-relaxed text-paper outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_12px,#000_calc(100%_-_8px),transparent)] [scrollbar-color:rgb(255_255_255/0.16)_transparent] [scrollbar-width:thin] placeholder:text-haze"
+            className="block max-h-[200px] min-h-[60px] w-full resize-none bg-transparent px-3 pb-2 pt-3 [field-sizing:content] text-[16px] leading-relaxed text-paper outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_12px,#000_calc(100%_-_8px),transparent)] [scrollbar-color:rgb(255_255_255/0.16)_transparent] [scrollbar-width:thin] placeholder:text-haze"
           />
           <input
             ref={input}
@@ -1193,7 +1400,7 @@ function Composer({
               Attach
               {attachments.length ? <span className="tabular text-haze">{attachments.length}</span> : null}
             </ChipButton>
-            <ModelPicker kind="text" value={model} onChange={setModel} variant="chip" chipClassName={GLASS_CHIP} surface="glass" placement="top-start" library only={brains} fits={(m) => m.family !== "comfy-local-text"} />
+            <ModelPicker kind="text" value={model} onChange={setModel} variant="chip" chipClassName={GLASS_CHIP} placement="top-start" library only={brains} fits={(m) => m.family !== "comfy-local-text"} />
             <Popover
               placement="top-start"
               trigger={({ open, toggle }) => (

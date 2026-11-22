@@ -198,7 +198,7 @@ async function scanRecipes(): Promise<Map<string, Kept>> {
     await Promise.all(
       fresh.slice(i, i + 32).map(async (name) => {
         // One Windows won't let us read this moment (mid-rename) is read next time.
-        const raw = await fs.readFile(path.join(/*turbopackIgnore: true*/ RECIPES_DIR, name), "utf8").catch(() => null);
+        const raw = await fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ RECIPES_DIR, name), "utf8").catch(() => null);
         if (raw !== null) store.files.set(name, keptOf(raw));
       }),
     );
@@ -211,7 +211,7 @@ async function scanRecipes(): Promise<Map<string, Kept>> {
 /* ------------------------------------------------------------------ estimates (local-speeds) */
 
 /** server/local-models keeps it: GPU name → model (its id without "local:") → its last runs. */
-const SPEEDS_FILE = path.join(DATA_DIR, "local-speeds.json");
+const SPEEDS_FILE = path.join(/*turbopackIgnore: true*/ DATA_DIR, "local-speeds.json");
 type SpeedRun = { s?: number; e?: number; at?: number };
 type SpeedEntry = { runs?: SpeedRun[] };
 type Speeds = Record<string, Record<string, SpeedEntry | undefined> | undefined>;

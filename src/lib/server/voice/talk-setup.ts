@@ -51,6 +51,7 @@ const hfToken = async () => (await getSettings()).keys.hf?.trim() || process.env
 
 export async function setUpTalk(input: { machine?: string; model?: VoiceModelId; loras?: Lfm3LoraKey[] }): Promise<TalkSetupJob> {
   const asked = [...new Set(input.loras ?? [])];
+  // (An add-on with no repo set in lib/local/lfm3.ts can't be fetched: said at once, before anything is queued.)
   const unpublished = asked.find((k) => !lfm3LoraUrl(k));
   if (unpublished) throw new TalkSetupError(`${LFM3_LORAS[unpublished].label} isn't published yet.`);
   const machines = (await voiceMachines(true)).filter((m) => m.online);

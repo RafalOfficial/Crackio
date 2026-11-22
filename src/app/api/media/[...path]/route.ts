@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { MIME, urlToPath } from "@/lib/server/media";
-import { preview } from "@/lib/server/previews";
+import { copyMissing, preview } from "@/lib/server/previews";
 import { demoMediaDenied } from "@/lib/demo/media";
 
 /**
@@ -26,18 +26,31 @@ export async function GET(req: Request, ctx: RouteContext<"/api/media/[...path]"
   // When no copy can be made the original stands in, kept only briefly so the copy is tried again.
   let standIn = false;
   if (width > 0) {
-    // A copy not made yet goes on being made, but this request waits for it only a moment: each request held here
-    // holds one of the browser's six connections to Crackio, and a few new clips in Recent (a few seconds of ffmpeg
-    // each, one at a time) kept everything else on the page waiting, the showcase's pictures and clips with it.
-    const making = preview(original, width, poster ? "poster" : null).catch(() => null);
+    // A copy not made yet goes on being made (ahead of the background warm-up: this card is on screen), but this request
+    // waits for it only a moment: each request held here holds one of the browser's six connections to Crackio, and a
+    // few new clips in Recent (a few seconds of ffmpeg each, one at a time) kept everything else on the page waiting, the
+    // showcase's pictures and clips with it. A big picture waits a little longer: sending a 3 MB original for a 480 px
+    // card holds its connection about as long, for 30 times the bytes.
+    const making = preview(original, width, poster ? "poster" : null, { urgent: true }).catch(() => null);
     const clip = /\.(mp4|webm|mov|m4v)$/i.test(original) && !poster;
-    const copy = await Promise.race([making, new Promise<undefined>((done) => setTimeout(done, poster ? 800 : clip ? 60 : 400))]);
+    const big = !clip && !poster ? ((await fs.stat(/*turbopackIgnore: true*/ original).catch(() => null))?.size ?? 0) > 1.5e6 : false;
+    const copy = await Promise.race([making, new Promise<undefined>((done) => setTimeout(done, poster ? 800 : clip ? 60 : big ? 1500 : 400))]);
     if (copy) ({ file, mime } = copy);
     else if (poster) return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });
     else standIn = true;
   }
 
-  const stat = await fs.stat(file).catch(() => null);
+  let stat = await fs.stat(/*turbopackIgnore: true*/ file).catch(() => null);
+  // A copy gone from disk (its cache folder cleared): made again on the next ask, the original standing in for a still
+  // or a clip meanwhile.
+  if (!stat?.isFile() && file !== original) {
+    copyMissing(file);
+    if (poster) return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+    file = original;
+    mime = undefined;
+    standIn = true;
+    stat = await fs.stat(/*turbopackIgnore: true*/ file).catch(() => null);
+  }
   if (!stat?.isFile()) return new Response("Not found", { status: 404 });
   const size = stat.size;
   const etag = `"${size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;

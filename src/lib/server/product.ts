@@ -18,7 +18,7 @@ import { CAMERAS, FINISHES, FORMATS, LIGHTS, MOMENTS, PEOPLE_MOMENTS, SCENES, WH
  *  3. Shoot: every take renders on the picked image model with the product photos attached.
  */
 
-const DIR = path.join(DATA_DIR, "cache", "product");
+const DIR = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "product");
 /** Bump when the reading instructions change. */
 const READ_VERSION = 1;
 
@@ -129,9 +129,9 @@ const reading = (g.__crackioProductReads ??= new Map());
 export async function readProduct(files: string[], signal?: AbortSignal): Promise<ProductRead | null> {
   if (!files.length) return null;
   const hash = createHash("sha1");
-  for (const f of files) hash.update(await fs.readFile(f)).update("|");
+  for (const f of files) hash.update(await fs.readFile(/*turbopackIgnore: true*/ f)).update("|");
   const key = hash.update(`v${READ_VERSION}`).digest("hex");
-  const file = path.join(DIR, `${key}.json`);
+  const file = path.join(/*turbopackIgnore: true*/ DIR, `${key}.json`);
   const hit = await fs
     .readFile(file, "utf8")
     .then((t) => JSON.parse(t) as { read: ProductRead })
@@ -154,8 +154,8 @@ export async function readProduct(files: string[], signal?: AbortSignal): Promis
     }).catch(() => null);
     const read = answer ? toRead(jsonObject(answer)) : null;
     if (read) {
-      await fs.mkdir(DIR, { recursive: true });
-      await fs.writeFile(file, JSON.stringify({ version: READ_VERSION, read }));
+      await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+      await fs.writeFile(/*turbopackIgnore: true*/ file, JSON.stringify({ version: READ_VERSION, read }));
     }
     return read;
   })();
@@ -288,8 +288,22 @@ export function fallbackShots({ read, spec, notes, count }: Pick<PlanInput, "rea
   const light = byId(LIGHTS, spec.light).phrase;
   const finish = byId(FINISHES, spec.finish).phrase || "Realistic commercial product photograph";
   const words = read?.text ? ` Its label reads "${read.text.split(" / ").slice(0, 3).join(" ")}".` : "";
+  // Who is in the frame, and how the thing is really used. Without them "in use" with a woman drew a pair of headphones
+  // lying on a café table under two hands: nobody wearing them, no face.
+  const withPeople = PEOPLE_MOMENTS.includes(spec.moment);
+  const who = !withPeople ? "" : spec.who === "cast" && spec.cast ? spec.cast.name : spec.who === "custom" && spec.whoText ? spec.whoText : byId(WHO, spec.who).phrase;
+  const person = !who ? "" : /only their hands/.test(who) ? "Only the person's hands and arms are in the frame, no face." : `The person is ${who}${spec.moment === "use" ? ", their face and upper body in the frame" : ""}.`;
+  const used = !withPeople
+    ? ""
+    : read?.use
+      ? `How it is used: ${read.use}${spec.moment === "use" ? " The picture shows exactly that happening." : ""}`
+      : spec.moment === "use"
+        ? "The product is doing its job on the person (worn where it is worn, drunk, applied, switched on in their hands), never lying beside them."
+        : "";
   const prompt = [
     `${finish} of ${name} from image 1${moment ? `, ${moment}` : ""}${scene ? `, ${scene}` : ""}.${words}`,
+    person,
+    used,
     camera ? `${camera}.` : "",
     light ? `${light}.` : "",
     "Real-world scale, natural contact shadows, true-to-life materials and color; placed where it would really be used.",
@@ -333,14 +347,14 @@ The fix is for a re-shoot. When the problem is a hard pose or a point of contact
 Answer with JSON only: {"pass": true or false, "issues": ["each problem in one short plain sentence"], "fix": "one or two sentences telling the image model exactly what to do differently on a re-shoot ('' when it passes)"}`;
 
 const CHECKERS = READERS;
-const CHECK_DIR = path.join(DIR, "check");
+const CHECK_DIR = path.join(/*turbopackIgnore: true*/ DIR, "check");
 
 /** What a client would reject in a take, looked for against the product photo. Null when no vision model answers (the shoot then keeps the take). */
 async function checkShot(product: string, out: EngineOutput, read: ProductRead | null, prompt: string, asked: string, signal: AbortSignal, person?: string) {
-  await fs.mkdir(CHECK_DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ CHECK_DIR, { recursive: true });
   const ext = out.mime === "image/jpeg" ? "jpg" : out.mime === "image/webp" ? "webp" : "png";
-  const file = path.join(CHECK_DIR, `${createHash("sha1").update(out.data).digest("hex").slice(0, 16)}.${ext}`);
-  await fs.writeFile(file, out.data);
+  const file = path.join(/*turbopackIgnore: true*/ CHECK_DIR, `${createHash("sha1").update(out.data).digest("hex").slice(0, 16)}.${ext}`);
+  await fs.writeFile(/*turbopackIgnore: true*/ file, out.data);
   try {
     const answer = await askText({
       instructions: CHECK_INSTRUCTIONS,
@@ -368,7 +382,7 @@ async function checkShot(product: string, out: EngineOutput, read: ProductRead |
     if (!raw || typeof raw.pass !== "boolean") return null;
     return { pass: raw.pass, issues: list(raw.issues, 5, 160), fix: tidy(raw.fix, 400) };
   } finally {
-    await fs.rm(file, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ file, { force: true });
   }
 }
 
@@ -402,9 +416,15 @@ export async function runProductShoot(
 
   ctx.progress(0.08, count > 1 ? "Planning the shots" : "Planning the shot");
   const pictures = job.references.map((r, i) => ({ label: i < products.length ? (i === 0 ? "the product" : "the same product from another angle") : (r.label ?? "a reference") }));
-  const plans =
-    (await planShots({ read, spec, notes: opts.notes, pictures, productFiles: products.map((p) => p.path), aspect: job.aspect, count, seesImages: opts.seesImages, signal: ctx.signal })) ??
-    fallbackShots({ read, spec, notes: opts.notes, count });
+  // An agent's own prompts are the plan (lib/agent): nothing is directed or reworded for it.
+  const own = (spec.shots ?? []).map((s) => s.trim()).filter(Boolean).slice(0, 4).map((prompt): ShotPlan => ({ idea: prompt.length > 140 ? `${prompt.slice(0, 138)}…` : prompt, prompt }));
+  const undirected = own.length > 0 || spec.direct === false;
+  const plans = own.length
+    ? own
+    : spec.direct === false
+      ? fallbackShots({ read, spec, notes: opts.notes, count })
+      : ((await planShots({ read, spec, notes: opts.notes, pictures, productFiles: products.map((p) => p.path), aspect: job.aspect, count, seesImages: opts.seesImages, signal: ctx.signal })) ??
+        fallbackShots({ read, spec, notes: opts.notes, count }));
   if (ctx.signal.aborted) throw new EngineError("Cancelled.");
 
   // Each take renders on its own, all at once; the bar shows how far they are together.
@@ -427,7 +447,7 @@ export async function runProductShoot(
     try {
       return await shootOne(plans[i], i, from, span);
     } catch (err) {
-      if (ctx.signal.aborted || !REFUSED.test((err as Error).message)) throw err;
+      if (ctx.signal.aborted || undirected || !REFUSED.test((err as Error).message)) throw err;
       const safer = await saferPrompt(plans[i].prompt, (err as Error).message, ctx.signal);
       if (!safer) throw err;
       plans[i] = { ...plans[i], prompt: safer };

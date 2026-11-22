@@ -172,7 +172,10 @@ export async function libraryGenerations(): Promise<Generation[]> {
     const kind = gen.params?.kind;
     // A Voice take's card and viewer show who speaks, its waveform and its timed words.
     const voice = kind === "voice" ? { voice: { who: (gen.params?.voice as { who?: unknown } | undefined)?.who }, heard: gen.params?.heard } : {};
-    return { ...gen, references: [], params: kind ? { kind, ...voice } : undefined };
+    // A take an agent made through Crackio's MCP (lib/agent) says which one, for the viewer's details.
+    const client = (gen.params?.agent as { client?: unknown } | undefined)?.client;
+    const agent = typeof client === "string" ? { agent: { client } } : {};
+    return { ...gen, references: [], params: kind || client ? { ...(kind ? { kind } : {}), ...voice, ...agent } : undefined };
   });
   const missing = items.flatMap((gen) => gen.outputs.filter((o) => o.bytes === undefined || (o.kind === "video" && o.duration === undefined)));
   // A few at a time: the first listing after a restart reads every clip's header once.

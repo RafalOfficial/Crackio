@@ -26,45 +26,69 @@ export type PreviewVariant = "poster" | null;
 type What = "still" | "poster" | "clip";
 type Made = { file: string; mime: string };
 
-/** At most `max` jobs at once; the rest wait their turn. */
-function limiter(max: number) {
+/**
+ * At most `max` jobs at once; the rest wait their turn, a card on screen (`urgent`) before the background warm-up. A
+ * finished job hands its place straight to the next one.
+ */
+function lane(max: number) {
   let active = 0;
-  const waiting: (() => void)[] = [];
-  return async <T>(job: () => Promise<T>): Promise<T> => {
-    while (active >= max) await new Promise<void>((r) => waiting.push(r));
-    active++;
-    try {
-      return await job();
-    } finally {
-      active--;
-      waiting.shift()?.();
-    }
+  const urgent: (() => void)[] = [];
+  const normal: (() => void)[] = [];
+  return {
+    async run<T>(job: () => Promise<T>, opts: { urgent?: boolean; onWait?: (promote: () => void) => void } = {}): Promise<T> {
+      if (active < max) active++;
+      else
+        await new Promise<void>((resolve) => {
+          const go = () => resolve();
+          (opts.urgent ? urgent : normal).push(go);
+          // Someone on screen asked for the copy this queued warm-up job will make: it goes ahead.
+          opts.onWait?.(() => {
+            const i = normal.indexOf(go);
+            if (i >= 0) urgent.push(...normal.splice(i, 1));
+          });
+        });
+      try {
+        return await job();
+      } finally {
+        const next = urgent.shift() ?? normal.shift();
+        if (next) next();
+        else active--;
+      }
+    },
   };
 }
 
+type Lane = ReturnType<typeof lane>;
 type State = {
   /** Pictures and opening frames (quick), and clips (slower), each with their own small lane. */
-  stills: ReturnType<typeof limiter>;
-  clips: ReturnType<typeof limiter>;
-  inflight: Map<string, Promise<Made | null>>;
+  stills: Lane;
+  clips: Lane;
+  inflight: Map<string, { job: Promise<Made | null>; promote?: () => void }>;
   failed: Map<string, number>;
+  /** Copies seen on disk and up to date, and when: each look is two file reads, and every card asks. */
+  ready: Map<string, number>;
   warm: { queue: [string, number, PreviewVariant][]; seen: Set<string>; running: boolean };
 };
 // On globalThis, so a hot reload in development doesn't start a second set of lanes.
-const g = globalThis as unknown as { __crackioPreviews?: State };
-const state: State = (g.__crackioPreviews ??= {
-  stills: limiter(2),
-  clips: limiter(1),
+const g = globalThis as unknown as { __crackioPreviewLanes?: State };
+const state: State = (g.__crackioPreviewLanes ??= {
+  stills: lane(2),
+  clips: lane(1),
   inflight: new Map(),
   failed: new Map(),
+  ready: new Map(),
   warm: { queue: [], seen: new Set(), running: false },
 });
 
+/** How long a copy seen up to date is trusted without looking again (originals are written once). */
+const READY_FOR = 10 * 60_000;
+
 /**
  * A light copy of `source` about `width` pixels wide (`poster`: a clip's opening frame), made now
- * if it isn't on disk yet. Null when there's no lighter copy to give: serve the original.
+ * if it isn't on disk yet. Null when there's no lighter copy to give: serve the original. `urgent`: a card on screen is
+ * waiting, so it goes ahead of the background warm-up.
  */
-export async function preview(source: string, width: number, variant: PreviewVariant = null): Promise<Made | null> {
+export async function preview(source: string, width: number, variant: PreviewVariant = null, { urgent = false }: { urgent?: boolean } = {}): Promise<Made | null> {
   const kind = kindOf(source);
   // Animated GIFs keep their motion; anything that isn't a picture or a clip has no copy.
   if (kind === "image" ? /\.gif$/i.test(source) : kind !== "video") return null;
@@ -74,23 +98,45 @@ export async function preview(source: string, width: number, variant: PreviewVar
 
   const failedAt = state.failed.get(made.file);
   if (failedAt && Date.now() - failedAt < RETRY_AFTER) return null;
-  const [src, have] = await Promise.all([fs.stat(source).catch(() => null), fs.stat(made.file).catch(() => null)]);
+  const seenAt = state.ready.get(made.file);
+  if (seenAt && Date.now() - seenAt < READY_FOR) return made;
+  const [src, have] = await Promise.all([fs.stat(/*turbopackIgnore: true*/ source).catch(() => null), fs.stat(/*turbopackIgnore: true*/ made.file).catch(() => null)]);
   if (!src?.isFile()) return null;
-  if (have && have.size > 0 && have.mtimeMs >= src.mtimeMs) return made;
-
-  let job = state.inflight.get(made.file);
-  if (!job) {
-    job = (what === "clip" ? state.clips : state.stills)(() => make(source, made.file, what, w))
-      .then(() => made)
-      .catch((err: Error) => {
-        state.failed.set(made.file, Date.now());
-        console.warn(`[previews] no ${what} of ${path.basename(source)}: ${err.message}`);
-        return null;
-      })
-      .finally(() => state.inflight.delete(made.file));
-    state.inflight.set(made.file, job);
+  if (have && have.size > 0 && have.mtimeMs >= src.mtimeMs) {
+    remember(made.file);
+    return made;
   }
-  return job;
+
+  const going = state.inflight.get(made.file);
+  if (going) {
+    if (urgent) going.promote?.();
+    return going.job;
+  }
+  const entry: { job: Promise<Made | null>; promote?: () => void } = { job: Promise.resolve(null) };
+  entry.job = (what === "clip" ? state.clips : state.stills)
+    .run(() => make(source, made.file, what, w), { urgent, onWait: (promote) => (entry.promote = promote) })
+    .then(() => {
+      remember(made.file);
+      return made;
+    })
+    .catch((err: Error) => {
+      state.failed.set(made.file, Date.now());
+      console.warn(`[previews] no ${what} of ${path.basename(source)}: ${err.message}`);
+      return null;
+    })
+    .finally(() => state.inflight.delete(made.file));
+  state.inflight.set(made.file, entry);
+  return entry.job;
+}
+
+function remember(file: string) {
+  state.ready.set(file, Date.now());
+  if (state.ready.size > 20_000) state.ready.delete(state.ready.keys().next().value!);
+}
+
+/** A copy that was remembered but isn't on disk any more: looked for (and made) again on the next ask. */
+export function copyMissing(file: string) {
+  state.ready.delete(file);
 }
 
 /** Where one original's copies live. */
@@ -98,11 +144,13 @@ const folderOf = (source: string) => path.join(/*turbopackIgnore: true*/ DIR, cr
 
 /** Drop an original's copies, once it's been deleted. */
 export async function forgetPreviews(source: string) {
-  await fs.rm(folderOf(source), { recursive: true, force: true }).catch(() => {});
+  const folder = folderOf(source);
+  for (const file of state.ready.keys()) if (file.startsWith(folder)) state.ready.delete(file);
+  await fs.rm(/*turbopackIgnore: true*/ folder, { recursive: true, force: true }).catch(() => {});
 }
 
 async function make(source: string, out: string, what: What, w: number) {
-  await fs.mkdir(path.dirname(out), { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(out), { recursive: true });
   // Written beside the copy and renamed into place, so a reader never gets half a file. (Built with
   // path.join, ignored: a bare template string here reads to the bundler as "any file", and makes
   // the production build trace the whole project.)
@@ -115,9 +163,9 @@ async function make(source: string, out: string, what: What, w: number) {
     } else {
       await previewClip(source, tmp, w);
     }
-    await fs.rename(tmp, out);
+    await fs.rename(/*turbopackIgnore: true*/ tmp, out);
   } finally {
-    await fs.rm(tmp, { force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ tmp, { force: true }).catch(() => {});
   }
 }
 
@@ -178,11 +226,13 @@ export function warmPreviews(files: string[], { posters = true }: { posters?: bo
   }
   if (w.running || !w.queue.length) return;
   w.running = true;
-  void (async () => {
-    try {
-      for (let next = w.queue.shift(); next; next = w.queue.shift()) await preview(...next).catch(() => null);
-    } finally {
-      w.running = false;
-    }
-  })();
+  // Four looks at a time: most copies are there already, and each look waits on two file reads (about 6 ms one after
+  // another on a busy Windows PC, so a Library of 2,000 takes needed half a minute). Making them still goes through the
+  // lanes, behind any card on screen.
+  const worker = async () => {
+    for (let next = w.queue.shift(); next; next = w.queue.shift()) await preview(...next).catch(() => null);
+  };
+  void Promise.all([worker(), worker(), worker(), worker()]).finally(() => {
+    w.running = false;
+  });
 }

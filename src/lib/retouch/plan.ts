@@ -26,8 +26,12 @@ export type RetouchChange = {
 
 export type RetouchSpec = {
   version: 2;
-  /** "closeup": each change on a crop of its own; "whole": one edit of the whole picture. */
-  mode: "closeup" | "whole";
+  /**
+   * "closeup": each change on a crop of its own; "whole": one edit of the whole picture; "redraw": the whole picture is
+   * redrawn with the changes (the model sees everything, so one thing really becomes another, in the picture's own
+   * style), then only the changed areas are set back into the original, at its own size.
+   */
+  mode: "closeup" | "whole" | "redraw";
   changes: RetouchChange[];
   /** General words: they apply to the whole picture. */
   extra?: string;

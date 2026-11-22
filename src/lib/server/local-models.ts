@@ -15,13 +15,15 @@ export type { Download, LocalStatus };
 import { comfyMachine, thisComputer, type BridgeInfo, type SystemStats } from "./hardware";
 import { addedId, comfyTargets, currentTarget, forgetTargets, isHere, samePlace, targetById, withTarget, type ComfyTarget } from "./comfy-targets";
 import { serverlessEndpoints } from "./serverless/endpoints";
-import { fetchModels } from "./serverless/shim";
+import { deleteModels, fetchModels } from "./serverless/shim";
 import { comfyCloudBlocked } from "./serverless/comfy-cloud";
 import { closeTunnels } from "./ssh";
 import { busyCount, isBusy } from "./comfy-busy";
 import { getSettings, updateSettings } from "./settings";
 import { DATA_DIR } from "./paths";
 import { writeFileAtomic } from "./atomic-write";
+import { bumpEpoch, epoch } from "./epoch";
+import { forgetMachineLooks, lastKnownOnline, machineLook } from "./machine-probe";
 
 /**
  * The Local page's server side, for each ComfyUI Crackio knows (comfy-targets): which machine it is and what it can hold,
@@ -44,6 +46,8 @@ const g = globalThis as unknown as {
   /** ComfyUIs that got a custom node: restarted once their downloads finish, so it loads. */
   __crackioRestartFor?: Set<string>;
   __crackioInstalledFor?: Map<string, { at: number; files: Promise<Set<string>> }>;
+  __crackioSeenFiles?: Map<string, { at: number; files: Set<string> }>;
+  __crackioLocalStatus?: { at: number; epoch: number; value: Promise<LocalStatus> };
 };
 const direct = (g.__crackioLocalDirect ??= new Map());
 const restartPending = (g.__crackioRestartFor ??= new Set());
@@ -98,7 +102,11 @@ const others = new Map<string, { gb: number; at: number }>();
  * the card's use outside ComfyUI's own PyTorch memory, at its lowest over the last ten minutes (ComfyUI's working buffers
  * count in it while a job runs).
  */
-function freeForModels(id: string, machine: Machine, stats: SystemStats) {
+function freeForModels(id: string, machine: Machine, stats: SystemStats, rented = false) {
+  // A rented box's card is Crackio's alone. What else holds memory there is Crackio's own (the finder model kept warm,
+  // a training run): it comes and goes, and counted as "other apps" it made the model suggested for the box change from
+  // one look to the next (6.8 GB of a 24 GB card "taken" by the finder: LTX-2.5 shown, a smaller model installed).
+  if (rented) return machine.modelMemoryGb;
   const dev = stats.devices?.[0];
   const gpu = machine.gpus[0];
   if (!gpu || gpu.unified || !dev?.vram_total || typeof dev.vram_free !== "number") return machine.modelMemoryGb;
@@ -113,7 +121,7 @@ function freeForModels(id: string, machine: Machine, stats: SystemStats) {
 async function targetStatus(t: ComfyTarget, mine: Machine): Promise<{ status: TargetStatus; machine: Machine | null }> {
   return withTarget(t, async () => {
     const onThisComputer = isHere(t);
-    const [stats, bridge] = await Promise.all([comfyJson<Parameters<typeof comfyMachine>[1]>("/system_stats"), comfyJson<BridgeInfo>("/crackio/info")]);
+    const { stats, bridge } = await machineLook(t);
     let machine: Machine | null = null;
     if (stats) {
       const theirs = comfyMachine(t.url, stats, bridge);
@@ -133,10 +141,10 @@ async function targetStatus(t: ComfyTarget, mine: Machine): Promise<{ status: Ta
           }
         : { ...theirs, target: t.id };
       // A card on this computer also drives its screens; a rented box's is ComfyUI's alone (its own models unload for a job).
-      machine.modelMemoryGb = freeForModels(t.id, machine, stats);
+      machine.modelMemoryGb = freeForModels(t.id, machine, stats, Boolean(t.cloud));
     }
     // The rest in one round: a far-away box answers each request in half a second.
-    const [installed, rawDownloads, measured, lends, live, speeds] = stats
+    const [listed, rawDownloads, measured, lends, live, speeds] = stats
       ? await Promise.all([
           listInstalled(bridge?.version),
           bridge ? comfyJson<Download[]>("/crackio/downloads") : null,
@@ -146,12 +154,17 @@ async function targetStatus(t: ComfyTarget, mine: Machine): Promise<{ status: Ta
           readSpeeds(),
         ])
       : [new Set<string>(), null, {}, null, {} as Live, {} as Speeds];
+    // A machine that answers but didn't send its list of files (busy, a slow link) has what it had, not nothing.
+    const installed = listed ?? new Set(lastFiles(t.id) ?? []);
     const ran = stats ? machineRuns(speeds, gpuKeyFrom(stats, bridge)) : undefined;
     const est = machine && stats ? await estimatesFor(machine, installed, ran, live) : null;
     const mineDirect = [...direct.values()].filter((d) => d.target === t.id);
     for (const d of mineDirect) if (d.state === "done") installed.add(`${d.folder}/${d.filename}`);
     // A fresh look is the model pickers' look too: an install that just finished is usable at once.
-    if (stats) installedCache.set(t.id, { at: Date.now(), files: Promise.resolve(new Set(installed)) });
+    if (stats && listed) {
+      installedCache.set(t.id, { at: Date.now(), files: Promise.resolve(new Set(installed)) });
+      sawFiles(t.id, new Set(installed));
+    }
 
     const fromBridge = (rawDownloads ?? []).map((d) => ({ ...d, via: "bridge" as const }));
     const downloads = [...fromBridge, ...mineDirect.map((d): Download => ({ id: d.id, folder: d.folder, filename: d.filename, state: d.state, received: d.received, total: d.total, error: d.error, via: d.via }))];
@@ -176,6 +189,7 @@ async function targetStatus(t: ComfyTarget, mine: Machine): Promise<{ status: Ta
         url: t.url,
         source: t.source,
         ...(t.implicit ? { implicit: true } : {}),
+        ...(t.metered ? { metered: true } : {}),
         ...(t.cloud ? { cloud: { provider: t.cloud.provider, instance: t.cloud.instance, tunnel: Boolean(t.tunnel) } } : {}),
         connected: Boolean(stats),
         onThisComputer,
@@ -191,7 +205,24 @@ async function targetStatus(t: ComfyTarget, mine: Machine): Promise<{ status: Ta
   });
 }
 
-export async function localStatus(): Promise<LocalStatus> {
+/**
+ * Every ComfyUI and this computer for the Local page, Settings (setupSnapshot) and the pickers. One look serves everyone
+ * who asks within 1.5 s (each costs a round to every machine and the estimates), and none from before a change (epoch).
+ */
+export function localStatus(): Promise<LocalStatus> {
+  const hit = g.__crackioLocalStatus;
+  const now = epoch();
+  if (hit && hit.epoch === now && Date.now() - hit.at < 1500) return hit.value;
+  const value = buildLocalStatus();
+  const entry = { at: Date.now(), epoch: now, value };
+  g.__crackioLocalStatus = entry;
+  value.catch(() => {
+    if (g.__crackioLocalStatus === entry) g.__crackioLocalStatus = undefined;
+  });
+  return value;
+}
+
+async function buildLocalStatus(): Promise<LocalStatus> {
   const [targets, mine, token, settings] = await Promise.all([comfyTargets(), computer(), hfToken(), getSettings()]);
   const all = await Promise.all(targets.map((t) => targetStatus(t, mine)));
   const main = all[0].status;
@@ -217,8 +248,12 @@ export async function localStatus(): Promise<LocalStatus> {
 /**
  * `folder/name` of every model file in the folders Local models use. ComfyUI lists GGUF files apart, under the folders
  * ComfyUI-GGUF adds (unet_gguf, clip_gguf), and only while that node is loaded, which is when they can run.
+ *
+ * Null when the machine didn't say (a busy box, a slow link): unknown is not empty. An empty answer was once taken for
+ * "no files", and for 20 s every model on that machine was gone: 16 picture jobs for a model that had drawn 21 pictures
+ * minutes before were refused with "Unknown model".
  */
-async function listInstalled(bridge?: string): Promise<Set<string>> {
+async function listInstalled(bridge?: string): Promise<Set<string> | null> {
   // The bridge (1.1+) lists every model folder in one answer.
   if (bridge && bridge.localeCompare("1.1.0", undefined, { numeric: true }) >= 0) {
     const all = await comfyJson<Record<string, string[]>>("/crackio/files", { timeoutMs: 15_000 });
@@ -230,32 +265,39 @@ async function listInstalled(bridge?: string): Promise<Set<string>> {
     }
   }
   const asked: [string, string][] = [...localFolders().map((f): [string, string] => [f, f]), ["unet_gguf", "diffusion_models"], ["clip_gguf", "text_encoders"]];
-  const lists = await Promise.all(asked.map(async ([route, folder]) => [folder, (await comfyJson<string[]>(`/models/${route}`)) ?? []] as const));
+  const lists = await Promise.all(asked.map(async ([route, folder]) => [folder, await comfyJson<string[]>(`/models/${route}`)] as const));
+  // Not one folder answered: the list is unknown.
+  if (lists.every(([, names]) => !names)) return null;
   const out = new Set<string>();
-  for (const [folder, names] of lists) for (const name of names) out.add(`${folder}/${name.replace(/\\/g, "/")}`);
+  for (const [folder, names] of lists) for (const name of names ?? []) out.add(`${folder}/${name.replace(/\\/g, "/")}`);
   return out;
-}
-
-/** ComfyUIs that didn't answer lately, until when they're skipped (a stopped box shouldn't slow every model list). */
-const quiet = new Map<string, number>();
-
-/** Whether the current ComfyUI answers, asked at most every 30 s once it hasn't. */
-async function answers() {
-  const t = currentTarget();
-  if ((quiet.get(t.id) ?? 0) > Date.now()) return false;
-  const ok = (await comfyJson("/system_stats", { timeoutMs: isHere(t) ? 1500 : 4000 })) !== null;
-  if (ok) quiet.delete(t.id);
-  else quiet.set(t.id, Date.now() + 30_000);
-  return ok;
 }
 
 /** The current ComfyUI's files are looked at again on the next ask (one was just installed). */
 export function forgetInstalled() {
   installedCache.delete(currentTarget().id);
+  bumpEpoch();
 }
 
-/** The last files each ComfyUI was seen with, and when. */
-const lastSeen = new Map<string, { at: number; files: Set<string> }>();
+/** The last files each ComfyUI was seen with, and when (kept across a hot reload of this file, like the list above). */
+const lastSeen = (g.__crackioSeenFiles ??= new Map());
+
+/** The files a machine was last seen with, while that's under 15 minutes ago. */
+const lastFiles = (id: string) => {
+  const last = lastSeen.get(id);
+  return last && Date.now() - last.at < 15 * 60_000 ? last.files : null;
+};
+
+/**
+ * Files seen on a machine. A change (an install finished, a model removed, a file copied in by hand) bumps the epoch, so
+ * the model pickers list it at once.
+ */
+function sawFiles(id: string, files: Set<string>) {
+  if (!files.size) return;
+  const before = lastSeen.get(id)?.files;
+  lastSeen.set(id, { at: Date.now(), files });
+  if (before && (before.size !== files.size || [...files].some((f) => !before.has(f)))) bumpEpoch();
+}
 
 /**
  * `folder/name` of every catalog file the current ComfyUI has, read at most every 20 s (model lists ask often). A box
@@ -266,27 +308,49 @@ export function installedFiles(): Promise<Set<string>> {
   const t = currentTarget();
   const hit = installedCache.get(t.id);
   if (hit && Date.now() - hit.at < 20_000) return hit.files;
+  let unknown = false;
   const files = (async () => {
-    if (await answers()) {
-      const seen = await listInstalled();
-      if (seen.size) lastSeen.set(t.id, { at: Date.now(), files: seen });
-      return seen;
+    // A machine that didn't answer lately is looked at again in the background (machine-probe), never waited on here.
+    const { stats, bridge } = await machineLook(t);
+    if (stats) {
+      const seen = await listInstalled(bridge?.version);
+      if (seen) {
+        sawFiles(t.id, seen);
+        return seen;
+      }
+      // It answers, but its list of files didn't come: it has what it had.
+      unknown = true;
     }
-    const last = lastSeen.get(t.id);
-    return last && Date.now() - last.at < 15 * 60_000 ? last.files : new Set<string>();
+    return lastFiles(t.id) ?? new Set<string>();
   })();
-  installedCache.set(t.id, { at: Date.now(), files });
+  const entry = { at: Date.now(), files };
+  installedCache.set(t.id, entry);
+  // Unknown rather than empty: asked again in a few seconds, not in twenty.
+  void files.then(
+    () => {
+      if (unknown) entry.at = Date.now() - 15_000;
+    },
+    () => undefined,
+  );
   return files;
 }
 
 /** Custom nodes Crackio can set up, and a node of each that shows it loaded. */
-const NODE_PROOF: Record<string, string> = { "ComfyUI-GGUF": "UnetLoaderGGUF", ComfyUI_FlashVSR: "FlashVSR_SM_Model" };
+const NODE_PROOF: Record<string, string> = { "ComfyUI-GGUF": "UnetLoaderGGUF", ComfyUI_FlashVSR: "FlashVSR_SM_Model", "ComfyUI-Panorama-Stickers": "PanoramaStudio", "Crackio-Video": "CrackioICLoRAGuide" };
+/** Nodes that come with the Crackio bridge itself (bridge/video.py from 1.10.5): a newer bridge brings them, never a git clone. */
+const BRIDGE_OWN = new Set(["Crackio-Video"]);
 
 /**
  * The custom nodes a variant needs: loaded already, or installed through the bridge (git clone + its packages). True when
  * ComfyUI has to restart to load one: the caller asks for that once the model's downloads are requested (see targetStatus).
  */
-async function ensureNodes(names: string[]): Promise<boolean> {
+async function ensureNodes(all: string[]): Promise<boolean> {
+  for (const own of all.filter((n) => BRIDGE_OWN.has(n))) {
+    const there = Object.keys((await comfyJson<Record<string, unknown>>(`/object_info/${NODE_PROOF[own]}`)) ?? {}).length > 0;
+    if (!there) throw new LocalError("This needs a newer Crackio helper in that ComfyUI: connect the machine again in Settings to bring it up to date.");
+  }
+  const names = all.filter((n) => !BRIDGE_OWN.has(n));
+  if (!names.length) return false;
   const known = await comfyJson<Record<string, { installed: boolean; loaded: boolean }>>("/crackio/nodes");
   if (!known) {
     const loaded = await Promise.all(names.map(async (n) => Object.keys((await comfyJson<Record<string, unknown>>(`/object_info/${NODE_PROOF[n] ?? n}`)) ?? {}).length > 0));
@@ -343,7 +407,13 @@ export async function hasModelHere(model: { variants: { files: LocalFile[] }[] }
 export async function localModelReady(crackioId: string): Promise<boolean | null> {
   const model = allLocalModels().find((m) => m.crackio === crackioId);
   if (!model) return null;
-  for (const t of await comfyTargets()) if (await withTarget(t, () => hasModelHere(model))) return true;
+  const runOn = (await getSettings()).runOn;
+  for (const t of await comfyTargets()) {
+    // A billed machine (RunPod Serverless, Comfy Cloud) counts only while it's the one chosen under Run on: no job goes to
+    // one otherwise (pickTarget), so a model only there isn't ready.
+    if (t.metered && t.id !== runOn) continue;
+    if (await withTarget(t, () => hasModelHere(model))) return true;
+  }
   return false;
 }
 
@@ -365,6 +435,7 @@ export async function addMachine(url: string, token?: string, label?: string) {
     comfyMachines: [...(s.comfyMachines ?? []).filter((m) => !samePlace(m.url, clean)), { url: clean, ...(t.token ? { token: t.token } : {}), label: label?.trim() || machine.label.replace(/ running ComfyUI$/, "") }],
   }));
   forgetTargets();
+  forgetMachineLooks();
   return { added: clean };
 }
 
@@ -379,13 +450,14 @@ export async function removeMachine(id: string) {
   }));
   if (t.cloud?.ssh) closeTunnels(t.cloud.ssh);
   forgetTargets();
+  forgetMachineLooks(t);
   installedCache.delete(id);
   return { removed: id };
 }
 
 /* ------------------------------------------------------------------ measured speeds */
 
-const SPEEDS_FILE = path.join(DATA_DIR, "local-speeds.json");
+const SPEEDS_FILE = path.join(/*turbopackIgnore: true*/ DATA_DIR, "local-speeds.json");
 /**
  * One finished run: its GPU seconds, its work in units (local/work), whether the model was loaded already, the kind of job,
  * and what Crackio estimated for it beforehand (`e`, seconds), so the estimates' own accuracy shows.
@@ -414,16 +486,9 @@ function gpuKeyFrom(stats: { devices?: { name?: string }[] } | null, bridge: Bri
   return GENERIC_GPU.test(key) && bridge?.gpus?.[0]?.name ? bridge.gpus[0].name : key;
 }
 
-const bridges = new Map<string, { at: number; info: Promise<BridgeInfo | null> }>();
-
-/** The current ComfyUI's bridge report (its CPU, disk and GPU names), looked up at most once a minute. */
-function bridgeHere(): Promise<BridgeInfo | null> {
-  const url = currentTarget().url;
-  const hit = bridges.get(url);
-  if (hit && Date.now() - hit.at < 60_000) return hit.info;
-  const info = comfyJson<BridgeInfo>("/crackio/info", { timeoutMs: 6000 });
-  bridges.set(url, { at: Date.now(), info });
-  return info;
+/** The current ComfyUI's bridge report (its CPU, disk and GPU names), from the shared look (asked again once a minute). */
+async function bridgeHere(): Promise<BridgeInfo | null> {
+  return (await machineLook(currentTarget())).bridge;
 }
 
 /** The current ComfyUI's GPU, as the key its speeds are kept under. */
@@ -432,8 +497,27 @@ async function machineKey() {
   return gpuKeyFrom(stats, GENERIC_GPU.test(gpuKey(stats)) ? await bridgeHere() : null);
 }
 
+const speedsSeen = globalThis as unknown as { __crackioSpeedsRead?: { at: number; mtimeMs: number; value: Speeds }; __crackioSpeedWrites?: Promise<unknown> };
+
+/**
+ * Every GPU's record (117 KB of JSON, read three times per machine per look): kept while the file is unchanged, looked at
+ * again at most every 2 s. Readers don't change it; recordSpeed reads its own copy.
+ */
 async function readSpeeds(): Promise<Speeds> {
-  return JSON.parse(await fs.readFile(SPEEDS_FILE, "utf8").catch(() => "{}")) as Speeds;
+  const hit = speedsSeen.__crackioSpeedsRead;
+  if (hit && Date.now() - hit.at < 2000) return hit.value;
+  const mtimeMs = (await fs.stat(/*turbopackIgnore: true*/ SPEEDS_FILE).catch(() => null))?.mtimeMs ?? -1;
+  if (hit && hit.mtimeMs === mtimeMs) {
+    hit.at = Date.now();
+    return hit.value;
+  }
+  const value = await readSpeedsFile();
+  speedsSeen.__crackioSpeedsRead = { at: Date.now(), mtimeMs, value };
+  return value;
+}
+
+async function readSpeedsFile(): Promise<Speeds> {
+  return JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ SPEEDS_FILE, "utf8").catch(() => "{}")) as Speeds;
 }
 
 function runsOf(e: SpeedEntry): Run[] {
@@ -454,7 +538,14 @@ export async function recordSpeed(modelId: string, run: { seconds: number; work:
   const key = await machineKey();
   // A busy box can miss the question: better no sample than one filed under the wrong GPU.
   if (key === "unknown") return;
-  const all = await readSpeeds();
+  // One run at a time: two jobs finishing together each read the file, and the second write dropped the first one's run.
+  const write = (speedsSeen.__crackioSpeedWrites ?? Promise.resolve()).then(() => writeSpeed(key, modelId, run));
+  speedsSeen.__crackioSpeedWrites = write.catch(() => undefined);
+  await write;
+}
+
+async function writeSpeed(key: string, modelId: string, run: { seconds: number; work: number; warm: boolean; mode: SpeedMode; variant?: string; estimate?: number }) {
+  const all = await readSpeedsFile();
   const mine = (all[key] ??= {});
   const old = mine[modelId];
   // Another version of the model starts its record over.
@@ -463,8 +554,11 @@ export async function recordSpeed(modelId: string, run: { seconds: number; work:
   const mode = (r: Run) => r.mode ?? "main";
   const last = runs.filter((r, i) => runs.slice(i + 1).filter((x) => mode(x) === mode(r)).length < KEEP);
   mine[modelId] = { v: 3, variant: run.variant ?? old?.variant, at: Date.now(), runs: last };
-  await fs.mkdir(path.dirname(SPEEDS_FILE), { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(SPEEDS_FILE), { recursive: true });
   await writeFileAtomic(SPEEDS_FILE, JSON.stringify(all, null, 2));
+  speedsSeen.__crackioSpeedsRead = undefined;
+  // The pickers' times come from this record.
+  bumpEpoch();
 }
 
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) / 2)];
@@ -534,11 +628,30 @@ export async function withMeasured5090<M extends LocalModel>(models: M[]): Promi
 /** Picture upscales kept before their work counted the picture's size (Oct 24, 2026, 21:14 UTC): sizes unknown, left out. */
 const UPSCALES_SIZED = Date.parse("2026-10-24T21:14:00Z");
 
+/** Recipe keys whose first model in the list is an upscaler (machineRuns asked the list once per record entry). */
+const upscalerKeys = new WeakMap<LocalModel[], Set<string>>();
+function upscalersIn(models: LocalModel[]): Set<string> {
+  let set = upscalerKeys.get(models);
+  if (!set) {
+    set = new Set();
+    const seen = new Set<string>();
+    for (const m of models) {
+      const k = recipeKey(m);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (m.tasks.includes("upscale")) set.add(k);
+    }
+    upscalerKeys.set(models, set);
+  }
+  return set;
+}
+
 /** A GPU's record of every model it ran, as the estimates read it (local/estimate). */
 function machineRuns(speeds: Speeds, gpu: string): MachineRuns | undefined {
   const mine = gpu !== "unknown" ? speeds[gpu] : undefined;
   if (!mine) return undefined;
-  const upscaler = (k: string) => allLocalModels().find((m) => recipeKey(m) === k)?.tasks.includes("upscale") ?? false;
+  const ups = upscalersIn(allLocalModels());
+  const upscaler = (k: string) => ups.has(k);
   return Object.fromEntries(
     Object.entries(mine).map(([k, e]) => [k, { variant: e.variant, runs: runsOf(e).filter((r) => !(upscaler(k) && (r.at ?? 0) < UPSCALES_SIZED && (r.mode ?? "upscale") === "upscale")) }]),
   );
@@ -573,14 +686,14 @@ export type EstimateContext = { machine: Machine; model: LocalModel; variant: Lo
 
 export async function estimateContext(modelId: string): Promise<EstimateContext | null> {
   const t = currentTarget();
-  const stats = await comfyJson<SystemStats & Parameters<typeof comfyMachine>[1]>("/system_stats", { timeoutMs: 6000 });
+  const { stats, bridge } = await machineLook(t, { maxAgeMs: 5000, wait: true });
   if (!stats) return null;
-  const [bridge, live, speeds, models, have] = await Promise.all([bridgeHere(), liveHere(), readSpeeds(), withMeasured5090(allLocalModels()), installedFiles().catch(() => new Set<string>())]);
+  const [live, speeds, models, have] = await Promise.all([liveHere(), readSpeeds(), withMeasured5090(allLocalModels()), installedFiles().catch(() => new Set<string>())]);
   const model = models.find((m) => m.crackio === `local:${modelId}`);
   if (!model) return null;
   const gpu = gpuKeyFrom(stats, bridge);
   const machine = comfyMachine(t.url, stats, bridge);
-  machine.modelMemoryGb = freeForModels(t.id, machine, stats);
+  machine.modelMemoryGb = freeForModels(t.id, machine, stats, Boolean(t.cloud));
   const runs = machineRuns(speeds, gpu);
   const variant = variantOn(model, have, runs?.[modelId]?.variant) ?? fitModel(machine, model).variant;
   if (!variant) return null;
@@ -646,16 +759,19 @@ export async function localTimes(crackioIds: string[]): Promise<Map<string, { se
   const looks = await Promise.all(
     targets.map((t) =>
       withTarget(t, async () => {
-        const stats = await comfyJson<SystemStats & Parameters<typeof comfyMachine>[1]>("/system_stats", { timeoutMs: 4000 });
+        const { stats, bridge } = await machineLook(t);
         if (!stats) return null;
-        const bridge = await bridgeHere();
         const machine = comfyMachine(t.url, stats, bridge);
-        machine.modelMemoryGb = freeForModels(t.id, machine, stats);
+        machine.modelMemoryGb = freeForModels(t.id, machine, stats, Boolean(t.cloud));
         return { t, machine, gpu: gpuKeyFrom(stats, bridge), speed: speedOf(machine) ?? 0 };
       }).catch(() => null),
     ),
   );
-  const fastest = looks.filter((x): x is NonNullable<typeof x> => x !== null).sort((a, b) => b.speed - a.speed);
+  const bySpeed = looks.filter((x): x is NonNullable<typeof x> => x !== null).sort((a, b) => b.speed - a.speed);
+  // Named in the order a job would land (pickTarget): the machine picked under Run on, then your own, and one billed per
+  // job last. By speed alone, a model set up on your GPU read "Comfy Cloud" on its card (seen Nov 2026, an L4 beside it).
+  const runOn = (await getSettings()).runOn;
+  const fastest = [...bySpeed.filter((x) => x.t.id === runOn), ...bySpeed.filter((x) => x.t.id !== runOn && !x.t.metered), ...bySpeed.filter((x) => x.t.id !== runOn && x.t.metered)];
   for (const id of crackioIds) {
     const model = models.find((m) => m.crackio === id);
     if (!model) continue;
@@ -685,20 +801,28 @@ export async function pickTarget(modelId: string, pinned?: unknown): Promise<Com
   const model = allLocalModels().find((m) => m.crackio === `local:${modelId}`);
   const probe = (t: ComfyTarget) =>
     withTarget(t, async () => {
-      const stats = await comfyJson<Parameters<typeof comfyMachine>[1]>("/system_stats", { timeoutMs: isHere(t) ? 1500 : 6000 });
-      if (!stats) quiet.set(t.id, Date.now() + 30_000);
-      else quiet.delete(t.id);
+      // A machine that didn't answer lately (switched off, a stopped box) answers "offline" at once: every job would wait
+      // out its timeout first. One that answers is asked afresh when its look is over 2 s old.
+      const { stats, bridge } = await machineLook(t, { wait: true });
       if (!stats || (model && !(await hasModelHere(model)))) return null;
       const q = await comfyJson<{ queue_running?: unknown[]; queue_pending?: unknown[] }>("/queue", { timeoutMs: 6000 });
       const busy = (q?.queue_running?.length ?? 0) + (q?.queue_pending?.length ?? 0) > 0;
-      return { t, busy, speed: speedOf(comfyMachine(t.url, stats, await bridgeHere())) ?? 0.01 };
+      return { t, busy, speed: speedOf(comfyMachine(t.url, stats, bridge)) ?? 0.01 };
     }).catch(() => null);
-  // A machine that didn't answer in the last 30 s (switched off, a stopped box) is skipped: every job would wait out its
-  // timeout first.
   // A billed machine (RunPod, Comfy Cloud) only when it's the one chosen: each job there costs money.
-  const ready = await Promise.all(targets.map((t) => ((quiet.get(t.id) ?? 0) > Date.now() || (t.metered && t.id !== asked?.id) ? null : probe(t))));
-  const ok = ready.filter((x): x is NonNullable<typeof x> => x !== null).sort((a, b) => Number(a.busy) - Number(b.busy) || b.speed - a.speed);
-  return (asked && ok.find((x) => x.t.id === asked.id)?.t) ?? ok[0]?.t ?? targets[0];
+  // A machine that's restarting its ComfyUI (after a model install) or busy downloading answers late for a few seconds:
+  // looked at again a few times before anything else is used, so a job doesn't fall to a ComfyUI that isn't running
+  // (Director v2's test on a rented A40: "ComfyUI isn't answering at http://127.0.0.1:8188" while the A40 installed LTX).
+  for (let attempt = 0; ; attempt++) {
+    const ready = await Promise.all(targets.map((t) => (t.metered && t.id !== asked?.id ? null : probe(t))));
+    const ok = ready.filter((x): x is NonNullable<typeof x> => x !== null).sort((a, b) => Number(a.busy) - Number(b.busy) || b.speed - a.speed);
+    const mine = asked && ok.find((x) => x.t.id === asked.id)?.t;
+    if (mine) return mine;
+    // The machine you chose gets about half a minute to answer before another one takes the job.
+    if (ok.length && (!asked || attempt >= 2)) return ok[0].t;
+    if (attempt >= 4) return ok[0]?.t ?? targets[0];
+    await new Promise((r) => setTimeout(r, 4000 + attempt * 3000));
+  }
 }
 
 /** One machine a job could run on, for the "Run on" pickers: whether it has the model, how busy it is, its estimate. */
@@ -721,7 +845,7 @@ export type MachineChoice = {
  * Every machine Crackio knows, for one local model and job: online or not, with the model or not, its queue and the job's
  * estimate there (`kind` and `work` as local/estimate takes them). In the order Auto would pick them.
  */
-export async function machinesFor(modelId: string, mode: SpeedMode, work: (perUnit: number | null) => number): Promise<MachineChoice[]> {
+export async function machinesFor(modelId: string, mode: SpeedMode, work: (perUnit: number | null, machine: Machine | null) => number): Promise<MachineChoice[]> {
   const targets = await comfyTargets();
   const model = allLocalModels().find((m) => m.crackio === `local:${modelId}`);
   const looks = await Promise.all(
@@ -729,7 +853,7 @@ export async function machinesFor(modelId: string, mode: SpeedMode, work: (perUn
       withTarget(t, async (): Promise<MachineChoice> => {
         const blocked = t.metered === "comfy-cloud" ? comfyCloudBlocked() : null;
         const base = { id: t.id, label: t.label, cloud: Boolean(t.cloud), onThisComputer: isHere(t), ...(blocked ? { note: blocked } : {}) };
-        const stats = await comfyJson<SystemStats & Parameters<typeof comfyMachine>[1]>("/system_stats", { timeoutMs: 5000 });
+        const { stats, bridge } = await machineLook(t);
         if (!stats) return { ...base, gpu: null, online: false, hasModel: false, queue: 0, estimate: null };
         const [has, q, ctx] = await Promise.all([
           model ? hasModelHere(model) : Promise.resolve(false),
@@ -737,10 +861,10 @@ export async function machinesFor(modelId: string, mode: SpeedMode, work: (perUn
           estimateContext(modelId).catch(() => null),
         ]);
         const pace = ctx ? estimateFor(ctx, mode, 1) : null;
-        const estimate = ctx ? estimateFor(ctx, mode, work(pace?.perUnit ?? null)) : null;
+        const estimate = ctx ? estimateFor(ctx, mode, work(pace?.perUnit ?? null, ctx.machine)) : null;
         return {
           ...base,
-          gpu: ctx?.gpu ?? shortGpuName(gpuKeyFrom(stats, await bridgeHere())),
+          gpu: ctx?.gpu ?? shortGpuName(gpuKeyFrom(stats, bridge)),
           online: true,
           hasModel: has,
           queue: (q?.queue_running?.length ?? 0) + (q?.queue_pending?.length ?? 0),
@@ -768,9 +892,7 @@ export async function poolFor(modelId: string, head: ComfyTarget): Promise<PoolH
   // Pooling is for computers on one network: every step's activations go between the two. A rented box is never split
   // with another machine, either way (two vast.ai boxes, one in Korea and one in California, were paired in a test).
   if (head.cloud) return null;
-  const [have, stats, bridge] = await withTarget(head, () =>
-    Promise.all([installedFiles(), comfyJson<SystemStats>("/system_stats", { timeoutMs: 6000 }), comfyJson<BridgeInfo>("/crackio/info", { timeoutMs: 6000 })]),
-  );
+  const [have, { stats, bridge }] = await withTarget(head, () => Promise.all([installedFiles(), machineLook(head, { wait: true })]));
   const variant = model.variants.find((v) => v.files.length > 0 && v.files.every((f) => have.has(`${f.folder}/${f.name}`)));
   if (!variant?.pool || !stats) return null;
   // What the card has for models, its own earlier models included (ComfyUI unloads those for this one): what's free at
@@ -782,7 +904,7 @@ export async function poolFor(modelId: string, head: ComfyTarget): Promise<PoolH
   // would wait on a slower second GPU (a GTX 1060 alone beat it split with an M2 by 1.8×).
   if (mode === "auto" && fitVariant({ ...machine, modelMemoryGb: room }, variant).state !== "no") return null;
   // The job's ComfyUI connects to the helper itself: a helper on this computer is out of reach of a ComfyUI elsewhere.
-  const others = (await comfyTargets()).filter((t) => t.id !== head.id && !t.cloud && !samePlace(t.url, head.url) && (isHere(head) || !isHere(t)) && (quiet.get(t.id) ?? 0) <= Date.now());
+  const others = (await comfyTargets()).filter((t) => t.id !== head.id && !t.cloud && !samePlace(t.url, head.url) && (isHere(head) || !isHere(t)) && lastKnownOnline(t) !== false);
   const offers = await Promise.all(
     others.map((t) =>
       withTarget(t, () => comfyJson<{ free?: number; held?: number }>("/crackio/pool", { timeoutMs: 5000 }))
@@ -831,6 +953,21 @@ async function installServerless(endpointId: string, modelId: string, variantId:
   const files = variant.files.map((f) => ({ url: f.url, folder: f.folder, name: f.name, ...(f.sizeEstimated ? {} : { bytes: f.bytes }) }));
   void fetchModels(ep, files).catch((err) => console.warn(`[serverless] fetching ${modelId} on ${ep.label} failed: ${(err as Error).message}`));
   return { started: files.length };
+}
+
+/** One file (a LoRA) into a RunPod Serverless endpoint's network volume, the same way: a "fetch" job, unless it's there. */
+async function installServerlessFile(endpointId: string, file: LocalFile) {
+  const ep = (await serverlessEndpoints()).find((e) => e.endpointId === endpointId);
+  if (!ep) throw new LocalError("Unknown endpoint.", 404);
+  const target = (await comfyTargets()).find((t) => t.serverless?.endpointId === endpointId);
+  if (target && (await withTarget(target, () => installedFiles()).catch(() => new Set<string>())).has(`${file.folder}/${file.name}`)) return { started: 0, exists: true };
+  void fetchModels(ep, [{ url: file.url, folder: file.folder, name: file.name, ...(file.bytes ? { bytes: file.bytes } : {}) }])
+    .then(() => {
+      forgetInstalled();
+      bumpEpoch();
+    })
+    .catch((err) => console.warn(`[serverless] fetching ${file.name} on ${ep.label} failed: ${(err as Error).message}`));
+  return { started: 1 };
 }
 
 async function installHere(modelId: string, variantId: string) {
@@ -908,7 +1045,7 @@ async function removeHere(modelId: string, variantId: string) {
   const drop = variant.files.filter((f) => have.has(`${f.folder}/${f.name}`) && !keep.has(`${f.folder}/${f.name}`));
   if (status.bridge) {
     for (const f of drop) await comfyFetch("/crackio/delete", { method: "POST", body: JSON.stringify({ folder: f.folder, filename: f.name }) });
-    installedCache.delete(currentTarget().id);
+    forgetInstalled();
     return { removed: drop.length };
   }
   if (!status.onThisComputer) throw new LocalError("Add the Crackio bridge to that ComfyUI to manage its models from here.");
@@ -916,7 +1053,7 @@ async function removeHere(modelId: string, variantId: string) {
   if (!folders) throw new LocalError("ComfyUI didn't say where its model folders are.");
   for (const f of drop) {
     for (const p of ((folders[f.folder] ?? []) as (string | string[])[]).map((x) => (Array.isArray(x) ? x[0] : x))) {
-      await fs.rm(path.join(p, f.name), { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ p, f.name), { force: true });
     }
     for (const [id, d] of direct) if (d.folder === f.folder && d.filename === f.name) direct.delete(id);
   }
@@ -928,6 +1065,8 @@ async function removeHere(modelId: string, variantId: string) {
 /** One file into a ComfyUI's model folders (a LoRA from the library), unless it's there or on its way: as installs fetch theirs. */
 export async function installFile(file: LocalFile, targetId?: string) {
   const target = await targetById(targetId);
+  if (target.serverless) return installServerlessFile(target.serverless.endpointId, file);
+  if (target.metered === "comfy-cloud") throw new LocalError("Comfy Cloud has its own model library: Crackio can't add files to it.", 400);
   return withTarget(target, async () => {
     const { status } = await targetStatus(currentTarget(), await computer());
     if (!status.connected) throw new LocalError(`${target.label} isn't answering. Start its ComfyUI (or check it in Settings → Machines) first.`);
@@ -953,10 +1092,21 @@ export async function installFile(file: LocalFile, targetId?: string) {
 /** Delete one file from a ComfyUI's model folder (a LoRA you no longer want). */
 export async function removeFile(folder: LocalFile["folder"], name: string, targetId?: string) {
   const target = await targetById(targetId);
+  if (target.serverless) {
+    // On an endpoint's volume: a short job there deletes it.
+    const ep = (await serverlessEndpoints()).find((e) => e.endpointId === target.serverless!.endpointId);
+    if (!ep) throw new LocalError("Unknown endpoint.", 404);
+    const done = await deleteModels(ep, [{ folder, name }]);
+    if (done.status !== "COMPLETED") throw new LocalError(`${target.label} didn't delete ${name} (${done.status.toLowerCase()}).`, 502);
+    const result = ((done.output as { results?: { name?: string; state?: string; error?: string }[] } | undefined)?.results ?? []).find((r) => r.name === name);
+    if (result?.state === "failed") throw new LocalError(`${target.label} kept ${name}: ${result.error ?? "it couldn't be deleted"}.`, 502);
+    await withTarget(target, async () => forgetInstalled());
+    return { removed: result?.state === "deleted" };
+  }
   return withTarget(target, async () => {
     const { status } = await targetStatus(currentTarget(), await computer());
     if (!status.connected) throw new LocalError(`${target.label} isn't answering.`);
-    installedCache.delete(currentTarget().id);
+    forgetInstalled();
     if (status.bridge) {
       const res = await comfyFetch("/crackio/delete", { method: "POST", body: JSON.stringify({ folder, filename: name }) });
       if (!res.ok) throw new LocalError(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? `ComfyUI kept ${name}.`);
@@ -967,10 +1117,10 @@ export async function removeFile(folder: LocalFile["folder"], name: string, targ
     if (!folders) throw new LocalError("ComfyUI didn't say where its model folders are.");
     let removed = false;
     for (const p of ((folders[folder] ?? []) as (string | string[])[]).map((x) => (Array.isArray(x) ? x[0] : x))) {
-      const at = path.resolve(p, name);
+      const at = path.resolve(/*turbopackIgnore: true*/ p, name);
       // A name is a file in that folder, never a path out of it.
-      if (path.dirname(at) !== path.resolve(p) || !(await fs.stat(at).then((s) => s.isFile()).catch(() => false))) continue;
-      await fs.rm(at, { force: true });
+      if (path.dirname(at) !== path.resolve(/*turbopackIgnore: true*/ p) || !(await fs.stat(/*turbopackIgnore: true*/ at).then((s) => s.isFile()).catch(() => false))) continue;
+      await fs.rm(/*turbopackIgnore: true*/ at, { force: true });
       removed = true;
     }
     for (const [id, d] of direct) if (d.folder === folder && d.filename === name) direct.delete(id);
@@ -1010,7 +1160,7 @@ async function resolve(url: string, token: string) {
 function startDirect(f: LocalFile, dir: string, token: string, target: string) {
   const d: DirectDownload = { id: nanoid(10), folder: f.folder, filename: f.name, state: "queued", received: 0, total: f.bytes, via: "direct", stop: false, target };
   direct.set(d.id, d);
-  void runDirect(d, f, path.join(dir, f.name), token);
+  void runDirect(d, f, path.join(/*turbopackIgnore: true*/ dir, f.name), token);
 }
 
 async function runDirect(d: DirectDownload, f: LocalFile, target: string, token: string) {
@@ -1022,8 +1172,8 @@ async function runDirect(d: DirectDownload, f: LocalFile, target: string, token:
     if (!size) throw new Error("The host didn't say how big the file is.");
     d.total = size;
     d.state = "downloading";
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    const fh = await fs.open(part, "w+");
+    await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(target), { recursive: true });
+    const fh = await fs.open(/*turbopackIgnore: true*/ part, "w+");
     try {
       await fh.truncate(size);
       const ranges: [number, number][] = [];
@@ -1069,10 +1219,10 @@ async function runDirect(d: DirectDownload, f: LocalFile, target: string, token:
       for await (const chunk of createReadStream(part)) hash.update(chunk as Buffer);
       if (hash.digest("hex") !== sha) throw new Error("The file didn't match its checksum.");
     }
-    await fs.rename(part, target);
+    await fs.rename(/*turbopackIgnore: true*/ part, target);
     Object.assign(d, { state: "done", received: size });
   } catch (err) {
     Object.assign(d, (err as { stopped?: boolean }).stopped ? { state: "stopped" } : { state: "error", error: (err as Error).message.slice(0, 300) });
-    await fs.rm(part, { force: true }).catch(() => {});
+    await fs.rm(/*turbopackIgnore: true*/ part, { force: true }).catch(() => {});
   }
 }

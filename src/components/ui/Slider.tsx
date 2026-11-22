@@ -18,6 +18,7 @@ export function Slider({
   format,
   hint,
   track,
+  origin,
   className,
 }: {
   label: ReactNode;
@@ -31,9 +32,19 @@ export function Slider({
   hint?: [ReactNode, ReactNode];
   /** Optional CSS background for the track (e.g. a color-temperature gradient). */
   track?: string;
+  /** Where the fill starts, for sliders that go both ways (−180…180 from 0): it fills from here to the value. */
+  origin?: number;
   className?: string;
 }) {
-  const pct = ((value - min) / (max - min)) * 100;
+  const at = (v: number) => ((Math.min(max, Math.max(min, v)) - min) / (max - min)) * 100;
+  const pct = at(value);
+  const from = origin === undefined ? 0 : at(origin);
+  const lo = Math.min(from, pct);
+  const hi = Math.max(from, pct);
+  const fill =
+    origin === undefined
+      ? `linear-gradient(90deg, var(--color-spike) var(--pct), var(--color-gaffer) var(--pct))`
+      : `linear-gradient(90deg, var(--color-gaffer) ${lo}%, var(--color-spike) ${lo}%, var(--color-spike) ${hi}%, var(--color-gaffer) ${hi}%)`;
   return (
     <label className={cn("block", className)}>
       <span className="flex items-baseline justify-between gap-2 text-[12.5px]">
@@ -55,7 +66,7 @@ export function Slider({
         style={
           {
             "--pct": `${pct}%`,
-            "--track": track ?? `linear-gradient(90deg, var(--color-spike) var(--pct), var(--color-gaffer) var(--pct))`,
+            "--track": track ?? fill,
           } as CSSProperties
         }
       />

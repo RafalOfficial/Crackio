@@ -7,7 +7,7 @@ import { announce } from "@/lib/hooks/use-setup";
 import { refreshConnections } from "@/lib/hooks/use-connections";
 import { useModelsStore } from "@/lib/hooks/use-models";
 import { DEMO, DEMO_FULL } from "@/lib/demo/config";
-import { KeyForm, KeySaved } from "./ConnectionsView";
+import { KeyForm, KeySaved } from "./keys";
 import { ComfyCloudRow, ServerlessConnections } from "./ServerlessConnections";
 import { Heading, Lamp, Loading, Verdict } from "./parts";
 
@@ -37,7 +37,7 @@ const GROUPS: { id: string; title: string; note: string; rows: Row[] }[] = [
     note: "With a key, every GPU you rent joins your machines by itself and leaves when you give it back. Crackio adds its SSH key to your account to set boxes up.",
     rows: [
       { name: "vast", title: "vast.ai key", body: "Lists the boxes you rent there.", url: "https://cloud.vast.ai/manage-keys/", get: "Get a vast.ai key" },
-      { name: "runpod", title: "RunPod key", body: "Lists your pods, and runs your RunPod Serverless endpoints.", url: "https://console.runpod.io/user/settings", get: "Get a RunPod key" },
+      { name: "runpod", title: "RunPod key", body: "Brings every pod you rent (any template), shows your credit, stops or deletes idle pods, and runs your Serverless endpoints. Give it All permissions.", url: "https://console.runpod.io/user/settings", get: "Get a RunPod key" },
     ],
   },
 ];

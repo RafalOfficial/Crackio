@@ -11,18 +11,26 @@ type LipsyncState = {
   load: (fresh?: boolean) => Promise<void>;
 };
 
-export const useLipsyncStore = create<LipsyncState>((set) => ({
+/** One look at a time: a second ask while one is out gets the same answer. */
+let out: Promise<void> | null = null;
+
+export const useLipsyncStore = create<LipsyncState>((set, get) => ({
   machines: [],
   loaded: false,
-  load: async (fresh = false) => {
-    try {
-      const res = await fetch(`/api/lipsync/machines${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
-      const data = (await res.json()) as { machines?: LipsyncMachine[] };
-      set({ machines: Array.isArray(data.machines) ? data.machines : [], loaded: true });
-    } catch {
-      set({ loaded: true });
-    }
-  },
+  load: (fresh = false) =>
+    (out ??= (async () => {
+      try {
+        const res = await fetch(`/api/lipsync/machines${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
+        const data = (await res.json()) as { machines?: LipsyncMachine[] };
+        const machines = Array.isArray(data.machines) ? data.machines : [];
+        // The same list again keeps its objects, so the page doesn't redraw every 20 s.
+        if (!get().loaded || JSON.stringify(machines) !== JSON.stringify(get().machines)) set({ machines, loaded: true });
+      } catch {
+        if (!get().loaded) set({ loaded: true });
+      } finally {
+        out = null;
+      }
+    })()),
 }));
 
 /** Where a lip sync runs: set up there (engine and LatentSync's files), the one picked under Run on, else the biggest GPU. */

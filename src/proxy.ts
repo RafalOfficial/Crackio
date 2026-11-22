@@ -22,6 +22,15 @@ function overHelperLimit(code: string) {
 const STATIC = /^\/(_next\/|assets\/|icons\/|favicon\.ico$|icon\.svg$|apple-icon\.png$|robots\.txt$)/;
 
 /**
+ * Built chunks and public/ files are the same for everyone (Crackio is open source), and a page load asks for them by
+ * the hundred: they skip the proxy. Pages, API routes and Next's image optimizer (/_next/image, which can fetch your
+ * own media) still come through here.
+ */
+export const config = {
+  matcher: ["/((?!_next/static/|assets/|icons/|favicon\\.ico$|icon\\.svg$|apple-icon\\.png$|robots\\.txt$).*)"],
+};
+
+/**
  * Another website can't drive Crackio from your browser. A browser sends Origin with every POST, PATCH or DELETE, and it
  * must be the address Crackio answers on (behind the LAN https address too, which passes Host through). Scripts and curl
  * send no Origin; reading (GET) stays open.
@@ -50,9 +59,12 @@ function fromAnotherSite(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   if (!demoOn()) {
     // A website whose own name resolves to this computer (DNS rebinding) gets nothing: Crackio answers only as this
-    // computer (localhost, its network addresses and name, CRACKIO_ALLOWED_ORIGINS).
+    // computer (localhost, its network addresses and name, CRACKIO_ALLOWED_ORIGINS). A request with no Host at all is
+    // Next's own: the image optimizer fetches /assets pictures through an internal request with no headers, and every
+    // browser sends Host, so a rebinding page still can't pass.
+    const host = request.headers.get("host");
     const forwarded = request.headers.get("x-forwarded-host");
-    if (!ourHost(request.headers.get("host")) || (forwarded !== null && !ourHost(forwarded))) {
+    if ((host && !ourHost(host)) || (forwarded !== null && !ourHost(forwarded))) {
       return new Response("Crackio only answers on this computer's own addresses. To reach it under another name, add that name to CRACKIO_ALLOWED_ORIGINS.", { status: 421 });
     }
     if (request.nextUrl.pathname.startsWith("/api/") && fromAnotherSite(request)) {

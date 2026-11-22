@@ -41,21 +41,21 @@ export function pictureSlots(def: { caps?: Caps | null; maxRefs: number; via?: s
 }
 
 async function cachedFile(key: string, make: () => Promise<Buffer>) {
-  const file = path.join(DIR, `${createHash("sha1").update(`${VERSION}|${key}`).digest("hex")}.png`);
+  const file = path.join(/*turbopackIgnore: true*/ DIR, `${createHash("sha1").update(`${VERSION}|${key}`).digest("hex")}.png`);
   try {
-    await fs.access(file);
+    await fs.access(/*turbopackIgnore: true*/ file);
     return file;
   } catch {
     const png = await make();
-    await fs.mkdir(DIR, { recursive: true });
-    await fs.writeFile(file, png);
+    await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+    await fs.writeFile(/*turbopackIgnore: true*/ file, png);
     return file;
   }
 }
 
 /** A subject's picture for the model: trimmed to the subject with some room around it, on a plain light background. */
 async function card(file: string, cutout: boolean) {
-  const stat = await fs.stat(file);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ file);
   return cachedFile(`card|${file}|${stat.size}|${stat.mtimeMs}|${cutout}`, async () => {
     if (!cutout) return sharp(file).rotate().resize({ width: CARD_EDGE, height: CARD_EDGE, fit: "inside", withoutEnlargement: true }).png().toBuffer();
     const { data, info } = await sharp(file).rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -87,7 +87,7 @@ async function card(file: string, cutout: boolean) {
 
 /** A card padded with its own background to an aspect ratio, the subject centered (for drawings in that shape). */
 async function framedCard(file: string, aspect: AspectId) {
-  const stat = await fs.stat(file);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ file);
   return cachedFile(`framed|${file}|${stat.size}|${aspect}`, async () => {
     const m = await sharp(file).metadata();
     const w = m.width ?? 1024;
@@ -108,7 +108,7 @@ async function framedCard(file: string, aspect: AspectId) {
 
 /** Several subjects' pictures side by side at the same height, for a model with fewer slots than subjects. */
 async function sheet(cards: string[]) {
-  const stats = await Promise.all(cards.map((c) => fs.stat(c)));
+  const stats = await Promise.all(cards.map((c) => fs.stat(/*turbopackIgnore: true*/ c)));
   return cachedFile(`sheet|${cards.join("|")}|${stats.map((s) => s.size).join(",")}`, async () => {
     const H = 768;
     const gap = 40;
@@ -208,10 +208,10 @@ const KINDS: ElementKind[] = ["person", "animal", "vehicle", "product", "object"
 
 /** What a cast picture shows (read once by a vision model, cached by the picture), or null without one. */
 export async function readSubject(file: string): Promise<SubjectRead | null> {
-  const bytes = await fs.readFile(file);
-  const cache = path.join(DIR, "read", `${createHash("sha1").update(bytes).update(`|${VERSION}`).digest("hex")}.json`);
+  const bytes = await fs.readFile(/*turbopackIgnore: true*/ file);
+  const cache = path.join(/*turbopackIgnore: true*/ DIR, "read", `${createHash("sha1").update(bytes).update(`|${VERSION}`).digest("hex")}.json`);
   try {
-    return JSON.parse(await fs.readFile(cache, "utf8")) as SubjectRead;
+    return JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ cache, "utf8")) as SubjectRead;
   } catch {
     /* not read yet */
   }
@@ -234,8 +234,8 @@ export async function readSubject(file: string): Promise<SubjectRead | null> {
   const height = typeof raw.height === "number" && raw.height > 0.03 && raw.height < 12 ? Math.round(raw.height * 100) / 100 : null;
   const around = typeof raw.view === "string" && raw.view.toLowerCase() in AROUND ? AROUND[raw.view.toLowerCase()] : null;
   const read: SubjectRead = { kind, noun, identity: tidy(raw.identity, 700), height, around };
-  await fs.mkdir(path.dirname(cache), { recursive: true });
-  await fs.writeFile(cache, JSON.stringify(read));
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(cache), { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ cache, JSON.stringify(read));
   return read;
 }
 
@@ -259,7 +259,7 @@ async function unknownShare(file: string | Buffer) {
 /**
  * The plate with its unseen parts made whole: where the set is torn into gray shreds (a car seen from far off the
  * photo's angle, its stretched paint between the holes), the whole patch goes gray, so the model draws it fresh.
- * Open edit models keep shreds and smears as they are (the user's gas station on Qwen-Image-Edit 2511 and FLUX.2 klein:
+ * Open edit models keep shreds and smears as they are (a gas station test photo on Qwen-Image-Edit 2511 and FLUX.2 klein:
  * a melted second hood in front); Grok redraws them, but needs no help.
  */
 async function solidUnknown(file: string) {
@@ -276,8 +276,8 @@ async function solidUnknown(file: string) {
     changed++;
   }
   if (changed < W * H * 0.002) return file;
-  const out = path.join(DIR, `solid-${createHash("sha1").update(data).digest("hex").slice(0, 16)}.png`);
-  await fs.mkdir(DIR, { recursive: true });
+  const out = path.join(/*turbopackIgnore: true*/ DIR, `solid-${createHash("sha1").update(data).digest("hex").slice(0, 16)}.png`);
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
   await sharp(data, { raw: { width: W, height: H, channels: 3 } }).png().toFile(out);
   return out;
 }
@@ -304,14 +304,14 @@ async function fillPlate(given: string, scene: Scene, job: EngineJob, engine: En
 /**
  * The plate made one photograph: the same camera, layout and things, every surface drawn fresh. The 3D set it was
  * rendered from shows seams between the place's views, smears and melted shapes where the camera left the photo's spot;
- * an edit keeps all of it (the user's take: the sky in square panels, the Mustang melting). A cloud model redraws the
+ * an edit keeps all of it (one test take: the sky in square panels, the Mustang melting). A cloud model redraws the
  * whole picture, lined up again after; a local one redraws it over itself at half strength (`redrawLatent`).
  */
 async function redrawPlate(file: string, things: string[], job: EngineJob, engine: Engine, ctx: EngineContext) {
   const local = job.via === "comfy-local";
-  // Its light too: FLUX 3 Klein, told only to keep the layout, turned the user's sunset into pale daylight.
+  // Its light too: FLUX 3 Klein, told only to keep the layout, turned a test sunset into pale daylight.
   const prompt = `Redraw this picture as one natural photograph taken by a real camera, keeping exactly the camera, the horizon and the place: every building, vehicle, object, the ground, water and sky where they are now and as large, in the same light, colors and time of day. ${REDRAW} ${onceRule(things, false)} One seamless photograph, no text.`;
-  const stat = await fs.stat(file);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ file);
   return cachedFile(`redraw|${file}|${stat.size}|${job.model}|${prompt}`, async () => {
     const { data, info } = await sharp(file).removeAlpha().raw().toBuffer({ resolveWithObject: true });
     const { outputs } = await engine.run(
@@ -343,16 +343,16 @@ const THINGS = `List the vehicles, people, animals and other large movable thing
 
 /** The countable things a place photo shows ("one red Ford Mustang convertible"), read once per photo. */
 async function placeThings(photo: string): Promise<string[]> {
-  const bytes = await fs.readFile(photo);
-  const file = path.join(DIR, "things", `${createHash("sha1").update(bytes).update(`|${VERSION}`).digest("hex")}.json`);
-  const hit = await fs.readFile(file, "utf8").catch(() => null);
+  const bytes = await fs.readFile(/*turbopackIgnore: true*/ photo);
+  const file = path.join(/*turbopackIgnore: true*/ DIR, "things", `${createHash("sha1").update(bytes).update(`|${VERSION}`).digest("hex")}.json`);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ file, "utf8").catch(() => null);
   if (hit) return JSON.parse(hit) as string[];
   const answer = await askText({ instructions: THINGS, text: "List the things.", references: [{ path: photo, label: "the place" }], imageEdge: 1024, detail: "low", effort: "low", timeoutMs: 60_000 }).catch(() => null);
   if (!answer) return [];
   const raw = jsonObject<{ things?: unknown[] }>(answer);
   const things = (raw?.things ?? []).flatMap((t) => (typeof t === "string" && t.trim() ? [t.trim().replace(/\.$/, "").slice(0, 80)] : [])).slice(0, 8);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(things));
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ file, JSON.stringify(things));
   return things;
 }
 
@@ -367,16 +367,16 @@ async function alreadyInPlace(photo: string, el: SceneElement, placeUrl: string)
   if (el.image?.sourceUrl && el.image.sourceUrl === placeUrl) return true;
   const subject = el.image ? urlToPath(el.image.url) : el.cast?.sheet ? urlToPath(el.cast.sheet) : null;
   if (!subject) return false;
-  const key = createHash("sha1").update(await fs.readFile(photo)).update(await fs.readFile(subject)).update(`|${VERSION}`).digest("hex");
-  const file = path.join(DIR, "same", `${key}.txt`);
-  const hit = await fs.readFile(file, "utf8").catch(() => null);
+  const key = createHash("sha1").update(await fs.readFile(/*turbopackIgnore: true*/ photo)).update(await fs.readFile(/*turbopackIgnore: true*/ subject)).update(`|${VERSION}`).digest("hex");
+  const file = path.join(/*turbopackIgnore: true*/ DIR, "same", `${key}.txt`);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ file, "utf8").catch(() => null);
   if (hit) return hit === "yes";
   // The question in the message itself: as the instructions under a bare question, Grok wrote a picture prompt back.
   const answer = await askText({ instructions: "You look at pictures and answer questions about them with one word.", text: SAME, references: [{ path: photo, label: "image 1: the place" }, { path: subject, label: "image 2: the subject" }], imageEdge: 1024, detail: "low", effort: "low", timeoutMs: 60_000 }).catch(() => null);
   if (!answer) return false;
   const same = /^\W*yes/i.test(answer);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, same ? "yes" : "no");
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ file, same ? "yes" : "no");
   return same;
 }
 
@@ -387,7 +387,7 @@ async function alreadyInPlace(photo: string, el: SceneElement, placeUrl: string)
  */
 export function fillPrompt(setting: string, camera?: string, things?: string[], marker: "green" | "soft" = "green", edge?: string, removed?: string[]) {
   // The setting only says what the unseen parts are made of: worded as what the view shows, Grok 2.0 redrew the whole
-  // view to match it and the user's gas station vanished from its own photo.
+  // view to match it and a gas station vanished from its own test photo.
   const around = `the surroundings here are ${setting.trim() || "the same place"}`;
   const shot = camera ? ` The photo is ${camera}.` : "";
   return [
@@ -395,7 +395,7 @@ export function fillPrompt(setting: string, camera?: string, things?: string[], 
       ? `The bright green areas of this photo are parts nobody has seen yet.${shot} Fill every bright green area with the natural continuation of what borders it (${around}): the same ground, terrain, sky, water, plants or walls carrying on, with matching perspective, scale and light.`
       : `The soft, blurred patches of this photo are only a guess at parts nobody has seen yet.${shot} Redraw them as the natural, sharp continuation of what borders them (${around}): the same ground, terrain, sky, water, plants or walls carrying on, with matching perspective, scale and light.`,
     // What the rest of the photo shows where the unseen part begins: measured on FLUX 3 Klein, a view turned away from
-    // the user's gas station, told only the landmark-free setting, came back as a cave beside the station's shop.
+    // a test photo's gas station, told only the landmark-free setting, came back as a cave beside the station's shop.
     edge ? `Right where it begins, the photo shows ${edge}: carry exactly that on across it first, the same surfaces, colors and light, before anything else.` : "",
     // Lifting a car out of its photo: told only to fill, Grok 2.0 drew another car into the car-shaped hole.
     removed?.length
@@ -417,20 +417,20 @@ const SETTING = `In 6 to 14 words, describe only the natural setting around wher
  * wherever the camera turns. Read once per photo; the place's own words when no vision model answers.
  */
 async function settingOf(photo: string, fallback: string) {
-  const bytes = await fs.readFile(photo);
-  const file = path.join(DIR, "setting", `${createHash("sha1").update(bytes).update(`|${VERSION}`).digest("hex")}.txt`);
-  const hit = await fs.readFile(file, "utf8").catch(() => null);
+  const bytes = await fs.readFile(/*turbopackIgnore: true*/ photo);
+  const file = path.join(/*turbopackIgnore: true*/ DIR, "setting", `${createHash("sha1").update(bytes).update(`|${VERSION}`).digest("hex")}.txt`);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ file, "utf8").catch(() => null);
   if (hit) return hit;
   const answer = await askText({ instructions: SETTING, text: "Describe the setting.", references: [{ path: photo, label: "the place" }], imageEdge: 768, detail: "low", effort: "low", timeoutMs: 45_000 }).catch(() => null);
   const setting = answer?.replace(/\s+/g, " ").trim().replace(/\.$/, "").slice(0, 160);
   if (!setting) return fallback;
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, setting);
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ file, setting);
   return setting;
 }
 
 /**
- * A view's unseen parts filled by the shot's model. Measured 2026-10-28 on the user's studio and gas station plates:
+ * A view's unseen parts filled by the shot's model. Measured 2026-10-28 on studio and gas station test plates:
  * Grok 2.0 fills bright green areas completely (flat gray ones it sometimes hands back, and a gray studio wall reads as
  * one); Qwen-Image-Edit 2511 and FLUX.2 klein keep either marker as it is. So cloud models get the green marker, and
  * local ones a soft guess of the place (what surrounds each hole, blended in) that they redraw only where the mask
@@ -444,7 +444,7 @@ async function settingOf(photo: string, fallback: string) {
 type FillWords = { setting: string; camera?: string; things?: string[]; edge?: string; exact?: boolean; removed?: string[]; redraw?: boolean; bridge?: boolean };
 
 async function fillUnknown(file: string, words: FillWords, job: EngineJob, engine: Engine, ctx: EngineContext) {
-  const stat = await fs.stat(file);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ file);
   const local = job.via === "comfy-local";
   const prompt =
     fillPrompt(words.setting, words.camera, words.things, local ? "soft" : "green", words.edge, words.removed) +
@@ -453,7 +453,7 @@ async function fillUnknown(file: string, words: FillWords, job: EngineJob, engin
     (words.bridge ? " Its left and right sides differ a little in color and light: blend from one into the other gradually across the middle, the sky, water and ground running on smoothly, with no line or step anywhere." : "");
   return cachedFile(`fill|${file}|${stat.size}|${job.model}|${prompt}`, async () => {
     const { data, hole, width: W, height: H } = await unseenOf(file);
-    const scratch = (name: string) => path.join(DIR, `${name}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.png`);
+    const scratch = (name: string) => path.join(/*turbopackIgnore: true*/ DIR, `${name}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.png`);
     const made: string[] = [];
     const save = async (input: Buffer, channels: 1 | 3) => {
       const out = scratch("fill-in");
@@ -469,7 +469,7 @@ async function fillUnknown(file: string, words: FillWords, job: EngineJob, engin
       if (!outputs[0]) throw new EngineError("The model returned nothing.");
       return sharp(outputs[0].data).resize(W, H, { fit: "fill" }).png().toBuffer();
     };
-    await fs.mkdir(DIR, { recursive: true });
+    await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
     try {
       if (local) {
         // The mask a little wider than the holes, so the seams are redrawn too.
@@ -491,7 +491,7 @@ async function fillUnknown(file: string, words: FillWords, job: EngineJob, engin
       if ((await greenShare(drawn)) > 0.01) {
         // Once more on what came back, told plainly.
         const again = scratch("fill-again");
-        await fs.writeFile(again, drawn);
+        await fs.writeFile(/*turbopackIgnore: true*/ again, drawn);
         made.push(again);
         drawn = await run(again, `${prompt} Not a single green area may remain anywhere in the picture.`);
       }
@@ -501,7 +501,7 @@ async function fillUnknown(file: string, words: FillWords, job: EngineJob, engin
       const aligned = await lineUp(original, drawn, wide, W, H);
       return words.exact ? keepKnown(aligned, original, wide, W, H) : sharp(aligned, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer();
     } finally {
-      await Promise.all(made.map((f) => fs.rm(f, { force: true })));
+      await Promise.all(made.map((f) => fs.rm(/*turbopackIgnore: true*/ f, { force: true })));
     }
   });
 }
@@ -595,7 +595,7 @@ export async function fillView(url: string, place: string, model: string, signal
   const [setting, edge] = await Promise.all([photo ? settingOf(photo, place) : place, edgeOf(file)]);
   const { job, engine } = await imageJob(model, machine);
   const filled = await fillUnknown(file, { setting, edge: edge ?? undefined, exact: true, bridge }, job, engine, { signal, progress: () => undefined });
-  return saveUpload(await fs.readFile(filled));
+  return saveUpload(await fs.readFile(/*turbopackIgnore: true*/ filled));
 }
 
 const EDGE = `This picture is part of a photo; its flat gray part hasn't been seen yet. In 8 to 22 words, say what the rest of the picture shows right where it meets the gray: the things cut off there (name them plainly, with their colors), the ground and the sky. Never mention the gray. Answer with the words only, no full stop.`;
@@ -606,14 +606,14 @@ const EDGE = `This picture is part of a photo; its flat gray part hasn't been se
  * says what lies beyond.
  */
 async function edgeOf(file: string) {
-  const bytes = await fs.readFile(file);
-  const cache = path.join(DIR, "edge", `${createHash("sha1").update(bytes).update(`|${VERSION}`).digest("hex")}.txt`);
-  const hit = await fs.readFile(cache, "utf8").catch(() => null);
+  const bytes = await fs.readFile(/*turbopackIgnore: true*/ file);
+  const cache = path.join(/*turbopackIgnore: true*/ DIR, "edge", `${createHash("sha1").update(bytes).update(`|${VERSION}`).digest("hex")}.txt`);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ cache, "utf8").catch(() => null);
   if (hit !== null) return hit || null;
   const answer = await askText({ instructions: EDGE, text: "What is at the edge of the gray?", references: [{ path: file, label: "the view" }], imageEdge: 1024, detail: "low", effort: "low", timeoutMs: 45_000 }).catch(() => null);
   const edge = answer?.replace(/\s+/g, " ").trim().replace(/\.$/, "").slice(0, 220) ?? "";
-  await fs.mkdir(path.dirname(cache), { recursive: true });
-  await fs.writeFile(cache, edge);
+  await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(cache), { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ cache, edge);
   return edge || null;
 }
 
@@ -741,19 +741,19 @@ export type LiftedPlace = { things: PlaceThing[]; clean: { url: string; width: n
 /**
  * The movable things a place photo shows (a parked car, a person), lifted out of it: each cut out as its own subject,
  * and the photo with them removed (what's behind them filled in by the place's model). On the 3D set a photo's car is
- * only a relief of the one side the photo saw: from anywhere else it smears and melts (the user's gas station Mustang).
+ * only a relief of the one side the photo saw: from anywhere else it smears and melts (a gas station Mustang, in testing).
  * As a subject it gets a stand-in and is drawn whole from the camera's angle, like anything staged.
  */
 export async function liftThings(photoUrl: string, place: string, model: string, signal: AbortSignal, machine?: string): Promise<LiftedPlace> {
   const photo = urlToPath(photoUrl);
   if (!photo) throw new EngineError("Crackio can't find that photo.");
-  const bytes = await fs.readFile(photo);
-  const cache = path.join(DIR, "lift", `${createHash("sha1").update(bytes).update(`|${model}|${VERSION}`).digest("hex")}.json`);
-  const hit = await fs.readFile(cache, "utf8").catch(() => null);
+  const bytes = await fs.readFile(/*turbopackIgnore: true*/ photo);
+  const cache = path.join(/*turbopackIgnore: true*/ DIR, "lift", `${createHash("sha1").update(bytes).update(`|${model}|${VERSION}`).digest("hex")}.json`);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ cache, "utf8").catch(() => null);
   if (hit) return JSON.parse(hit) as LiftedPlace;
   const done = async (lifted: LiftedPlace) => {
-    await fs.mkdir(path.dirname(cache), { recursive: true });
-    await fs.writeFile(cache, JSON.stringify(lifted));
+    await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(cache), { recursive: true });
+    await fs.writeFile(/*turbopackIgnore: true*/ cache, JSON.stringify(lifted));
     return lifted;
   };
 
@@ -790,7 +790,7 @@ export async function liftThings(photoUrl: string, place: string, model: string,
   // Each one cut out of a crop around it; its matte, put back on the photo, says what the clean photo loses.
   const hole = Buffer.alloc(W * H);
   const things: PlaceThing[] = [];
-  await fs.mkdir(DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
   for (const t of boxes) {
     const mx = (t.box[2] - t.box[0]) * 0.12;
     const my = (t.box[3] - t.box[1]) * 0.12;
@@ -799,7 +799,7 @@ export async function liftThings(photoUrl: string, place: string, model: string,
     const width = Math.min(W - left, Math.ceil(((t.box[2] - t.box[0] + 2 * mx) / 1000) * W));
     const height = Math.min(H - top, Math.ceil(((t.box[3] - t.box[1] + 2 * my) / 1000) * H));
     if (width < 16 || height < 16) continue;
-    const crop = path.join(DIR, `lift-${Date.now().toString(36)}-${things.length}.png`);
+    const crop = path.join(/*turbopackIgnore: true*/ DIR, `lift-${Date.now().toString(36)}-${things.length}.png`);
     await sharp(rgb, { raw: { width: W, height: H, channels: 3 } }).extract({ left, top, width, height }).png().toFile(crop);
     try {
       const cut = await withSubjectMatte(crop);
@@ -825,7 +825,7 @@ export async function liftThings(photoUrl: string, place: string, model: string,
       const read = file ? await readSubject(file) : null;
       things.push({ kind: read?.kind ?? t.kind, box: t.box, cutout: { url: saved.url, width: saved.width, height: saved.height }, read });
     } finally {
-      await fs.rm(crop, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ crop, { force: true });
     }
   }
   if (!things.length) return done({ things: [], clean: null });
@@ -834,7 +834,7 @@ export async function liftThings(photoUrl: string, place: string, model: string,
   const wide = await sharp(hole, { raw: { width: W, height: H, channels: 1 } }).blur(Math.max(4, W / 110)).extractChannel(0).raw().toBuffer();
   const marked = Buffer.from(rgb);
   for (let i = 0; i < W * H; i++) if (wide[i] > 16) marked[i * 3] = marked[i * 3 + 1] = marked[i * 3 + 2] = 138;
-  const markedFile = path.join(DIR, `lift-marked-${Date.now().toString(36)}.png`);
+  const markedFile = path.join(/*turbopackIgnore: true*/ DIR, `lift-marked-${Date.now().toString(36)}.png`);
   await sharp(marked, { raw: { width: W, height: H, channels: 3 } }).png().toFile(markedFile);
   try {
     const { job, engine } = await imageJob(model, machine);
@@ -842,10 +842,10 @@ export async function liftThings(photoUrl: string, place: string, model: string,
     // The photo's own pixels around the hole, exactly: Grok 2.0's whole redraw moved the gas station, which the set is
     // built on; the hole's tone is matched to its rim so the car's outline doesn't stay as a lighter patch.
     const filled = await fillUnknown(markedFile, { setting: await settingOf(photo, place), exact: true, removed }, job, engine, { signal, progress: () => undefined });
-    const clean = await saveUpload(await fs.readFile(filled));
+    const clean = await saveUpload(await fs.readFile(/*turbopackIgnore: true*/ filled));
     return done({ things, clean: { url: clean.url, width: clean.width, height: clean.height } });
   } finally {
-    await fs.rm(markedFile, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ markedFile, { force: true });
   }
 }
 
@@ -902,7 +902,7 @@ async function drawFromAngle(el: SceneElement, view: Pick<SubjectView, "around" 
   // Angles to 15 degrees: what a model can tell apart, and drawings get reused between shots.
   const rounded = { around: Math.round(view.around / 15) * 15, above: Math.round(view.above / 10) * 10 };
   const prompt = viewPrompt(el, rounded, light);
-  const stat = await fs.stat(card);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ card);
   const file = await cachedFile(`view|${card}|${stat.size}|${job.model}|${prompt}`, async () => {
     const aspect: AspectId = el.kind === "person" ? "2:3" : el.kind === "vehicle" ? "16:9" : "1:1";
     const size = sizeFor(aspect);
@@ -914,14 +914,14 @@ async function drawFromAngle(el: SceneElement, view: Pick<SubjectView, "around" 
       ctx,
     );
     if (!outputs[0]) throw new EngineError(`The model drew nothing for ${el.name}.`);
-    const raw = path.join(DIR, `raw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.png`);
-    await fs.mkdir(DIR, { recursive: true });
-    await fs.writeFile(raw, await sharp(outputs[0].data).png().toBuffer());
+    const raw = path.join(/*turbopackIgnore: true*/ DIR, `raw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.png`);
+    await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+    await fs.writeFile(/*turbopackIgnore: true*/ raw, await sharp(outputs[0].data).png().toBuffer());
     try {
-      const cut = (await withSubjectMatte(raw)) ?? (await fs.readFile(raw));
+      const cut = (await withSubjectMatte(raw)) ?? (await fs.readFile(/*turbopackIgnore: true*/ raw));
       return sharp(cut).trim({ threshold: 1 }).png().toBuffer();
     } finally {
-      await fs.rm(raw, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ raw, { force: true });
     }
   });
   return { file, prompt };
@@ -1030,7 +1030,7 @@ export async function runDirectorComp(job: EngineJob, gen: Generation, engine: E
   const viewsOut: Record<string, { url: string; prompt: string }> = {};
   for (const d of drawn) {
     if (!d.view) continue;
-    const saved = await saveUpload(await fs.readFile(d.view.file));
+    const saved = await saveUpload(await fs.readFile(/*turbopackIgnore: true*/ d.view.file));
     viewsOut[d.el.id] = { url: saved.url, prompt: d.view.prompt };
   }
   return { ...result, usedPrompt: result.usedPrompt ?? prompt, compUrl: comp.url, views: viewsOut };
@@ -1044,7 +1044,7 @@ export const TURNAROUND = [0, 45, 90, 135, 180, -135, -90, -45].map((around) => 
 export type Drawing = { around: number; above: number; url: string; width: number; height: number };
 
 /** An image job for a model, as the runner builds one (no prompt or pictures yet). */
-async function imageJob(model: string, machine?: string) {
+export async function imageJob(model: string, machine?: string) {
   const [{ resolveModel }, { engineFor }] = await Promise.all([import("@/lib/models/resolve"), import("@/lib/engines/registry")]);
   const def = await resolveModel("image", model);
   const engine = def.via ? engineFor(def.via) : null;
@@ -1089,7 +1089,7 @@ export async function drawTurnaround(el: SceneElement, model: string, signal: Ab
         return null;
       });
       if (!view) return null;
-      const saved = await saveUpload(await fs.readFile(view.file));
+      const saved = await saveUpload(await fs.readFile(/*turbopackIgnore: true*/ view.file));
       return { ...angle, url: saved.url, width: saved.width, height: saved.height };
     }),
   );
@@ -1106,24 +1106,24 @@ const SHEET_AROUND: Record<string, number> = { front: 0, "three-quarter": 45, si
 export async function castSheetDrawings(sheetUrl: string, names: readonly string[]): Promise<Drawing[]> {
   const sheet = urlToPath(sheetUrl);
   if (!sheet) throw new EngineError("Crackio can't find that Cast sheet.");
-  const stat = await fs.stat(sheet);
+  const stat = await fs.stat(/*turbopackIgnore: true*/ sheet);
   const views = await sheetViews(sheet);
   const drawings: Drawing[] = [];
   for (let i = 0; i < Math.min(views.length, names.length); i++) {
     const around = SHEET_AROUND[names[i]];
     if (around === undefined) continue;
     const file = await cachedFile(`sheet-drawing|${sheet}|${stat.size}|${stat.mtimeMs}|${i}`, async () => {
-      const raw = path.join(DIR, `sheet-view-${Date.now().toString(36)}-${i}.png`);
-      await fs.mkdir(DIR, { recursive: true });
-      await fs.writeFile(raw, views[i]);
+      const raw = path.join(/*turbopackIgnore: true*/ DIR, `sheet-view-${Date.now().toString(36)}-${i}.png`);
+      await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+      await fs.writeFile(/*turbopackIgnore: true*/ raw, views[i]);
       try {
         const cut = (await withSubjectMatte(raw)) ?? views[i];
         return sharp(cut).trim({ threshold: 1 }).png().toBuffer();
       } finally {
-        await fs.rm(raw, { force: true });
+        await fs.rm(/*turbopackIgnore: true*/ raw, { force: true });
       }
     });
-    const saved = await saveUpload(await fs.readFile(file));
+    const saved = await saveUpload(await fs.readFile(/*turbopackIgnore: true*/ file));
     drawings.push({ around, above: 0, url: saved.url, width: saved.width, height: saved.height });
     if (around % 180 !== 0) {
       const mirrored = await saveUpload(await sharp(file).flop().png().toBuffer());
@@ -1166,8 +1166,8 @@ export async function runDirectorPlate(job: EngineJob, gen: Generation, engine: 
   const placeModel = typeof gen.params?.placeModel === "string" && gen.params.placeModel !== "auto" && gen.params.placeModel !== job.model ? gen.params.placeModel : null;
   const maker = placeModel ? await imageJob(placeModel, typeof job.options?.machine === "string" ? job.options.machine : undefined) : { job, engine };
   // A world's view is a guide, not the picture: one panorama spread over the whole circle holds about a quarter of a
-  // photo's detail, and shots kept its softness and the sharpener's invented grids (the user: "the quality of it can be
-  // bad.. then the output WILL also be bad"). Redrawn fresh at the shot's size, it keeps the place's layout and light.
+  // photo's detail, and shots kept its softness and the sharpener's invented grids. Redrawn fresh at the shot's size,
+  // it keeps the place's layout and light.
   // Within the place photo the world is the photo itself (server/world photoInto): kept exactly, as sharp as it is.
   const clean = gen.params?.surround === true && (!scene.place.world || withinPhoto(scene));
   const filled = scene.place.image
@@ -1182,7 +1182,7 @@ export async function runDirectorPlate(job: EngineJob, gen: Generation, engine: 
         if (!outputs[0]) throw new EngineError("The model returned no place.");
         return sharp(outputs[0].data).resize(meta.width, meta.height, { fit: "fill" }).png().toBuffer();
       });
-  const plateSaved = await saveUpload(await fs.readFile(filled));
+  const plateSaved = await saveUpload(await fs.readFile(/*turbopackIgnore: true*/ filled));
 
   // 2. The stand-ins on it, where the ID pass has them: none for a subject the place already shows, or one the prompt
   // doesn't name (a chair's corner in the frame while the chair itself is out of it would stay a colored block).
@@ -1190,12 +1190,12 @@ export async function runDirectorPlate(job: EngineJob, gen: Generation, engine: 
   const skip = (comp?.boxes ?? []).filter((b) => (kept.has(b.id) || !named.has(b.id)) && Array.isArray(b.color)).map((b) => b.color!);
   const overlay = await standInsOver(filled, blocking, ids, skip, plate);
   const overlaySaved = await saveUpload(overlay);
-  const swapIn = path.join(DIR, `swap-in-${Date.now().toString(36)}.png`);
-  await fs.mkdir(DIR, { recursive: true });
-  await fs.writeFile(swapIn, overlay);
+  const swapIn = path.join(/*turbopackIgnore: true*/ DIR, `swap-in-${Date.now().toString(36)}.png`);
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ swapIn, overlay);
 
   // 3. One edit swaps each stand-in for its subject: its own picture beside the shot, from the side the camera sees it,
-  // for as many as the model takes; the rest in words. Measured on Grok 2.0 (the user's gas station shot): the swap and
+  // for as many as the model takes; the rest in words. Measured on Grok 2.0 (a gas station test shot): the swap and
   // the likeness in one pass keep the subject's facing, size and spot; a separate likeness pass after the swap turned a
   // profile toward the camera.
   const { subjects } = briefPictures(scene, 99);
@@ -1219,7 +1219,7 @@ export async function runDirectorPlate(job: EngineJob, gen: Generation, engine: 
     if (!outputs.length) throw new EngineError("The model returned no picture.");
     return { outputs, usedPrompt: swap, plateUrl: plateSaved.url, swapUrl: overlaySaved.url };
   } finally {
-    await fs.rm(swapIn, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ swapIn, { force: true });
   }
 }
 
@@ -1256,7 +1256,7 @@ async function matchedView(el: SceneElement, around: number): Promise<{ path: st
     const i = names.indexOf(want);
     if (i < 0) return { path: sheet, matched: false };
     const flip = (want === "side" || want === "three-quarter") && around < 0;
-    const stat = await fs.stat(sheet);
+    const stat = await fs.stat(/*turbopackIgnore: true*/ sheet);
     const file = await cachedFile(`sheet-view|${sheet}|${stat.size}|${stat.mtimeMs}|${i}|${flip}`, async () => {
       const view = sharp((await sheetViews(sheet))[i]);
       return (flip ? view.flop() : view).png().toBuffer();

@@ -9,9 +9,13 @@ import { useSyncExternalStore } from "react";
 const EVENT = "crackio:run-on";
 let version = 0;
 
-/** api/local/eta's answers by job, shared for a moment by everyone asking the same (the time line, the Advanced section). */
+/**
+ * api/local/eta's answers by job, shared by everyone asking the same (the time line, the Advanced section) and kept for
+ * half a minute: coming back to a page Crackio kept open asks again only once the answer is that old. Picking another
+ * machine to run on forgets them all.
+ */
 const answers = new Map<string, { at: number; answer: Promise<unknown> }>();
-const SHARED_MS = 3000;
+const SHARED_MS = 30_000;
 
 export async function setRunOn(target: string) {
   await fetch("/api/local", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "run-on", target }) });
@@ -47,6 +51,8 @@ export type EtaAsk = {
   /** An upscale's picture and factor: its work grows with them. */
   source?: { width: number; height: number };
   scale?: number;
+  /** Advanced's "Never enlarge". */
+  nativeOnly?: boolean;
 };
 
 /** The request for a job, built the same way by every asker so they share one answer. Null for models that don't run locally. */
@@ -62,6 +68,7 @@ export function etaBody(a: EtaAsk): string | null {
     ...(a.resolution && a.ratio ? { ratio: Math.round(a.ratio * 1000) / 1000 } : {}),
     ...(a.source ? { source: { width: a.source.width, height: a.source.height } } : {}),
     ...(a.scale ? { scale: a.scale } : {}),
+    ...(a.nativeOnly ? { nativeOnly: true } : {}),
   });
 }
 

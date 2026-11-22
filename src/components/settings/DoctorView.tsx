@@ -16,6 +16,8 @@ import { countReady, gbText } from "./words";
  */
 export function DoctorView() {
   const { snap, error } = useSetup();
+  // When Crackio last looked: the snapshot itself only changes when something in it does.
+  const checkedAt = useSetupStore((s) => s.checkedAt);
   const [checking, setChecking] = useState(false);
   if (!snap) return error ? <ProblemCard title="Crackio couldn't look at your machines" why={error} /> : <Loading rows={6} />;
   const problems = findProblems(snap);
@@ -31,7 +33,7 @@ export function DoctorView() {
     <div className="space-y-10">
       <Verdict
         title={problems.length ? `${problems.length} ${problems.length === 1 ? "thing" : "things"} to fix` : "All good."}
-        facts={`Checked ${new Date(snap.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${snap.machines.length} machines · ${problems.length ? "fixes go gentlest first" : "nothing needs you"}`}
+        facts={`Checked ${new Date(checkedAt || snap.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${snap.machines.length} machines · ${problems.length ? "fixes go gentlest first" : "nothing needs you"}`}
         aside={
           <Button variant="outline" onClick={() => void again()} disabled={checking}>
             {checking ? <LoaderCircle size={15} className="animate-spin" /> : null}

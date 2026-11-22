@@ -7,7 +7,7 @@ import { PILL_ACT as ACT, PillAct as Act, SetupPill as Pill, readLater as readLa
 import { useVoiceStore } from "@/lib/hooks/use-voice";
 import { AUDIOCPP_BYTES, buildName, firstVoiceModel, HEARING, voiceModel, type VoiceModel } from "@/lib/voice/models";
 import type { VoiceMachine, VoiceSetupJob } from "@/lib/voice/types";
-import { VoiceModelMark } from "./VoiceModelLibrary";
+import { VoiceModelMark } from "./ModelMark";
 
 /** The bridge that checks audio.cpp builds and proves Voice with a test line (server/voice/machines SETUP_BRIDGE). */
 const SETUP_BRIDGE = "1.8.5";

@@ -70,7 +70,18 @@ const REPORTED_TRUST = { high: 0.5, medium: 0.3, low: 0.12 };
 const COMPUTE: Record<string, number> = { blackwell: 12, hopper: 9, ada: 8.9, ampere: 8.6, turing: 7.5, volta: 7, pascal: 6.1, maxwell: 5.2 };
 
 /** A benchmark's machine, as much of one as fit's scale reads. */
+/** Benchmarks never change, so each one's machine is made once (startingPoint asks for every benchmark of every model). */
+const benchMachines = new WeakMap<Benchmark, Machine>();
+
 export function benchMachine(b: Benchmark): Machine {
+  const hit = benchMachines.get(b);
+  if (hit) return hit;
+  const m = makeBenchMachine(b);
+  benchMachines.set(b, m);
+  return m;
+}
+
+function makeBenchMachine(b: Benchmark): Machine {
   const c = gpuClass(b.gpu);
   const unified = c.vendor === "apple";
   const name = c.vendor === "nvidia" && /^(RTX|GTX) d/i.test(b.gpu) ? `NVIDIA GeForce ${b.gpu}` : b.gpu;
@@ -125,7 +136,29 @@ type Start = { perUnit: number; basis: Exclude<Basis, "measured">; from: string 
  * The starting point for a model's version on this machine, per unit of work: benchmarks of the same card first, then its
  * series', then any card's, carried over by the cards' speed; else the catalog's RTX 5090 time scaled to the card.
  */
+/**
+ * Starting points per machine, model version and job kind. One estimate reads every other model's starting points (its
+ * machine factor), so the Local page's ~130 estimates per machine asked for the same ones over and over: 0.5–1 s of
+ * blocking work per machine on every look. Kept by object identity: a fresh machine reading is a fresh start.
+ */
+const starts = new WeakMap<Machine, WeakMap<LocalModel, WeakMap<LocalVariant, Map<string, Start | null>>>>();
+
 export function startingPoint(machine: Machine, model: LocalModel, v: LocalVariant, mode: SpeedMode, key = recipeKey(model), bench: Benchmark[] = BENCHMARKS): Start | null {
+  if (bench !== BENCHMARKS) return computeStart(machine, model, v, mode, key, bench);
+  let byModel = starts.get(machine);
+  if (!byModel) starts.set(machine, (byModel = new WeakMap()));
+  let byVariant = byModel.get(model);
+  if (!byVariant) byModel.set(model, (byVariant = new WeakMap()));
+  let byMode = byVariant.get(v);
+  if (!byMode) byVariant.set(v, (byMode = new Map()));
+  const id = `${mode}|${key}`;
+  if (byMode.has(id)) return byMode.get(id)!;
+  const start = computeStart(machine, model, v, mode, key, bench);
+  byMode.set(id, start);
+  return start;
+}
+
+function computeStart(machine: Machine, model: LocalModel, v: LocalVariant, mode: SpeedMode, key: string, bench: Benchmark[]): Start | null {
   const scale = gpuScale(machine, v);
   if (!scale) return null;
   const gpu = mainGpu(machine);
@@ -182,11 +215,32 @@ export const recipeKey = (model: LocalModel) => (model.crackio ?? model.id).repl
  */
 export function machineFactor(machine: Machine, models: LocalModel[], runs: MachineRuns | undefined, except?: string) {
   if (!runs) return 1;
+  // Every model's share, worked out once per machine reading, record and model list, and added up in the same order as
+  // ever (the same number to the last bit); only the model being estimated is left out.
   let num = 0;
   let den = 1.5;
+  for (const c of factorParts(machine, models, runs)) {
+    if (c.key === except) continue;
+    num += c.num;
+    den += c.w;
+  }
+  return Math.min(3, Math.max(1 / 3, Math.exp(num / den)));
+}
+
+type FactorPart = { key: string; num: number; w: number };
+const factorCache = new WeakMap<Machine, WeakMap<MachineRuns, WeakMap<LocalModel[], FactorPart[]>>>();
+
+function factorParts(machine: Machine, models: LocalModel[], runs: MachineRuns): FactorPart[] {
+  let byRuns = factorCache.get(machine);
+  if (!byRuns) factorCache.set(machine, (byRuns = new WeakMap()));
+  let byModels = byRuns.get(runs);
+  if (!byModels) byRuns.set(runs, (byModels = new WeakMap()));
+  const hit = byModels.get(models);
+  if (hit) return hit;
+  const parts: FactorPart[] = [];
   for (const [key, e] of Object.entries(runs)) {
-    if (key === except || !e.variant) continue;
-    const model = models.find((m) => recipeKey(m) === key);
+    if (!e.variant) continue;
+    const model = modelByKey(models, key);
     const v = model?.variants.find((x) => x.id === e.variant);
     if (!model || !v) continue;
     for (const mode of ["t2i", "edit", "clip", "upscale"] as SpeedMode[]) {
@@ -195,11 +249,26 @@ export function machineFactor(machine: Machine, models: LocalModel[], runs: Mach
       const start = startingPoint(machine, model, v, mode, key);
       if (!start) continue;
       const w = Math.min(4, warm.length);
-      num += w * Math.log(median(warm) / start.perUnit);
-      den += w;
+      parts.push({ key, num: w * Math.log(median(warm) / start.perUnit), w });
     }
   }
-  return Math.min(3, Math.max(1 / 3, Math.exp(num / den)));
+  byModels.set(models, parts);
+  return parts;
+}
+
+/** The first model in the list a record's key names (the list is a few dozen long and asked hundreds of times). */
+const keyIndex = new WeakMap<LocalModel[], Map<string, LocalModel>>();
+function modelByKey(models: LocalModel[], key: string): LocalModel | undefined {
+  let index = keyIndex.get(models);
+  if (!index) {
+    index = new Map();
+    for (const m of models) {
+      const k = recipeKey(m);
+      if (!index.has(k)) index.set(k, m);
+    }
+    keyIndex.set(models, index);
+  }
+  return index.get(key);
 }
 
 /** A model's main kind of job, for runs kept before kinds were. */
@@ -244,10 +313,23 @@ function fromRuns(model: LocalModel, v: LocalVariant, mode: SpeedMode, work: num
 }
 
 /** How fast this machine's disk loads models, GB/s: from the first runs it timed, else the speed rented boxes showed. */
+const diskSpeeds = new WeakMap<MachineRuns, WeakMap<LocalModel[], number>>();
+
 export function diskSpeed(models: LocalModel[], runs: MachineRuns | undefined) {
+  if (!runs) return computeDiskSpeed(models, runs);
+  let byModels = diskSpeeds.get(runs);
+  if (!byModels) diskSpeeds.set(runs, (byModels = new WeakMap()));
+  const hit = byModels.get(models);
+  if (hit !== undefined) return hit;
+  const speed = computeDiskSpeed(models, runs);
+  byModels.set(models, speed);
+  return speed;
+}
+
+function computeDiskSpeed(models: LocalModel[], runs: MachineRuns | undefined) {
   const speeds: number[] = [];
   for (const [key, e] of Object.entries(runs ?? {})) {
-    const model = models.find((m) => recipeKey(m) === key);
+    const model = modelByKey(models, key);
     const v = model?.variants.find((x) => x.id === e.variant);
     const rs = e.runs ?? [];
     const warm = rs.filter((r) => r.warm).map((r) => r.s / r.u);

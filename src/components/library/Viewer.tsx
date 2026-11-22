@@ -223,16 +223,23 @@ export function Viewer({ takes, index, onGo, onClose, folders, newColor, onMove,
     return () => document.removeEventListener("keydown", onKey, true);
   }, []);
 
-  // The next and previous pictures load in the background, so stepping to them is instant.
+  // The next and previous pictures load in the background, so stepping to them is instant: once you've stayed a
+  // moment, and cancelled when you step on (holding → through big PNGs used to queue every original it passed).
   useEffect(() => {
     const near = [takes[index + 1], takes[index - 1]].filter((t): t is Take => Boolean(t) && t.kind === "image");
-    const loading = near.map((t) => {
-      const img = new Image();
-      img.decoding = "async";
-      img.src = t.gen.outputs[t.index]?.url ?? "";
-      return img;
-    });
-    return () => void loading.splice(0);
+    const loading: HTMLImageElement[] = [];
+    const timer = setTimeout(() => {
+      for (const t of near) {
+        const img = new Image();
+        img.decoding = "async";
+        img.src = t.gen.outputs[t.index]?.url ?? "";
+        loading.push(img);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      for (const img of loading) if (!img.complete) img.src = "";
+    };
   }, [takes, index]);
 
   if (!take) return null;
@@ -435,6 +442,26 @@ function Still({
     const r = surface.current?.getBoundingClientRect();
     return r ? ([e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2] as const) : ([0, 0] as const);
   };
+  // Wheel ticks and drags are gathered into one update a frame: a trackpad sends more than the screen shows, and each
+  // update lays the original out again at its new size.
+  const pending = useRef({ f: 1, cx: 0, cy: 0, dx: 0, dy: 0, raf: 0 });
+  const flush = () => {
+    const p = pending.current;
+    p.raf = 0;
+    const { f, cx, cy, dx, dy } = p;
+    p.f = 1;
+    p.dx = 0;
+    p.dy = 0;
+    if (f !== 1) zoomAt(f, cx, cy);
+    if (dx || dy) setView((v) => clampView(v.z, v.x + dx, v.y + dy));
+  };
+  const later = () => {
+    if (!pending.current.raf) pending.current.raf = requestAnimationFrame(flush);
+  };
+  useEffect(() => {
+    const p = pending.current;
+    return () => cancelAnimationFrame(p.raf);
+  }, []);
 
   useImperativeHandle(ref, () => ({ toggleZoom: () => toggleAt(0, 0), zoomBy: (f: number) => zoomAt(f, 0, 0) }));
 
@@ -448,7 +475,11 @@ function Still({
   useLayoutEffect(() => {
     wheel.current = (e) => {
       const [cx, cy] = fromCenter(e);
-      zoomAt(Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.06 : 0.0025)), cx, cy);
+      const p = pending.current;
+      p.f *= Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.06 : 0.0025));
+      p.cx = cx;
+      p.cy = cy;
+      later();
     };
   });
   useEffect(() => {
@@ -468,7 +499,9 @@ function Still({
     onDrag: (dx, dy) => {
       if (!zoomed) return;
       setGrabbing(true);
-      setView((v) => clampView(v.z, v.x + dx, v.y + dy));
+      pending.current.dx += dx;
+      pending.current.dy += dy;
+      later();
     },
     onEnd: () => setGrabbing(false),
   });
@@ -848,6 +881,7 @@ function InfoPanel({
         <Section label="Details">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2.5 text-[13px]">
             {g.modelName ? <Detail term="Model">{g.modelName}</Detail> : null}
+            {typeof (g.params?.agent as { client?: unknown } | undefined)?.client === "string" ? <Detail term="Made by">{`An agent (${(g.params!.agent as { client: string }).client})`}</Detail> : null}
             {o?.width && o?.height ? (
               <Detail term="Size">
                 <span className="tabular">

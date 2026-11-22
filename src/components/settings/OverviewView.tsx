@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { UsageSummary } from "@/lib/usage/types";
@@ -8,13 +9,13 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { setUp, useSetup } from "@/lib/hooks/use-setup";
 import { setRunOn } from "@/lib/hooks/use-run-on";
 import { KITS } from "@/lib/setup/kits";
-import type { KitId, LiveGpu, SetupMachine, SetupSnapshot } from "@/lib/setup/types";
+import type { KitId, SetupMachine, SetupSnapshot } from "@/lib/setup/types";
 import { cn } from "@/lib/cn";
 import { Heading, KitMark, Lamp, Loading, ProblemCard, Tape, Verdict } from "./parts";
 import { findProblems, type Fix, type Problem } from "./problems";
 import { bytesText, gbText, machineTone, machineWords, settable } from "./words";
 import { JobPanel } from "./ToolsView";
-import { useLive } from "@/lib/hooks/use-live";
+import { useLiveOf, useLiveWatch } from "@/lib/hooks/use-live";
 import { LiveLine } from "./LiveMeters";
 import { CreditLine } from "./CloudMoney";
 
@@ -24,8 +25,8 @@ import { CreditLine } from "./CloudMoney";
  */
 export function OverviewView() {
   const { snap, error } = useSetup();
-  // The GPUs right now, for the machine cards' one line.
-  const gpus = useLive((snap?.machines ?? []).filter((m) => m.online && !m.metered).map((m) => m.id));
+  // The GPUs right now, for the machine cards' one line: each card reads its own, so the page doesn't redraw every 3 s.
+  useLiveWatch((snap?.machines ?? []).filter((m) => m.online && !m.metered).map((m) => m.id));
   if (!snap) return error ? <ProblemCard title="Crackio couldn't look at your machines" why={error} /> : <Loading rows={6} />;
   const problems = findProblems(snap);
   const own = snap.machines.filter((m) => !m.metered);
@@ -54,7 +55,7 @@ export function OverviewView() {
         <Heading title="Your machines" aside={<Link href="/settings/machines?add=1" className="text-[13px] font-medium text-haze hover:text-paper">Add a computer</Link>} />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {snap.machines.map((m) => (
-            <MachineCard key={m.id} m={m} live={gpus[m.id]} />
+            <MachineCard key={m.id} m={m} />
           ))}
         </div>
       </section>
@@ -93,7 +94,8 @@ const offlineHint = (m: SetupMachine) =>
           : "No ComfyUI yet."
         : "Not answering right now.";
 
-function MachineCard({ m, live }: { m: SetupMachine; live?: LiveGpu }) {
+function MachineCard({ m }: { m: SetupMachine }) {
+  const live = useLiveOf(m.id);
   const tone = machineTone(m);
   const ready = Object.values(m.tools).filter((t) => t.state === "ready").length;
   return (
@@ -155,6 +157,10 @@ export function FixButton({ fix }: { fix: Fix }) {
     setError(null);
     if (fix.kind === "run-on-auto") await setRunOn("auto");
     if (fix.kind === "setup") setError((await setUp(fix.machine, fix.kits as KitId[])).error);
+    if (fix.kind === "reconnect") {
+      const res = await fetch("/api/local/cloud", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "connect-box", provider: fix.provider, id: fix.instance }) }).catch(() => null);
+      if (!res?.ok) setError(((await res?.json().catch(() => null)) as { error?: string } | null)?.error ?? "That didn't work.");
+    }
     if (fix.kind === "start-comfy") {
       const res = await fetch("/api/local/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start" }) }).catch(() => null);
       if (!res?.ok) setError("ComfyUI didn't start.");
@@ -183,8 +189,7 @@ function KitLine({ kitId, snap }: { kitId: KitId; snap: SetupSnapshot }) {
   return (
     <li className="flex min-h-[64px] items-center gap-3.5 border-b border-line py-2.5">
       <span className="relative shrink-0">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={kit.media} alt="" loading="lazy" decoding="async" className={cn("squircle h-11 w-16 rounded-[10px] object-cover", on ? "" : "opacity-45 grayscale-[0.9]")} />
+        <Image src={kit.media} alt="" width={64} height={44} className={cn("squircle h-11 w-16 rounded-[10px] object-cover", on ? "" : "opacity-45 grayscale-[0.9]")} />
         <span className="absolute -bottom-1.5 -right-1.5">
           <KitMark kit={kit} lit={Boolean(on)} size={22} />
         </span>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
+import { radioArrows, radioTab } from "@/lib/roving";
 import type { UsageDay, UsageModel, UsageSummary } from "@/lib/usage/types";
 import { Heading, Loading, ProblemCard, Tape, Verdict } from "./parts";
 import { SavingsCard } from "./SavingsCard";
@@ -123,8 +124,8 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
 
 function Pills({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
-    <div role="radiogroup" aria-label="Range" className="squircle inline-flex rounded-[12px] bg-white/[0.05] p-0.5">
-      {options.map((o) => {
+    <div role="radiogroup" aria-label="Range" onKeyDown={radioArrows} className="squircle inline-flex rounded-[12px] bg-white/[0.05] p-0.5">
+      {options.map((o, i) => {
         const on = o.value === value;
         return (
           <button
@@ -132,6 +133,7 @@ function Pills({ value, onChange, options }: { value: string; onChange: (v: stri
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={radioTab(on, i, options.some((x) => x.value === value))}
             onClick={() => onChange(o.value)}
             className={cn("press squircle relative rounded-[10px] px-3.5 py-1.5 text-[12.5px] font-semibold", on ? "bg-white/[0.12] text-paper" : "text-fog hover:text-paper")}
           >
@@ -172,7 +174,26 @@ function DayChart({ days }: { days: UsageDay[] }) {
               <span className="absolute -left-9 w-7 -translate-y-1/2 text-right text-[11px] leading-none tabular text-haze">{v}</span>
             </div>
           ))}
-          <div className={cn("absolute inset-0 flex items-end", gap)} onMouseLeave={() => setHover(null)}>
+          {/* One stop for the keyboard: ← and → walk the days, the tooltip follows (and is read out). */}
+          <div
+            className={cn("field-focus absolute inset-0 flex items-end rounded-[6px] outline-none", gap)}
+            onMouseLeave={() => setHover(null)}
+            tabIndex={0}
+            role="group"
+            aria-label="Takes per day: use the arrow keys to read each day"
+            onFocus={() => setHover((v) => v ?? days.length - 1)}
+            onBlur={() => setHover(null)}
+            onKeyDown={(e) => {
+              if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+              e.preventDefault();
+              setHover((v) => {
+                const at = v ?? days.length - 1;
+                if (e.key === "Home") return 0;
+                if (e.key === "End") return days.length - 1;
+                return Math.max(0, Math.min(days.length - 1, at + (e.key === "ArrowRight" ? 1 : -1)));
+              });
+            }}
+          >
             {days.map((d, i) => {
               const total = totals[i];
               const parts = shown.map((x) => ({ x, v: d[x.key as SeriesKey] })).filter((p) => p.v > 0);
@@ -193,6 +214,7 @@ function DayChart({ days }: { days: UsageDay[] }) {
           </div>
           {h ? (
             <div
+              aria-live="polite"
               className="squircle pointer-events-none absolute top-1 z-10 min-w-[150px] rounded-[12px] bg-apple-2 px-3 py-2 text-[12.5px] shadow-[0_8px_24px_rgb(0_0_0/0.4),inset_0_0_0_1px_var(--color-line-strong)]"
               style={{ left: `clamp(0px, calc(${((hover! + 0.5) / days.length) * 100}% - 75px), calc(100% - 160px))` }}
             >
@@ -284,7 +306,8 @@ function ToolTable({ tools }: { tools: UsageSummary["tools"] }) {
   return (
     <ul className="grid gap-x-10 gap-y-2 sm:grid-cols-2">
       {tools.map((t) => (
-        <li key={t.tool} className="grid grid-cols-[120px_minmax(0,1fr)_auto] items-center gap-3 text-[13px]">
+        // A fixed count column: every bar's track ends at the same place, so the bars compare at a glance.
+        <li key={t.tool} className="grid grid-cols-[120px_minmax(0,1fr)_104px] items-center gap-3 text-[13px]">
           <span className="truncate text-fog">{t.label}</span>
           <span className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
             <span className="block h-full rounded-full bg-[#3987e5]" style={{ width: `${(t.done / max) * 100}%` }} />

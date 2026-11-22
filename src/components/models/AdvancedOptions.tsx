@@ -24,6 +24,8 @@ export function useTuning(tuning: Tuning | null | undefined) {
   const [steps, setSteps] = useState("");
   const [cfg, setCfg] = useState("");
   const [seed, setSeed] = useState("");
+  // Never enlarge: a picture stays at the largest size the model draws by itself.
+  const [nativeOnly, setNativeOnly] = useState(false);
   const t = tuning ?? null;
   const stepsValue = t?.steps ? numberIn(steps, t.steps.min, t.steps.max) : undefined;
   const cfgValue = t?.cfg ? numberIn(cfg, t.cfg.min, t.cfg.max) : undefined;
@@ -34,6 +36,7 @@ export function useTuning(tuning: Tuning | null | undefined) {
         ...(stepsValue !== undefined ? { steps: Math.round(stepsValue) } : {}),
         ...(cfgValue !== undefined ? { cfg: Math.round(cfgValue * 10) / 10 } : {}),
         ...(seedValue !== undefined ? { seed: Math.floor(seedValue) } : {}),
+        ...(nativeOnly ? { nativeOnly: true } : {}),
       }
     : {};
   return {
@@ -46,12 +49,15 @@ export function useTuning(tuning: Tuning | null | undefined) {
     setCfg,
     seed,
     setSeed,
+    nativeOnly,
+    setNativeOnly,
     options,
     reset() {
       setNegative("");
       setSteps("");
       setCfg("");
       setSeed("");
+      setNativeOnly(false);
     },
   };
 }
@@ -61,7 +67,7 @@ export type TuningState = ReturnType<typeof useTuning>;
 /** "Steps 12 · Guidance 3.5 · Seed 42 · Negative prompt", or the model's own settings. */
 function summary(s: TuningState) {
   const o = s.options;
-  const parts = [o.steps !== undefined && `Steps ${o.steps}`, o.cfg !== undefined && `Guidance ${o.cfg}`, o.seed !== undefined && `Seed ${o.seed}`, o.negative && "Negative prompt"].filter(Boolean);
+  const parts = [o.steps !== undefined && `Steps ${o.steps}`, o.cfg !== undefined && `Guidance ${o.cfg}`, o.seed !== undefined && `Seed ${o.seed}`, o.negative && "Negative prompt", o.nativeOnly && "Never enlarge"].filter(Boolean);
   return parts.length ? parts.join(" · ") : "The model's own settings";
 }
 
@@ -147,6 +153,15 @@ export function AdvancedOptions({ s, job, className }: { s: TuningState; /** The
             </div>
           ) : null}
           {t && !t.steps ? <p className="text-[12px] leading-relaxed text-haze">This model&rsquo;s steps are a fixed schedule it was trained for, so they aren&rsquo;t offered.</p> : null}
+          {t && job?.resolution && (job.kind ?? "image") === "image" ? (
+            <label className="flex cursor-pointer items-start gap-3 rounded-[12px] bg-white/[0.03] px-3 py-2.5">
+              <input type="checkbox" checked={s.nativeOnly} onChange={(e) => s.setNativeOnly(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-[var(--color-daylight)]" />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-semibold text-paper">Never enlarge</span>
+                <span className="mt-0.5 block text-[12px] leading-relaxed text-haze">A size bigger than this model draws by itself stays at the largest it does draw, instead of being enlarged to fit.</span>
+              </span>
+            </label>
+          ) : null}
           {Object.keys(s.options).length ? (
             <button type="button" onClick={s.reset} className="press inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-haze hover:text-paper">
               <RotateCcw size={12} /> Back to the model&rsquo;s own settings

@@ -65,7 +65,25 @@ function archOfCompute(c: number): { arch: Arch; tensor: boolean } {
   return { arch: "unknown", tensor: false };
 }
 
+/**
+ * Names seen before, by "name|compute": the estimator asks about the same few cards thousands of times per look (every
+ * benchmark against every machine), each a dozen regexes. Capped, so odd names can't grow it forever.
+ */
+const CLASSES = new Map<string, GpuClass>();
+const KEYS = new Map<string, string>();
+const remember = <T>(map: Map<string, T>, key: string, value: T) => {
+  if (map.size >= 500) map.clear();
+  map.set(key, value);
+  return value;
+};
+
+/** The family a GPU belongs to (vendor, series, architecture), from its name and, for NVIDIA, its compute capability. */
 export function gpuClass(name: string, compute?: number | null): GpuClass {
+  const key = `${name}|${compute ?? ""}`;
+  return CLASSES.get(key) ?? remember(CLASSES, key, classify(name, compute));
+}
+
+function classify(name: string, compute?: number | null): GpuClass {
   const n = name.replace(/^(NVIDIA|AMD|Intel)\s+/i, "").replace(/^(GeForce|Radeon)\s+/i, "");
   if (/apple|\bm[1-9]\b/i.test(name)) {
     const m = /\bM(\d)/i.exec(name);
@@ -105,10 +123,15 @@ export function gpuClass(name: string, compute?: number | null): GpuClass {
 
 /** The key two GPUs share when they're the same card: "rtx 4070 ti", "gtx 1080 ti", "apple m2 pro". */
 export const gpuKeyOf = (name: string) =>
-  name
-    .replace(/^(NVIDIA|AMD|Intel)\s+/i, "")
-    .replace(/^(GeForce|Radeon)\s+/i, "")
-    .replace(/\s+\d+\s*GB$/i, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+  KEYS.get(name) ??
+  remember(
+    KEYS,
+    name,
+    name
+      .replace(/^(NVIDIA|AMD|Intel)\s+/i, "")
+      .replace(/^(GeForce|Radeon)\s+/i, "")
+      .replace(/\s+\d+\s*GB$/i, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase(),
+  );

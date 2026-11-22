@@ -1,6 +1,7 @@
 "use client";
 
-import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, memo, Suspense, useEffect, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Grid, Line, OrbitControls, useTexture } from "@react-three/drei";
 import {
@@ -30,22 +31,29 @@ import {
   Vector3,
   Vector4,
 } from "three";
-import { mainElement, useDirector } from "@/lib/director/store";
+import { mainElement, useDirector, usePlayhead } from "@/lib/director/store";
 import { angleDelta, cameraHeight, cameraPosition, focusPoint, orbitFrom, pedestalTo, shotCamera, verticalFov } from "@/lib/director/camera";
 import { walking } from "../walk";
 import { ELEMENT_DEFAULTS, kelvinToRgb } from "@/lib/director/vocab";
-import { fitPlaceView, photoCamera, photoFov, placeSurface, type DepthMap } from "@/lib/director/reconstruct";
+import { fitPlaceView, photoCamera, photoFov, type DepthMap } from "@/lib/director/reconstruct";
 import { reliefSurface } from "@/lib/director/relief";
 import { blockingLook, shotLook } from "@/lib/director/look";
 import { standInColor } from "@/lib/director/standin";
-import { useDepth } from "@/lib/director/vision";
-import type { CameraRig, LightRig, PlacePhoto, PlaceView, PlaceWorld, Scene, SceneElement } from "@/lib/director/types";
-import { loadedViews, makeCapture, makePlateCapture, NO_DEPTH, PLACE_SET, registerCapture, registerPlateCapture, showView, SUBJECT, UNKNOWN_GRAY, VIEW_MODEL, VIEW_NORMAL } from "./capture";
+import { useDepth, useGeometry } from "@/lib/director/vision";
+import { flatPhotos, mapSpread, meshFlat, meshMeters, meshSpread, mogeMeters, mogeView, photoMeters } from "@/lib/director/moge-scale";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { buildSet, disposeSet } from "@/components/tools/angles/place";
+import type { CameraRig, LightRig, PlacePhoto, PlaceVideo, PlaceView, PlaceWorld, Scene, SceneElement } from "@/lib/director/types";
+import { useVideoTexture } from "./video-texture";
+import { loadedViews, makeCapture, makeFrameGrab, showStandIns, STAGE_FLOOR, makePlateCapture, NO_DEPTH, PLACE_SET, registerCapture, registerFrameGrab, registerPlateCapture, showView, SUBJECT, UNKNOWN_GRAY, VIEW_MODEL, VIEW_NORMAL } from "./capture";
 import { PhotoBody, StandIn } from "./StandIn";
 import { WalkIn } from "./WalkIn";
 import { zoomed } from "@/lib/director/room";
 import { useStageView } from "./view";
 import { HELPER_LAYER, ShotRenderer, STAGE_BACKGROUND } from "./post";
+import { eyes, Nav } from "./Nav";
+import { CameraPath } from "./CameraPath";
+import { useFeel } from "@/lib/director/feel";
 
 const SPIKE = "#ff5b2e";
 const floorPlane = new Plane(new Vector3(0, 1, 0), 0);
@@ -57,6 +65,7 @@ export default function Stage3D() {
   // The camera the viewer sees glides toward the scene's camera; captures use the exact one.
   const pose = useRef<Pose | null>(null);
   const scout = useStageView((s) => s.scout);
+  const v2 = useStageView((s) => s.v2);
   return (
     <Canvas
       flat
@@ -69,7 +78,7 @@ export default function Stage3D() {
       className="touch-none"
     >
       <ShotCamera pose={pose} />
-      {scout ? <ScoutCamera /> : null}
+      {v2 ? <Nav /> : scout ? <ScoutCamera /> : null}
       <Pipeline pose={pose} />
       <World />
       <ScriptHandle />
@@ -87,9 +96,11 @@ function ScriptHandle() {
   return null;
 }
 
-function goalPose(scene: Scene): Pose {
+/** Where the shot camera is aimed and how, as plain numbers: unchanged by changes elsewhere in the set. */
+function goalNumbers(scene: Scene) {
+  const t = focusPoint(scene);
   const { azimuth, elevation, distance, focal, roll } = scene.camera;
-  return { target: focusPoint(scene), azimuth, elevation, distance, focal, roll };
+  return [t.x, t.y, t.z, azimuth, elevation, distance, focal, roll];
 }
 
 /** Moves the canvas camera smoothly to the scene's shot camera: presets glide, drags feel weighted. */
@@ -97,15 +108,20 @@ function ShotCamera({ pose }: { pose: React.RefObject<Pose | null> }) {
   const get = useThree((s) => s.get);
   const size = useThree((s) => s.size);
   const invalidate = useThree((s) => s.invalidate);
-  const scene = useDirector((s) => s.scene);
-  const goal = useMemo(() => goalPose(scene), [scene]);
+  // The same pose keeps the same goal: every change of the set (a key typed in the notes) made a new one and a frame.
+  const [tx, ty, tz, azimuth, elevation, distance, focal, roll] = useDirector(useShallow((s) => goalNumbers(s.scene)));
+  // Director v2: the canvas is bigger than the shot's frame (the world shows dimmed around it), by `fit.scale`.
+  const fit = useStageView((s) => (s.v2 ? s.fit : null));
+  useEffect(() => invalidate(), [fit, invalidate]);
+  const goal = useMemo<Pose>(() => ({ target: new Vector3(tx, ty, tz), azimuth, elevation, distance, focal, roll }), [tx, ty, tz, azimuth, elevation, distance, focal, roll]);
 
   useEffect(() => invalidate(), [goal, size, invalidate]);
 
   useFrame((_, delta) => {
     const cur = (pose.current ??= { ...goal, target: goal.target.clone() });
     // Walking moves smoothly on its own: followed exactly (eased again, a turn swung the view about).
-    const k = walking.active ? 1 : 1 - Math.exp(-Math.min(delta, 1 / 30) * 15);
+    // Playing the timeline (or recording its preview) shows each frame as it is: a Cut must cut, not glide.
+    const k = walking.active || usePlayhead.getState().playing ? 1 : 1 - Math.exp(-Math.min(delta, 1 / 30) * 15);
     cur.target.lerp(goal.target, k);
     cur.azimuth += angleDelta(cur.azimuth, goal.azimuth) * k;
     cur.elevation += (goal.elevation - cur.elevation) * k;
@@ -127,7 +143,7 @@ function ShotCamera({ pose }: { pose: React.RefObject<Pose | null> }) {
     // three.js cameras are mutable objects owned by the canvas; read it fresh and update in place.
     const camera = get().camera as PerspectiveCamera;
     const aspect = size.width / Math.max(1, size.height);
-    camera.fov = verticalFov(cur.focal, aspect);
+    camera.fov = fit ? MathUtils.radToDeg(2 * Math.atan(Math.tan(rad(verticalFov(cur.focal, fit.aspect) / 2)) * fit.scale)) : verticalFov(cur.focal, aspect);
     camera.aspect = aspect;
     camera.near = 0.05;
     camera.far = 1000;
@@ -145,18 +161,24 @@ function ShotCamera({ pose }: { pose: React.RefObject<Pose | null> }) {
 function Pipeline({ pose }: { pose: React.RefObject<Pose | null> }) {
   const gl = useThree((s) => s.gl);
   const threeScene = useThree((s) => s.scene);
-  const scene = useDirector((s) => s.scene);
+  // What the look is made of (lib/director/look `shotLook`): the frame, the light, the style and the lens.
+  const lookOf = useDirector(
+    useShallow((s) => ({ aspect: s.scene.aspect, light: s.scene.light, style: s.scene.style, focal: s.scene.camera.focal, aperture: s.scene.camera.aperture, distance: s.scene.camera.distance })),
+  );
   const renderer = useMemo(() => new ShotRenderer(), []);
-  useEffect(() => () => renderer.dispose(), [renderer]);
+  useInsertionEffect(() => () => renderer.dispose(), [renderer]);
   const model = useStageView((s) => s.model);
   const scout = useStageView((s) => s.scout);
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => invalidate(), [model, scout, invalidate]);
   // Scouting is plain and sharp: the lens's blur and grade belong to the shot.
   const look = useMemo(() => {
-    const l = shotLook(scene, scene.camera.distance);
+    const s = useDirector.getState().scene;
+    const l = shotLook({ ...s, aspect: lookOf.aspect, light: lookOf.light, style: lookOf.style, camera: { ...s.camera, focal: lookOf.focal, aperture: lookOf.aperture } }, lookOf.distance);
     return model || scout ? blockingLook(l) : l;
-  }, [scene, model, scout]);
+  }, [lookOf, model, scout]);
+  // The look is read by each frame: a new one is drawn.
+  useEffect(() => invalidate(), [look, invalidate]);
 
   // The renderer, scene and camera are mutable objects owned by the canvas: use the frame's own handles.
   useFrame((state) => {
@@ -164,8 +186,9 @@ function Pipeline({ pose }: { pose: React.RefObject<Pose | null> }) {
     const camera = state.camera as PerspectiveCamera;
     const dpr = r.getPixelRatio();
     renderer.setSize(Math.max(1, Math.round(size.width * dpr)), Math.max(1, Math.round(size.height * dpr)));
-    // The model's view: the blocking frame the image model gets, live.
-    const restore = model ? showView(world, "model") : null;
+    // The model's view: the blocking frame the image model gets, live. Director v2's Set tab: people as stand-ins.
+    const stage = useStageView.getState();
+    const restore = model ? showView(world, "model") : stage.v2 && stage.scout ? showStandIns(world) : null;
     renderer.render(r, world, camera, { ...look, focus: pose.current?.distance ?? look.focus }, null);
     // Before the helpers: a color background makes three.js clear the canvas on every render, even without autoClear.
     restore?.();
@@ -176,6 +199,27 @@ function Pipeline({ pose }: { pose: React.RefObject<Pose | null> }) {
     camera.layers.set(HELPER_LAYER);
     r.render(world, camera);
     camera.layers.set(0);
+    // Director v2, Set tab: the Camera's shot, live, in its window (the same canvas: no second WebGL context).
+    const v = useStageView.getState();
+    if (v.v2 && v.scout && v.preview && v.pip.w > 8 && v.pip.h > 8) {
+      const pc = shotCamera(useDirector.getState().scene);
+      pc.aspect = v.pip.w / v.pip.h;
+      pc.far = 1000;
+      pc.updateProjectionMatrix();
+      pc.layers.set(0);
+      const y = size.height - v.pip.y - v.pip.h;
+      const clear = r.getClearColor(pipClear);
+      const alpha = r.getClearAlpha();
+      r.setScissorTest(true);
+      r.setScissor(v.pip.x, y, v.pip.w, v.pip.h);
+      r.setViewport(v.pip.x, y, v.pip.w, v.pip.h);
+      r.setClearColor(STAGE_BACKGROUND, 1);
+      r.clear(true, true, false);
+      r.render(world, pc);
+      r.setScissorTest(false);
+      r.setViewport(0, 0, size.width, size.height);
+      r.setClearColor(clear, alpha);
+    }
     r.autoClear = autoClear;
     r.shadowMap.autoUpdate = shadows;
   }, 1);
@@ -192,15 +236,19 @@ function Pipeline({ pose }: { pose: React.RefObject<Pose | null> }) {
       const s = useDirector.getState().scene;
       return shotLook(s, s.camera.distance);
     };
-    registerCapture(makeCapture(gl, threeScene, exact, lookNow));
-    registerPlateCapture(makePlateCapture(gl, threeScene, lookNow));
+    const dropCapture = registerCapture(makeCapture(gl, threeScene, exact, lookNow));
+    const dropPlate = registerPlateCapture(makePlateCapture(gl, threeScene, lookNow));
+    const dropGrab = registerFrameGrab(makeFrameGrab(gl, threeScene, exact, lookNow));
     return () => {
-      registerCapture(null);
-      registerPlateCapture(null);
+      dropCapture();
+      dropPlate();
+      dropGrab();
     };
   }, [gl, threeScene]);
   return null;
 }
+
+const pipClear = new Color();
 
 /** Puts everything inside it on the helper layer: seen while you work, never in the shot. */
 function Helper({ children }: { children: ReactNode }) {
@@ -223,13 +271,18 @@ function lightFor(light: LightRig, target: Vector3): LightUniforms & { position:
 }
 
 function World() {
-  const scene = useDirector((s) => s.scene);
+  const elements = useDirector((s) => s.scene.elements);
+  const lightRig = useDirector((s) => s.scene.light);
+  const image = useDirector((s) => s.scene.place.image);
+  const placeScale = useDirector((s) => s.scene.place.scale ?? 1);
+  const [tx, ty, tz] = useDirector(useShallow((s) => focusPoint(s.scene).toArray()));
   const selectedId = useDirector((s) => s.selectedId);
   const scout = useStageView((s) => s.scout);
-  const target = focusPoint(scene);
-  const light = lightFor(scene.light, target);
-  const image = scene.place.image;
-  const shadowOpacity = 0.55 - scene.light.softness * 0.35;
+  const v2 = useStageView((s) => s.v2);
+  // One light object until the light or what it aims at moves: a new one every render re-ran every subject's light.
+  const target = useMemo(() => new Vector3(tx, ty, tz), [tx, ty, tz]);
+  const light = useMemo(() => lightFor(lightRig, target), [lightRig, target]);
+  const shadowOpacity = 0.55 - lightRig.softness * 0.35;
 
   return (
     <>
@@ -244,26 +297,31 @@ function World() {
         shadow-camera-bottom={-9}
         shadow-camera-near={0.5}
         shadow-camera-far={50}
-        shadow-radius={2 + scene.light.softness * 10}
+        shadow-radius={2 + lightRig.softness * 10}
         shadow-bias={-0.0004}
         shadow-normalBias={0.02}
       >
         <object3D attach="target" position={[target.x, 0, target.z]} />
       </directionalLight>
 
-      {scout ? <CameraOnSet /> : <OrbitCatcher />}
+      {scout ? <CameraOnSet /> : v2 ? null : <OrbitCatcher />}
+      {scout && v2 ? (
+        <Helper>
+          <CameraPath />
+        </Helper>
+      ) : null}
 
       {image ? (
         <Safe key={image.url} fallback={<EmptyStage shadowOpacity={shadowOpacity} />}>
           <Suspense fallback={null}>
-            <Location image={image} scale={scene.place.scale ?? 1} light={light} shadowOpacity={shadowOpacity} />
+            <Location image={image} scale={placeScale} light={light} shadowOpacity={shadowOpacity} />
           </Suspense>
         </Safe>
       ) : (
         <EmptyStage shadowOpacity={shadowOpacity} />
       )}
 
-      {scene.elements.map((el, i) => (
+      {elements.map((el, i) => (
         <Subject key={el.id} el={el} color={standInColor(i).hex} selected={el.id === selectedId} light={light} />
       ))}
     </>
@@ -273,7 +331,7 @@ function World() {
 /**
  * Scouting the set: a camera of its own, like a 3D editor's viewport. Drag empty space to look around, right-drag to
  * slide, scroll to come closer, without touching the shot. Framing by dragging the shot camera itself was the hard part
- * (the user: "moving the camera around is already hard enough"). It starts behind and above the shot camera, looking at
+ * already. It starts behind and above the shot camera, looking at
  * what it frames, and the shot camera's helpers become clickable.
  */
 function ScoutCamera() {
@@ -344,9 +402,14 @@ function CameraOnSet() {
     return [o, c[0], o, c[1], o, c[2], o, c[3], c[0], c[1], c[1], c[2], c[2], c[3], c[3], c[0], up[0], up[1], up[1], up[2]];
   }, [cam.fov, cam.aspect]);
   const color = hover || held ? "#ffb35c" : SPIKE;
+  const near = useRef<Group>(null);
+  useFrame(() => {
+    if (near.current) near.current.visible = !useStageView.getState().v2 || eyes.pos.distanceTo(cam.position) > 1.1;
+  });
 
   return (
     <Helper>
+      <group ref={near}>
       <group position={cam.position} quaternion={cam.quaternion}>
         <mesh
           onPointerDown={(e) => {
@@ -413,6 +476,7 @@ function CameraOnSet() {
         <ringGeometry args={[0.16, 0.2, 32]} />
         <meshBasicMaterial color={color} transparent opacity={0.8} depthTest={false} toneMapped={false} />
       </mesh>
+      </group>
     </Helper>
   );
 }
@@ -517,9 +581,9 @@ function FloorGrid() {
       }),
     [],
   );
-  useEffect(() => () => material.dispose(), [material]);
+  useInsertionEffect(() => () => material.dispose(), [material]);
   return (
-    <mesh rotation-x={-Math.PI / 2} material={material} visible={false} userData={{ [VIEW_MODEL]: true }}>
+    <mesh rotation-x={-Math.PI / 2} material={material} visible={false} userData={{ [VIEW_MODEL]: true, [STAGE_FLOOR]: true }}>
       <planeGeometry args={[400, 400]} />
     </mesh>
   );
@@ -529,7 +593,7 @@ function EmptyStage({ shadowOpacity }: { shadowOpacity: number }) {
   return (
     <>
       <fog attach="fog" args={[STAGE_BACKGROUND.getStyle(), 14, 46]} />
-      <mesh rotation-x={-Math.PI / 2} userData={{ [VIEW_NORMAL]: true }}>
+      <mesh rotation-x={-Math.PI / 2} userData={{ [VIEW_NORMAL]: true, [STAGE_FLOOR]: true }}>
         <planeGeometry args={[90, 90]} />
         <meshBasicMaterial color="#1f2126" />
       </mesh>
@@ -558,67 +622,6 @@ function EmptyStage({ shadowOpacity }: { shadowOpacity: number }) {
 }
 
 // ---------------------------------------------------------------- Location
-
-const placeVertex = /* glsl */ `
-  attribute vec3 flatPos;
-  attribute float outside;
-  attribute float stretch;
-  uniform float reveal;
-  varying vec2 vUv;
-  varying float vOutside;
-  varying float vStretch;
-  varying vec3 vNormal;
-  void main() {
-    vUv = uv;
-    vOutside = outside;
-    vStretch = stretch;
-    vNormal = normalize(mat3(modelMatrix) * normal);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(mix(flatPos, position, reveal), 1.0);
-  }
-`;
-const placeFragment = /* glsl */ `
-  uniform sampler2D map;
-  uniform vec3 lightDir;
-  uniform vec3 lightColor;
-  uniform float relight;
-  uniform vec3 background;
-  uniform float unknown;
-  uniform vec3 unknownColor;
-  uniform vec2 texSize;
-  varying vec2 vUv;
-  varying float vOutside;
-  varying float vStretch;
-  varying vec3 vNormal;
-  void main() {
-    // The model's view: what the photo never showed is left out, so the flat gray behind it shows, to be filled, and a
-    // smear never hides a subject standing behind it. That's the stretched curtains between near and far, past its
-    // edges, and wherever one photo pixel is smeared across many screen pixels in one direction (a wall seen edge-on from
-    // the new camera): the singular values of the photo-pixels-per-screen-pixel Jacobian. unknown = 2 is the ID pass:
-    // what the photo did show is black there.
-    if (unknown > 0.5) {
-      vec2 dx = dFdx(vUv) * texSize;
-      vec2 dy = dFdy(vUv) * texSize;
-      float a = dot(dx, dx) + dot(dy, dy);
-      float det = dx.x * dy.y - dx.y * dy.x;
-      float disc = sqrt(max(a * a - 4.0 * det * det, 0.0));
-      float smax = sqrt(max(0.5 * (a + disc), 0.0));
-      float smin = sqrt(max(0.5 * (a - disc), 0.0));
-      if (vStretch > 0.3 || vOutside > 0.3 || smax > 3.0 * max(smin, 1e-5) || smin < 0.12) discard;
-      if (unknown > 1.5) {
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-        return;
-      }
-    }
-    // Stretched curtains between near and far parts become a soft, slightly darker smear.
-    vec3 c = texture2D(map, vUv, vStretch * 4.5).rgb * (1.0 - 0.25 * vStretch);
-    // The photo keeps its own light; the key light only nudges surfaces that face it.
-    float lambert = max(dot(normalize(vNormal), lightDir), 0.0);
-    c *= mix(vec3(1.0), (0.78 + 0.5 * lambert) * lightColor, relight);
-    // Past the photo's edges, the stretched border fades into the dark.
-    c = mix(c, background, smoothstep(0.0, 1.0, vOutside) * 0.9);
-    gl_FragColor = vec4(c, 1.0);
-  }
-`;
 
 /** Photos are sRGB; set once when a texture first loads (it's cached and shared by URL). */
 function asPhoto(texture: Texture | Texture[]) {
@@ -657,15 +660,215 @@ function Location({
 
   const more = useDirector((s) => s.scene.place.more);
   const world = useDirector((s) => s.scene.place.world);
+  // Director video mode: the set plays the video (its first frame is `image`).
+  const video = useDirector((s) => s.scene.place.video);
+  const fps = useDirector((s) => s.scene.timeline?.fps ?? 24);
+  // Director v2's "3D" place: the photo itself on its depth, so the camera moves round what's in it (PhotoSet).
+  const v2 = useStageView((s) => s.v2);
+  const look = useFeel((s) => s.place);
+  const photoSet = v2 && look === "3d" && Boolean(depth) && Boolean(image.view);
   return (
     <group scale={scale}>
       {image.view ? (
-        <Surround main={{ ...image, view: image.view }} more={world ? [] : (more ?? [])} world={world} shadowOpacity={shadowOpacity} />
+        <>
+          <Surround main={{ ...image, view: image.view }} more={world ? [] : (more ?? [])} world={world} shadowOpacity={shadowOpacity} photoSet={photoSet} />
+          {photoSet && depth ? <PhotoSet url={world?.photo?.url ?? image.url} photo={image.url} depth={depth} view={image.view} aspect={aspect} video={video} fps={fps} /> : null}
+        </>
       ) : (
         <PlaceCard texture={texture} view={provisionalView(aspect)} aspect={aspect} />
       )}
     </group>
   );
+}
+
+const photoSetVertex = /* glsl */ `
+  attribute float outside;
+  attribute float stretch;
+  attribute float back;
+  varying vec2 vUv;
+  varying float vOutside;
+  varying float vStretch;
+  varying float vBack;
+  varying vec3 vWorld;
+  void main() {
+    vUv = uv;
+    vOutside = outside;
+    vStretch = stretch;
+    vBack = back;
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vWorld = w.xyz;
+    gl_Position = projectionMatrix * viewMatrix * w;
+  }
+`;
+const photoSetFragment = /* glsl */ `
+  uniform sampler2D map;
+  uniform sampler2D mask;
+  uniform float cut;
+  uniform float unknown;
+  varying vec2 vUv;
+  varying float vOutside;
+  varying float vStretch;
+  varying float vBack;
+  varying vec3 vWorld;
+  void main() {
+    // The subject is its own solid: the place has a hole where it stood, the solid keeps only it.
+    if (cut > 0.5) {
+      float subject = texture2D(mask, vec2(vUv.x, 1.0 - vUv.y)).r;
+      if (cut < 1.5 ? subject > 0.5 : subject <= 0.5) discard;
+    }
+    // Past the photo's edges the world (Surround) is the place.
+    if (vOutside > 0.01) discard;
+    if (unknown > 1.5) {
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      return;
+    }
+    // Sharp everywhere: the steps in depth are already holes (Angles' openCurtains), and judged by the depth step alone
+    // the ground near the camera and every subject's outline went gray even seen from where the photo was taken.
+    vec3 c = texture2D(map, vUv).rgb;
+    // A back the photo never saw: only a wash of its colors, so no face ends up on the back of a head.
+    if (vBack > 0.5 || !gl_FrontFacing) c = texture2D(map, vUv, 7.0).rgb * 0.85;
+    gl_FragColor = vec4(c, 1.0);
+  }
+`;
+
+/**
+ * The photo's MoGe-3 mesh (server/photo-mesh: the challenge winner's own measuring, on the GPU machine), loaded once per
+ * photo and field of view: positions in MoGe's meters in the photo camera's frame, UVs as three.js reads a photo, and
+ * the set's empty `outside`/`stretch`/`back` lanes. Null when the machine can't make it (no Panorama Stickers there).
+ */
+const photoMeshes = new Map<string, Promise<{ geometry: BufferGeometry; uvTop: Float32Array } | null>>();
+
+/** Videos whose camera already turns round their middle (Director video mode, PhotoSet). */
+const videoFocused = new Set<string>();
+
+/**
+ * How far the middle of a MoGe mesh is from its camera (meters): the median distance of the points in the picture's
+ * middle tenth. Null when too few points are there (sky, a hole).
+ */
+function middleDepth(geometry: BufferGeometry) {
+  const pos = geometry.getAttribute("position");
+  const uv = geometry.getAttribute("uv");
+  if (!pos || !uv) return null;
+  const near: number[] = [];
+  for (let i = 0; i < uv.count; i++) {
+    if (Math.abs(uv.getX(i) - 0.5) < 0.05 && Math.abs(uv.getY(i) - 0.5) < 0.05) near.push(Math.hypot(pos.getX(i), pos.getY(i), pos.getZ(i)));
+  }
+  if (near.length < 8) return null;
+  near.sort((a, b) => a - b);
+  return near[Math.floor(near.length / 2)];
+}
+function loadPhotoMesh(photo: string, hfov: number) {
+  const key = `${photo}|${hfov.toFixed(1)}`;
+  let p = photoMeshes.get(key);
+  if (!p) {
+    p = (async () => {
+      const res = await fetch("/api/director/mesh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: photo, hfov }) });
+      const data = (await res.json().catch(() => ({}))) as { url?: string };
+      if (!res.ok || !data.url) return null;
+      const gltf = await new GLTFLoader().loadAsync(data.url);
+      let found: BufferGeometry | null = null;
+      gltf.scene.traverse((o) => {
+        if (!found && (o as Mesh).isMesh) found = (o as Mesh).geometry as BufferGeometry;
+      });
+      const geometry = found as BufferGeometry | null;
+      const uv = geometry?.getAttribute("uv");
+      if (!geometry || !uv) return null;
+      // glTF's UVs start top-left; three.js photos are read flipped (as the set's own surface's are).
+      const uvTop = Float32Array.from(uv.array as ArrayLike<number>);
+      for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i));
+      uv.needsUpdate = true;
+      const n = geometry.getAttribute("position").count;
+      for (const lane of ["outside", "stretch", "back"]) geometry.setAttribute(lane, new BufferAttribute(new Float32Array(n), 1));
+      return { geometry, uvTop };
+    })().catch(() => null);
+    p.then((m) => m ?? photoMeshes.delete(key), () => photoMeshes.delete(key));
+    photoMeshes.set(key, p);
+  }
+  return p;
+}
+
+/**
+ * Director v2's place in 3D, the challenge winner's "3D World": the photo on its own depth, in its real pixels; the
+ * camera moves round what's in it, and what the photo never saw stays open for a kept shot's model to fill. Seen from
+ * where the photo was taken it is the photo, pixel for pixel. Its shape is the winner's own once the GPU machine has
+ * measured it (MoGe-3 and their mesh step, server/photo-mesh), scaled into the set by MoGe's meters per set unit, the
+ * same scale Shoot turns the Camera by for their render: what you frame is what it shoots. Until then (or on a machine
+ * without their node), the photo on MoGe-2's depth (server/vision), else the set's own depth.
+ */
+function PhotoSet({ url, photo, depth, view, aspect, video, fps = 24 }: { url: string; photo: string; depth: DepthMap; view: PlaceView; aspect: number; video?: PlaceVideo; fps?: number }) {
+  const still = useTexture(url, asPhoto) as Texture;
+  const invalidateNow = useThree((s) => s.invalidate);
+  // Director video mode: the video's frame at the playhead on the first frame's 3D shape (until it loads, the first frame).
+  const moving = useVideoTexture(video, fps, invalidateNow);
+  const texture = moving ?? still;
+  const hfov = (2 * Math.atan(Math.tan((view.fov * Math.PI) / 360) * aspect) * 180) / Math.PI;
+  const [mesh, setMesh] = useState<{ key: string; geometry: BufferGeometry; meters: number; spread: number | null } | null>(null);
+  const meshKey = `${photo}|${hfov.toFixed(1)}`;
+  useEffect(() => {
+    let live = true;
+    void loadPhotoMesh(photo, hfov).then((m) => {
+      if (!live || !m) return;
+      const positions = m.geometry.getAttribute("position").array as ArrayLike<number>;
+      setMesh({ key: meshKey, geometry: m.geometry, meters: meshMeters(positions, m.uvTop, depth, view), spread: meshSpread(positions) });
+    });
+    return () => {
+      live = false;
+    };
+  }, [photo, hfov, meshKey, depth, view]);
+  // MoGe-2's measuring: the 3D photo until the mesh comes (the winner measures with MoGe-3; on the set's own depth the
+  // astronaut stood nearer than MoGe has him, so an orbit framed him a third of the way in and their render in the
+  // middle), and the check that the mesh isn't a flat picture of a place MoGe-2 saw depth in (moge-scale `meshFlat`).
+  const { geometry } = useGeometry(photo);
+  const seen = useMemo(() => (geometry ? mapSpread(geometry.depth, geometry.near, geometry.far) : null), [geometry]);
+  const current = mesh?.key === meshKey ? mesh : null;
+  const flat = Boolean(current && meshFlat(current.spread, seen));
+  const exact = current && !flat ? current : null;
+  useEffect(() => {
+    if (flat) flatPhotos.add(photo);
+    else if (current) flatPhotos.delete(photo);
+    if (exact) photoMeters.set(photo, exact.meters);
+  }, [flat, current, exact, photo]);
+  // Director video mode: the camera turns round what the middle of the video shows, at the depth MoGe-3 measured there
+  // (the set's own middle was its rougher depth: a woman 3.1 m away by MoGe had the pivot 0.8 m in front of her, so every
+  // orbit swung her out of frame, Nov 14). Once per video, before any key.
+  useEffect(() => {
+    if (!video || !exact || videoFocused.has(photo)) return;
+    const d = middleDepth(exact.geometry);
+    if (!d) return;
+    videoFocused.add(photo);
+    useDirector.getState().focusVideoAt(photo, d / exact.meters);
+  }, [video, exact, photo]);
+  const measured = useMemo(() => {
+    if (!geometry || exact) return null;
+    const meters = mogeMeters(depth, view, geometry.depth, geometry.near, geometry.far);
+    photoMeters.set(photo, meters);
+    return { depth: geometry.depth, view: mogeView(view, geometry.near, geometry.far, meters) };
+  }, [geometry, exact, depth, view, photo]);
+  // The photo's surface alone, torn at its depth steps, as the winner's MoGe mesh is: no solid backs of our own.
+  const set = useMemo(() => (exact ? null : buildSet(measured?.depth ?? depth, measured?.view ?? view, aspect, null)), [exact, measured, depth, view, aspect]);
+  useInsertionEffect(() => () => (set ? disposeSet(set) : undefined), [set]);
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: photoSetVertex,
+        fragmentShader: photoSetFragment,
+        side: DoubleSide,
+        uniforms: { map: { value: texture }, mask: { value: null }, cut: { value: 0 }, unknown: { value: 0 } },
+      }),
+    [texture],
+  );
+  useInsertionEffect(() => () => material.dispose(), [material]);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => invalidate(), [material, exact, set, invalidate]);
+  const pose = useMemo(() => photoCamera(view), [view]);
+  if (exact) {
+    return (
+      <group position={pose.position} quaternion={pose.quaternion} scale={1 / exact.meters}>
+        <mesh geometry={exact.geometry} material={material} frustumCulled={false} userData={{ [PLACE_SET]: true }} />
+      </group>
+    );
+  }
+  return set ? <mesh geometry={set.place} material={material} frustumCulled={false} userData={{ [PLACE_SET]: true }} /> : null;
 }
 
 /**
@@ -693,7 +896,7 @@ function useWorldPicture(url: string | undefined) {
       live = false;
     };
   }, [url]);
-  useEffect(() => () => shown?.texture.dispose(), [shown]);
+  useInsertionEffect(() => () => shown?.texture.dispose(), [shown]);
   return url && shown ? shown.texture : null;
 }
 
@@ -723,20 +926,47 @@ const surroundFragment = /* glsl */ `
   uniform float hasWorld;
   uniform float worldLat;
   uniform vec4 eyeLock;
+  uniform float skyOnly;
+  uniform float photoOver;
+  uniform float photoSet;
   varying vec3 vWorld;
   void main() {
     // A world is seen as from wherever the camera stands (a 360 backdrop): laid on the floor around the photo's spot, its
     // pumps and rocks below the horizon came out flat on the ground and its bottom swirled, once the camera stood a few
-    // meters away (the user's shots).
+    // meters away (in test shots).
     // Its floor, though, is laid on the real floor as seen from right above the camera at the photo's height: as a
     // backdrop alone it stays where a 1.6 m eye sees it, and from a low camera a woman's feet hovered over it (FLUX 3).
     // Scouting, the world is the one the shot camera sees (eyeLock): from a camera flying about it slid underfoot.
     vec3 viewer = eyeLock.w > 0.5 ? eyeLock.xyz : cameraPosition;
     vec3 eye = hasWorld > 0.5 ? (ground > 0.5 ? vec3(viewer.x, center.y, viewer.z) : viewer) : center;
     vec3 d = normalize(vWorld - eye);
+    // Director v2's 3D photo (PhotoSet): inside the photo's view the photo's own 3D set is the place, so nothing of the
+    // surround is drawn there: through the set's holes shows the stage's dark (the models' flat gray in their views), for
+    // the model to fill. Drawn, its floor hid the photo's sea wherever the measured sea lay below it (a black band on a
+    // newly dropped photo). The floor is tested from where the photo was taken, the sky (far off) by direction.
+    if (photoSet > 0.5) {
+      vec3 c0 = turns[0] * (ground > 0.5 ? normalize(vWorld - center) : d);
+      if (c0.z < -0.0001) {
+        vec2 p0 = c0.xy / -c0.z / halfTan[0];
+        if (max(abs(p0.x), abs(p0.y)) < 1.0) {
+          // From where the photo was taken (as server/director-real judges it, within 0.35 m) the set's seams, a grid
+          // cell wide where its curtains were opened, show the photo itself: there it is the photo, pixel for pixel.
+          // Moved off, they open (the re-shoot from a new angle fills them). Judged by the camera drawing this picture:
+          // scouting (the Set tab) the Camera can stand there while your eyes don't, and the photo then hung far off
+          // behind the 3D set, a second boy on a second car (a phone test).
+          if (ground > 0.5 || distance(cameraPosition, center) > 0.35) discard;
+          if (unknown > 1.5) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+          }
+          gl_FragColor = vec4(texture2D(maps[0], p0 * 0.5 + 0.5).rgb, 1.0);
+          return;
+        }
+      }
+    }
     // Below the horizon is the ground's: the dome there would show the same ground at infinity, stretched.
     // (A little past it: the floor's far edge doesn't quite reach the horizon, and the gap showed as a line.)
-    if (ground < 0.5 && d.y < -0.01) discard;
+    if (ground < 0.5 && skyOnly < 0.5 && d.y < -0.01) discard;
     // The model's view: ground the photo shows magnified over 3 times (right in front of the camera) is left for the
     // model to draw: stretched, its puddles and reflections came back as streaks (FLUX 3 Klein kept them).
     if (hasWorld < 0.5 && ground > 0.5 && unknown > 0.5 && max(length(dFdx(d)), length(dFdy(d))) < photoRes / 3.0) discard;
@@ -747,13 +977,27 @@ const surroundFragment = /* glsl */ `
       float lat = asin(clamp(d.y, -1.0, 1.0));
       if (abs(lat) < worldLat * 0.5) {
         // Where longitude wraps (behind the photo's forward), its jump made the GPU pick the blurriest mip for one column
-        // of pixels: a line down the world behind you (the user's alley). The same longitude half a turn round is smooth
+        // of pixels: a line down the world behind you (a test photo of an alley). The same longitude half a turn round is smooth
         // there; whichever of the two is smooth is sampled (the texture repeats).
         float u1 = atan(d.x, -d.z) / 6.28318530718 + 0.5;
         float u2 = fract(u1 + 0.5) - 0.5;
         vec2 uv = vec2(fwidth(u1) <= fwidth(u2) ? u1 : u2, 0.5 + lat / worldLat);
         sum = texture2D(world, uv).rgb;
         total = 1.0;
+      }
+      // Director v2: the photo's own pixels wherever it shows. The world holds it at about a quarter of its detail,
+      // toned toward the drawing from halfway out (server/world photoInto), so every shot came out softer and bluer
+      // than the photo (an astronaut test photo). Here it is itself to near its edges, then fades into the world.
+      if (photoOver > 0.5) {
+        vec3 c = turns[0] * d;
+        if (c.z < -0.0001) {
+          vec2 p = c.xy / -c.z / halfTan[0];
+          float edge = max(abs(p.x), abs(p.y));
+          if (edge < 1.0) {
+            sum = mix(sum, texture2D(maps[0], p * 0.5 + 0.5).rgb, 1.0 - smoothstep(0.72, 0.98, edge));
+            total = 1.0;
+          }
+        }
       }
     }
     ${Array.from(
@@ -790,7 +1034,7 @@ const surroundFragment = /* glsl */ `
  * show it (the photo first, then the views around it, blended where they overlap), as seen from where the photo was
  * taken; the ground is that same picture laid on the floor, so moving or raising the camera keeps the ground's
  * perspective. The 3D relief smeared and melted wherever the camera left the photo's spot, and its views met in hard,
- * square seams, which every model copied into the take (the user's Qwen-Image takes: the sky in panels). Here nothing
+ * square seams, which every model copied into the take (Qwen-Image takes in testing: the sky in panels). Here nothing
  * is stretched: each pixel is one of a real picture's, and the parts no picture shows are left out (gray to fill, in
  * the model's view).
  */
@@ -799,17 +1043,25 @@ function Surround({
   more,
   world,
   shadowOpacity,
+  photoSet = false,
 }: {
   main: { url: string; width: number; height: number; view: PlaceView };
   more: PlacePhoto[];
   world?: PlaceWorld;
   shadowOpacity: number;
+  /** The photo's own 3D set (PhotoSet) is the place inside the photo's view: the surround is only around it. */
+  photoSet?: boolean;
 }) {
   const views = more.slice(0, SURROUND_MAX - 1);
   const scout = useStageView((s) => s.scout);
-  const rig = useDirector((s) => s.scene.camera);
-  const shotEye = scout ? cameraPosition(rig, focusPoint(useDirector.getState().scene)) : null;
-  const urls = [main.url, ...views.map((p) => p.url)];
+  const v2 = useStageView((s) => s.v2);
+  const look = useFeel((s) => s.place);
+  // Director v2 only: the classic Director keeps its 3D place.
+  const placeLook = v2 ? look : "3d";
+  const eye = useDirector(useShallow((s) => (scout ? cameraPosition(s.scene.camera, focusPoint(s.scene)).toArray() : null)));
+  const shotEye = useMemo(() => (eye ? new Vector3(eye[0], eye[1], eye[2]) : null), [eye]);
+  // With a world, the photo shown where it looks: Fix this spot's changes in it, when a fix reached it.
+  const urls = [world?.photo?.url ?? main.url, ...views.map((p) => p.url)];
   const textures = useTexture(urls, asPhoto) as Texture[];
   const worldTexture = useWorldPicture(world?.url);
   const invalidate = useThree((s) => s.invalidate);
@@ -840,18 +1092,21 @@ function Surround({
           hasWorld: { value: 0 },
           worldLat: { value: 2.69 },
           eyeLock: { value: new Vector4() },
+          skyOnly: { value: 0 },
+          photoOver: { value: 0 },
+          photoSet: { value: 0 },
         },
       }),
     [],
   );
-  useEffect(() => () => material.dispose(), [material]);
+  useInsertionEffect(() => () => material.dispose(), [material]);
   const ground = useMemo(() => {
     const m = material.clone();
     m.side = DoubleSide;
     m.uniforms.ground.value = 1;
     return m;
   }, [material]);
-  useEffect(() => () => ground.dispose(), [ground]);
+  useInsertionEffect(() => () => ground.dispose(), [ground]);
 
   // Each picture's camera: the photo's own, the views turned around it by their turn (built from the photo's pose).
   const mainAspect = main.width / main.height;
@@ -882,6 +1137,9 @@ function Surround({
     u.world.value = worldTexture ?? textures[0];
     u.hasWorld.value = worldTexture ? 1 : 0;
     (u.eyeLock.value as Vector4).set(shotEye?.x ?? 0, shotEye?.y ?? 0, shotEye?.z ?? 0, shotEye ? 1 : 0);
+    u.skyOnly.value = placeLook === "picture" ? 1 : 0;
+    u.photoOver.value = v2 && worldTexture && !photoSet ? 1 : 0;
+    u.photoSet.value = photoSet ? 1 : 0;
     if (world) {
       // 21:9 of a full panorama's 2:1: its share of 180 degrees of latitude.
       u.worldLat.value = Math.PI * (world.height / (world.width / 2));
@@ -892,7 +1150,7 @@ function Surround({
 
   // The world as a backdrop that goes where the camera goes: its ground until (or unless) it's been measured to walk
   // into; its dome always, behind everything, so a gap in the walk-in shows the place's own picture that way instead
-  // of black (the user's store, swung round its corner). Keyed: when the depth came in, React kept the ground's mesh for
+  // of black (a test photo of a store, swung round its corner). Keyed: when the depth came in, React kept the ground's mesh for
   // the depth-only floor below, and dropping its `material` reset it to a plain white one, which fought the walk-in
   // floor (white blotches after an extend).
   const dome = (
@@ -908,7 +1166,14 @@ function Surround({
   return (
     <>
       {dome}
-      {world?.depth && worldTexture ? (
+      {placeLook === "picture" ? (
+        // The picture alone, all around and underfoot, seen by direction: it never moves or bends. The floor is only for
+        // the shot's depth and the cast's shadows.
+        <mesh key="depth-floor" rotation-x={-Math.PI / 2} userData={{ [PLACE_SET]: true }}>
+          <circleGeometry args={[400, 96]} />
+          <meshBasicMaterial colorWrite={false} depthWrite={false} />
+        </mesh>
+      ) : placeLook === "3d" && !v2 && world?.depth && worldTexture ? (
         <>
           <WalkIn depth={world.depth} world={worldTexture} center={pose.position} span={Math.PI * (world.height / (world.width / 2))} eye={shotEye}>
             {groundDisc}
@@ -930,36 +1195,6 @@ function Surround({
   );
 }
 
-/**
- * Another photo of the place from the same spot: its own 3D set, turned around the main photo's camera by its turn and
- * moved so both cameras stand in the same spot (both are at eye height over the same floor).
- */
-function MorePlace({ photo, main, light, shadowOpacity }: { photo: PlacePhoto; main: PlaceView; light: LightUniforms; shadowOpacity: number }) {
-  const texture = useTexture(photo.url, asPhoto) as Texture;
-  const { depth } = useDepth(photo.url);
-  const setPlacePhotoView = useDirector((s) => s.setPlacePhotoView);
-  const aspect = photo.width / photo.height;
-  useEffect(() => {
-    if (depth && !photo.view) setPlacePhotoView(photo.url, fitPlaceView(depth, aspect));
-  }, [depth, photo.view, photo.url, aspect, setPlacePhotoView]);
-  const view = photo.view ?? provisionalView(aspect);
-  const at = photoCamera(main).position;
-  const own = photoCamera(view).position;
-  return (
-    <group position={[at.x, 0, at.z]}>
-      <group rotation-y={rad(photo.turn)}>
-        <group position={[-own.x, 0, -own.z]}>
-          {depth && photo.view ? (
-            <PlaceSet texture={texture} depth={depth} view={photo.view} aspect={aspect} light={light} shadowOpacity={shadowOpacity} />
-          ) : (
-            <PlaceCard texture={texture} view={view} aspect={aspect} />
-          )}
-        </group>
-      </group>
-    </group>
-  );
-}
-
 /** Before the 3D set is ready: the photo as a backdrop exactly filling the photo camera's view. */
 function PlaceCard({ texture, view, aspect }: { texture: Texture; view: PlaceView; aspect: number }) {
   const { position, quaternion } = photoCamera(view);
@@ -972,106 +1207,6 @@ function PlaceCard({ texture, view, aspect }: { texture: Texture; view: PlaceVie
       <planeGeometry args={[h * aspect, h]} />
       <meshBasicMaterial map={texture} toneMapped={false} fog={false} />
     </mesh>
-  );
-}
-
-function PlaceSet({
-  texture,
-  depth,
-  view,
-  aspect,
-  light,
-  shadowOpacity,
-}: {
-  texture: Texture;
-  depth: DepthMap;
-  view: PlaceView;
-  aspect: number;
-  light: LightUniforms;
-  shadowOpacity: number;
-}) {
-  const invalidate = useThree((s) => s.invalidate);
-  const geometry = useMemo(() => {
-    const surface = placeSurface(depth, view, aspect);
-    const g = new BufferGeometry();
-    g.setAttribute("position", new BufferAttribute(surface.positions, 3));
-    g.setAttribute("uv", new BufferAttribute(surface.uvs, 2));
-    g.setAttribute("outside", new BufferAttribute(surface.outside, 1));
-    g.setAttribute("stretch", new BufferAttribute(surface.stretch, 1));
-    g.setIndex(new BufferAttribute(surface.index, 1));
-    g.computeVertexNormals();
-    // Where each vertex starts: on the flat backdrop, along its own ray, so the photo "inflates" into 3D.
-    const { position: eye } = photoCamera(view);
-    const flat = new Float32Array(surface.positions.length);
-    const p = new Vector3();
-    const distance = view.pivot * 1.8;
-    for (let i = 0; i < flat.length; i += 3) {
-      p.set(surface.positions[i], surface.positions[i + 1], surface.positions[i + 2]).sub(eye);
-      const along = p.length();
-      p.multiplyScalar(along > 0 ? distance / along : 0).add(eye);
-      flat.set([p.x, p.y, p.z], i);
-    }
-    g.setAttribute("flatPos", new BufferAttribute(flat, 3));
-    return g;
-  }, [depth, view, aspect]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
-  const material = useMemo(
-    () =>
-      new ShaderMaterial({
-        vertexShader: placeVertex,
-        fragmentShader: placeFragment,
-        side: DoubleSide,
-        uniforms: {
-          map: { value: texture },
-          reveal: { value: 0 },
-          lightDir: { value: new Vector3(0, 1, 0) },
-          lightColor: { value: new Color(1, 1, 1) },
-          relight: { value: 0.3 },
-          background: { value: new Color(STAGE_BACKGROUND).convertSRGBToLinear() },
-          unknown: { value: 0 },
-          unknownColor: { value: UNKNOWN_GRAY.clone() },
-          texSize: { value: new Vector2((texture.image as { width?: number } | undefined)?.width ?? 1024, (texture.image as { height?: number } | undefined)?.height ?? 1024) },
-        },
-      }),
-    [texture],
-  );
-  useEffect(() => () => material.dispose(), [material]);
-  // Uniforms change in place through the mesh (three.js materials are mutable, React state isn't).
-  const mesh = useRef<Mesh>(null);
-  const uniforms = () => (mesh.current?.material as ShaderMaterial | undefined)?.uniforms;
-
-  useEffect(() => {
-    const u = uniforms();
-    if (!u) return;
-    u.lightDir.value.copy(light.dir);
-    u.lightColor.value.copy(light.color);
-    u.relight.value = 0.38 * (1 - light.softness * 0.6);
-    invalidate();
-  }, [material, light.dir, light.color, light.softness, invalidate]);
-
-  // Reveal: the flat photo swells into its 3D shape.
-  const [revealed, setRevealed] = useState(false);
-  const started = useRef<number | null>(null);
-  useFrame((state) => {
-    const u = uniforms();
-    if (revealed || !u) return;
-    started.current ??= state.clock.elapsedTime;
-    const t = Math.min(1, (state.clock.elapsedTime - started.current) / 0.9);
-    u.reveal.value = 1 - Math.pow(1 - t, 3);
-    if (t >= 1) setRevealed(true);
-    else state.invalidate();
-  });
-
-  return (
-    <>
-      <mesh ref={mesh} geometry={geometry} material={material} userData={{ [PLACE_SET]: true }} />
-      {revealed ? (
-        <mesh geometry={geometry} receiveShadow userData={{ [NO_DEPTH]: true }}>
-          <shadowMaterial transparent opacity={shadowOpacity} depthWrite={false} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-4} />
-        </mesh>
-      ) : null}
-    </>
   );
 }
 
@@ -1104,6 +1239,13 @@ function useDragHandlers(el: SceneElement): Handlers {
   return {
     onPointerDown: (e) => {
       if (e.button !== 0) return;
+      const v = useStageView.getState();
+      if (v.v2 && !v.scout) {
+        // Director v2's Camera tab frames the shot: a press picks them and the drag goes on to move the Camera, so
+        // framing never shoves someone off their mark. People are placed in the Set tab.
+        useDirector.getState().select(el.id);
+        return;
+      }
       e.stopPropagation();
       hold(true);
       const { select } = useDirector.getState();
@@ -1129,7 +1271,7 @@ function useDragHandlers(el: SceneElement): Handlers {
       if (!d.moved) {
         checkpoint();
         // The camera stays where it is while the one it frames is moved: aimed at them, it went along with each nudge,
-        // so the next nudge reached further, and a slight move sent them meters (the user).
+        // so the next nudge reached further, and a slight move sent them meters.
         if (mainElement(scene)?.id === el.id && !scene.camera.free) {
           const aim = focusPoint(scene);
           setCamera({ free: { x: aim.x, z: aim.z } }, true);
@@ -1147,13 +1289,15 @@ function useDragHandlers(el: SceneElement): Handlers {
     },
     onPointerOver: (e) => {
       e.stopPropagation();
-      document.body.style.cursor = "grab";
+      const v = useStageView.getState();
+      document.body.style.cursor = v.v2 && !v.scout ? "pointer" : "grab";
     },
     onPointerOut: () => {
       document.body.style.cursor = "";
     },
     onDoubleClick: (e) => {
       e.stopPropagation();
+      useDirector.getState().checkpoint();
       useDirector.getState().focusOn(el.id);
     },
   };
@@ -1225,7 +1369,7 @@ function PosedPictures({
   return <PhotoBody el={el} front={of(front)} back={of(back)} light={light} onShown={onShown} />;
 }
 
-function Subject({ el, color, selected, light }: { el: SceneElement; color: string; selected: boolean; light: LightUniforms }) {
+const Subject = memo(function Subject({ el, color, selected, light }: { el: SceneElement; color: string; selected: boolean; light: LightUniforms }) {
   const handlers = useDragHandlers(el);
   const drawn = Boolean(el.views?.length);
   const posing = usePosing(el.id);
@@ -1241,11 +1385,14 @@ function Subject({ el, color, selected, light }: { el: SceneElement; color: stri
     <group position={[el.x, 0, el.z]}>
       {drawn ? (
         <group visible={!swapped}>
-          <Safe key={`${pictures}|${el.image?.url ?? ""}`} fallback={null}>
-            <Suspense fallback={null}>
-              <Drawn el={el} handlers={handlers} />
-            </Suspense>
-          </Safe>
+          {/* The camera view's (Director v2's Set tab shows the stand-in instead: showStandIns). */}
+          <group userData={{ [VIEW_NORMAL]: true }}>
+            <Safe key={`${pictures}|${el.image?.url ?? ""}`} fallback={null}>
+              <Suspense fallback={null}>
+                <Drawn el={el} handlers={handlers} />
+              </Suspense>
+            </Safe>
+          </group>
         </group>
       ) : null}
       <group position-y={el.lift} rotation-y={rad(el.yaw)}>
@@ -1288,7 +1435,7 @@ function Subject({ el, color, selected, light }: { el: SceneElement; color: stri
       ) : null}
     </group>
   );
-}
+});
 
 /**
  * A subject drawn from all around it: the drawing nearest to the side the camera sees, standing upright and turned to
@@ -1309,7 +1456,7 @@ function Drawn({ el, handlers }: { el: SceneElement; handlers: Handlers }) {
     return m;
   }, [textures]);
   const depthMaterial = useMemo(() => new MeshDepthMaterial({ depthPacking: RGBADepthPacking, map: textures[0], alphaTest: 0.5 }), [textures]);
-  useEffect(
+  useInsertionEffect(
     () => () => {
       material.dispose();
       depthMaterial.dispose();
@@ -1473,7 +1620,7 @@ function Relief({ el, light, handlers }: { el: SceneElement; light: LightUniform
     };
     return { front: make(r.front, r.frontIndex), back: make(r.back, r.backIndex) };
   }, [grid, width, el.height, thickness, depth, image.cutout]);
-  useEffect(
+  useInsertionEffect(
     () => () => {
       front.dispose();
       back.dispose();
@@ -1483,7 +1630,7 @@ function Relief({ el, light, handlers }: { el: SceneElement; light: LightUniform
 
   const materials = useMemo(() => ({ front: subjectMaterial(texture, 0), back: subjectMaterial(texture, 1) }), [texture]);
   const depthMaterial = useMemo(() => new MeshDepthMaterial({ depthPacking: RGBADepthPacking, map: texture, alphaTest: 0.5 }), [texture]);
-  useEffect(
+  useInsertionEffect(
     () => () => {
       materials.front.dispose();
       materials.back.dispose();

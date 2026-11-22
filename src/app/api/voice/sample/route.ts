@@ -17,16 +17,16 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) return Response.json({ error: "Send the clip as a file." }, { status: 400 });
   if (file.size > MAX) return Response.json({ error: "That file is over 200 MB. A 10–30 second clip is all it needs." }, { status: 413 });
   const ext = (path.extname(file.name) || ".bin").replace(/[^.a-z0-9]/gi, "").slice(0, 8);
-  const dir = path.join(DATA_DIR, "cache", "voice");
-  await fs.mkdir(dir, { recursive: true });
-  const raw = path.join(dir, `${nanoid(10)}${ext}`);
-  await fs.writeFile(raw, Buffer.from(await file.arrayBuffer()));
+  const dir = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "voice");
+  await fs.mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
+  const raw = path.join(/*turbopackIgnore: true*/ dir, `${nanoid(10)}${ext}`);
+  await fs.writeFile(/*turbopackIgnore: true*/ raw, Buffer.from(await file.arrayBuffer()));
   try {
     return Response.json(await readSample(raw, request.signal));
   } catch (err) {
     const status = err instanceof VoiceSetupError ? err.status : err instanceof AudioError ? 400 : 500;
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status });
   } finally {
-    await fs.rm(raw, { force: true });
+    await fs.rm(/*turbopackIgnore: true*/ raw, { force: true });
   }
 }

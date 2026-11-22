@@ -8,6 +8,7 @@ import { useComposerBridge } from "@/lib/hooks/use-composer-bridge";
 import { copyText } from "@/lib/clipboard";
 import { AspectGlyph } from "@/components/ui/AspectGlyph";
 import { cn } from "@/lib/cn";
+import { calmNow } from "@/lib/motion-pref";
 
 type Filter = "All" | ExampleCategory;
 const FILTERS: Filter[] = ["All", ...EXAMPLE_CATEGORIES];
@@ -68,7 +69,7 @@ export function ExamplesGallery() {
   const use = (ex: Example) => {
     push({ prompt: ex.prompt, aspect: ex.aspect });
     setOpen(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: calmNow() ? "auto" : "smooth" });
   };
 
   return (
@@ -131,7 +132,8 @@ function Card({ ex, copied, onOpen, onUse, onCopy }: { ex: Example; copied: bool
       <div className="pointer-events-none absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
         <p className="text-[12.5px] font-semibold text-paper">{ex.title}</p>
         <p className="mt-1 line-clamp-3 text-[12px] leading-snug text-paper/75">{ex.prompt}</p>
-        <div className="pointer-events-auto mt-2.5 flex gap-1.5">
+        {/* Clickable only while shown (hover or focus): on a touch screen, a tap on the picture opens it. */}
+        <div className="pointer-events-none mt-2.5 flex gap-1.5 group-focus-within:pointer-events-auto group-hover:pointer-events-auto">
           <button type="button" onClick={onUse} className="press inline-flex h-7 items-center gap-1.5 rounded-full bg-spike px-2.5 text-[11.5px] font-bold text-spike-ink hover:bg-spike-hi">
             <CornerUpLeft size={12} strokeWidth={2.4} /> Use
           </button>
@@ -196,8 +198,8 @@ function Lightbox({
         // Focus lands here rather than on the first button, so opening shows no stray focus ring.
         <div autoFocus tabIndex={-1} className="flex max-h-[calc(100dvh-2rem)] flex-col outline-none lg:h-[min(calc(100dvh-4rem),860px)] lg:flex-row">
           <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-3 sm:p-5">
+            {/* One image whose source changes: stepping keeps the last picture up until the next one is in. */}
             <Image
-              key={ex.id}
               src={ex.src}
               alt={ex.prompt}
               width={ex.width}

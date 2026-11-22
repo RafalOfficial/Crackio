@@ -1,20 +1,15 @@
 "use client";
 
-import { create } from "zustand";
 import { MathUtils, PerspectiveCamera, Raycaster, Vector2 } from "three";
 import { useDirector } from "@/lib/director/store";
 import { photoCamera } from "@/lib/director/reconstruct";
 import type { ElementKind } from "@/lib/director/types";
 import { drawAllSides } from "./intake";
 import { placeModel } from "./place-model";
+import { useLift, friendlyModelError } from "./status";
 
-/**
- * The cars, people and objects a place photo shows, lifted out of it onto the set (server/director `liftThings`): each
- * stands where the photo has it, turned the way it faces there, and is drawn from the camera's angle like anything
- * staged, instead of being a relief of the photo's one side that smears and melts as the camera moves (the user's gas
- * station Mustang). The photo is then the place without them.
- */
-export const useLift = create<{ busy: string | null; error: string | null }>(() => ({ busy: null, error: null }));
+// The busy flag lives in status.ts (no three.js there); still importable from here.
+export { useLift } from "./status";
 
 type Thing = {
   kind: ElementKind;
@@ -25,6 +20,12 @@ type Thing = {
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/**
+ * The cars, people and objects a place photo shows, lifted out of it onto the set (server/director `liftThings`): each
+ * stands where the photo has it, turned the way it faces there, and is drawn from the camera's angle like anything
+ * staged, instead of being a relief of the photo's one side that smears and melts as the camera moves (a Mustang at a
+ * gas station, in testing). The photo is then the place without them.
+ */
 export async function liftFromPlace() {
   const scene = useDirector.getState().scene;
   const image = scene.place.image;
@@ -76,7 +77,7 @@ export async function liftFromPlace() {
     }
     swapPlacePhoto(data.clean ?? null);
   } catch (err) {
-    useLift.setState({ error: (err as Error).message });
+    useLift.setState({ error: friendlyModelError((err as Error).message) });
   } finally {
     useLift.setState({ busy: null });
   }

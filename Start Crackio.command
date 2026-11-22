@@ -5,6 +5,9 @@ PORT="${CRACKIO_PORT:-3211}"
 # Only this Mac can open Crackio. Set CRACKIO_HOST=0.0.0.0 to open it to your network (it has no login).
 BIND="${CRACKIO_HOST:-127.0.0.1}"
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# Node's pool for file reads, picture work and hashing has 4 threads; picture previews filled it, and plain reads (your
+# settings) waited seconds behind them.
+export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-16}"
 
 fail() {
   echo ""

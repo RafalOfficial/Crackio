@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { ASPECT_STAGES, withRuntime } from "@/lib/motion/runtime";
 import { cn } from "@/lib/cn";
@@ -10,13 +10,20 @@ export type PlayerComposition = { id: string; html: string; aspect: string; dura
 /**
  * Plays a Motion composition live, the same document the renderer scrubs, scaled to fit.
  * It runs in a sandboxed frame (scripts only, no access to Crackio itself).
+ *
+ * The frame says where it is every frame it draws: the readout and the scrubber follow it directly, so playing never
+ * redraws the page (React only hears play, pause and the frame's size).
  */
 export function CompositionPlayer({ composition, className }: { composition: PlayerComposition; className?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
+  const range = useRef<HTMLInputElement>(null);
+  const readout = useRef<HTMLSpanElement>(null);
+  const time = useRef(0);
+  const scrubbing = useRef(false);
   const [scale, setScale] = useState(0);
-  const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const wasPlaying = useRef(true);
   const size = composition.width && composition.height ? { width: composition.width, height: composition.height } : (ASPECT_STAGES[composition.aspect] ?? ASPECT_STAGES["16:9"]);
   const stage = { ...size, duration: composition.duration, fps: composition.fps };
   // Relative file names in the document resolve in the project folder.
@@ -25,6 +32,12 @@ export function CompositionPlayer({ composition, className }: { composition: Pla
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [composition.id, composition.html],
   );
+
+  const show = (t: number) => {
+    time.current = t;
+    if (readout.current) readout.current.textContent = `${t.toFixed(1)}s`;
+    if (range.current && !scrubbing.current) range.current.value = String(Math.min(t, composition.duration));
+  };
 
   useEffect(() => {
     const el = box.current;
@@ -38,15 +51,24 @@ export function CompositionPlayer({ composition, className }: { composition: Pla
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow) return;
       const d = e.data as { type?: string; t?: number };
-      if (d?.type === "crackio:time" && typeof d.t === "number") setTime(d.t);
+      if (d?.type === "crackio:time" && typeof d.t === "number") show(d.t);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composition.duration]);
 
   const post = (msg: Record<string, unknown>) => frame.current?.contentWindow?.postMessage(msg, "*");
+
+  // A hidden page (another route, kept by Next) stops the piece's loop and its videos; showing it again goes on.
+  useLayoutEffect(() => {
+    if (wasPlaying.current) post({ type: "crackio:play", t: time.current });
+    return () => post({ type: "crackio:pause" });
+  }, []);
+
   const toggle = () => {
-    post(playing ? { type: "crackio:pause" } : { type: "crackio:play", t: time });
+    post(playing ? { type: "crackio:pause" } : { type: "crackio:play", t: time.current });
+    wasPlaying.current = !playing;
     setPlaying(!playing);
   };
 
@@ -62,7 +84,8 @@ export function CompositionPlayer({ composition, className }: { composition: Pla
               sandbox="allow-scripts"
               srcDoc={doc}
               onLoad={() => {
-                setTime(0);
+                show(0);
+                wasPlaying.current = true;
                 setPlaying(true);
                 post({ type: "crackio:play", t: 0 });
               }}
@@ -80,16 +103,22 @@ export function CompositionPlayer({ composition, className }: { composition: Pla
         >
           {playing ? <Pause size={15} /> : <Play size={15} className="translate-x-px" />}
         </button>
-        <span className="tabular w-11 shrink-0 font-mono text-[11.5px] text-fog">{time.toFixed(1)}s</span>
+        <span ref={readout} className="tabular w-11 shrink-0 font-mono text-[11.5px] text-fog">
+          0.0s
+        </span>
         <input
+          ref={range}
           type="range"
           min={0}
           max={composition.duration}
           step={1 / composition.fps}
-          value={Math.min(time, composition.duration)}
+          defaultValue={0}
+          onPointerDown={() => (scrubbing.current = true)}
+          onPointerUp={() => (scrubbing.current = false)}
           onChange={(e) => {
             const t = Number(e.target.value);
-            setTime(t);
+            show(t);
+            wasPlaying.current = false;
             setPlaying(false);
             post({ type: "crackio:seek", t });
           }}

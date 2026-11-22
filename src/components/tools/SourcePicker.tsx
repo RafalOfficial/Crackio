@@ -90,6 +90,9 @@ export function SourcePicker({ onPick, hint }: { onPick: (src: SourceImage) => v
           ).map((s) => (
             <button
               key={s.url}
+              type="button"
+              aria-label={`Use ${s.name}`}
+              title={s.name}
               onClick={() => onPick(s)}
               className="press squircle h-20 shrink-0 overflow-hidden rounded-[12px] bg-apple shadow-[0_0_0_1px_var(--color-line)] hover:brightness-110 hover:shadow-[0_0_0_1px_var(--color-line-strong)]"
               style={{ aspectRatio: `${s.width} / ${s.height}` }}

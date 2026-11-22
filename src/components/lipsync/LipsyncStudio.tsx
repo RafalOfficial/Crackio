@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import { ArrowUpRight, Check, ChevronDown, CornerDownLeft, Download, Film, LoaderCircle, Mic, Pencil, Sparkles, TriangleAlert, Undo2, Upload, X } from "lucide-react";
 import { Popover } from "@/components/ui/Popover";
 import { GeneratingField } from "@/components/ui/GeneratingField";
 import { RecDot } from "@/components/ui/Viewfinder";
 import { ChipButton, shotFor } from "@/components/dashboard/ComposerControls";
 import { Orb } from "@/components/voice/Orb";
-import { VoiceDrawer } from "@/components/voice/VoiceDrawer";
-import { VoiceModelMark } from "@/components/voice/VoiceModelLibrary";
+import { usePlayer } from "@/components/voice/player";
+import { VoiceModelMark } from "@/components/voice/ModelMark";
 import { LipsyncSetupBar } from "./LipsyncSetup";
 import { useLipsyncPrefs } from "./prefs";
 import { isLive, useGenerations, useGenerationsStore } from "@/lib/hooks/use-generations";
@@ -23,6 +26,12 @@ import { VOICE_MODELS, voiceModel } from "@/lib/voice/models";
 import type { Generation } from "@/lib/generations/types";
 import { posterUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
+
+// Voices' drawer carries the model library's code: it comes once the page has settled, not with it.
+const VoiceDrawer = dynamic(() => import("@/components/voice/VoiceDrawer").then((m) => m.VoiceDrawer), { ssr: false });
+
+/** Where the clip is playing: read only by the sentence it lights up, so playing doesn't redraw the page 4 times a second. */
+const useClipTime = create<{ t: number }>(() => ({ t: 0 }));
 
 /** The speech models that can say new words in someone's voice (the clip's own, or one of yours). */
 const SPEAKERS = VOICE_MODELS.filter((m) => m.can.clone);
@@ -98,7 +107,8 @@ export function LipsyncStudio() {
   const voiceLoaded = useVoiceStore((s) => s.machinesLoaded);
   const ready = useVoiceStore((s) => s.ready);
   const yours = useVoiceStore((s) => s.yours);
-  const items = useGenerations((s) => s.items);
+  // Only Lip Sync's takes: another tool's job ticking along doesn't redraw the page.
+  const takes = useGenerations(useShallow((s) => s.items.filter((g) => g.tool === "lipsync")));
   const submit = useGenerations((s) => s.submit);
   const cancel = useGenerations((s) => s.cancel);
   const model = useLipsyncPrefs((s) => s.model);
@@ -118,19 +128,18 @@ export function LipsyncStudio() {
   const [notice, setNotice] = useState<string | null>(null);
   const [voicesOpen, setVoicesOpen] = useState(false);
   const [voiceAnchor, setVoiceAnchor] = useState<HTMLSpanElement | null>(null);
-  const [time, setTime] = useState(0);
   const player = useRef<PlayerApi | null>(null);
+  const [drawerIn, setDrawerIn] = useState(false);
 
   useEffect(() => {
     if (!useGenerationsStore.getState().loaded) void useGenerationsStore.getState().load();
     void useLipsyncPrefs.persist.rehydrate();
-    // ?clip=… (from the Library, a reload, a take's "Edit further") opens that clip.
-    const u = new URL(window.location.href);
-    const url = u.searchParams.get("clip");
-    if (!url || !/^\/(api\/media\/(out|uploads|templates)|assets)\//.test(url)) return;
-    const t = window.setTimeout(() => setClip({ url, name: u.searchParams.get("name") || "Clip" }), 0);
+    // The voices' drawer comes once the page has settled (or at once when it opens), then stays.
+    const t = window.setTimeout(() => setDrawerIn(true), 1500);
     return () => window.clearTimeout(t);
   }, []);
+  // A voice sample still playing stops when you leave (its sound isn't in the page, so hiding the page can't pause it).
+  useLayoutEffect(() => () => usePlayer.getState().stop(), []);
 
   /** A clip to work on (or none): everything about the last one goes, and the address keeps the new one. */
   const choose = useCallback((c: Clip | null) => {
@@ -140,7 +149,7 @@ export function LipsyncStudio() {
     setViewing(null);
     setBefore(false);
     setNotice(null);
-    setTime(0);
+    useClipTime.setState({ t: 0 });
     const u = new URL(window.location.href);
     if (c) {
       u.searchParams.set("clip", c.url);
@@ -151,6 +160,20 @@ export function LipsyncStudio() {
     }
     window.history.replaceState(window.history.state, "", u);
   }, []);
+
+  // ?clip=… (from the Library's "Change what they say", a reload, a take's "Edit further") opens that clip through
+  // choose, so a page kept from an earlier visit doesn't carry the last clip's edits and consent over to it.
+  const clipOnScreen = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    clipOnScreen.current = clip?.url ?? null;
+  });
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const url = u.searchParams.get("clip");
+    if (!url || url === clipOnScreen.current || !/^\/(api\/media\/(out|uploads|templates)|assets)\//.test(url)) return;
+    const t = window.setTimeout(() => choose({ url, name: u.searchParams.get("name") || "Clip" }), 0);
+    return () => window.clearTimeout(t);
+  }, [choose]);
 
   // What the clip says: heard once on a GPU with speech to text (kept after that, so it's instant the next time).
   const url = clip?.url ?? null;
@@ -205,7 +228,6 @@ export function LipsyncStudio() {
   const cloning = !voiceCard;
   const regions = useMemo(() => (analysis ? regionsOf(analysis, edited) : []), [analysis, edited]);
   const rate = analysis ? rateOf(analysis) : 2.6;
-  const takes = useMemo(() => items.filter((g) => g.tool === "lipsync"), [items]);
   const mine = clip ? takes.filter((g) => (g.params?.lipsync as LipsyncAsk | undefined)?.url === clip.url) : [];
   const live = mine.find(isLive) ?? null;
   const shown = viewing ? (mine.find((g) => g.id === viewing && g.status === "done") ?? null) : (mine.find((g) => g.status === "done") ?? null);
@@ -285,7 +307,7 @@ export function LipsyncStudio() {
               live={live}
               onCancel={() => live && void cancel(live.id)}
               onClose={() => choose(null)}
-              onTime={setTime}
+              onTime={(t) => useClipTime.setState({ t })}
             />
             <div className="squircle flex min-h-[420px] flex-col rounded-[24px] bg-white/[0.03] shadow-[inset_0_0_0_1px_var(--color-line)] lg:min-h-0">
               <div className="flex items-baseline justify-between gap-3 px-4 pb-2 pt-4">
@@ -300,7 +322,7 @@ export function LipsyncStudio() {
               </div>
               <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-2">
                 {analysis ? (
-                  <Transcript analysis={analysis} edited={edited} setEdited={setEdited} regions={regions} rate={rate} time={time} onPlay={(s) => player.current?.playStretch(s.start, s.end)} onSubmit={() => void sync()} />
+                  <Transcript analysis={analysis} edited={edited} setEdited={setEdited} regions={regions} rate={rate} onPlay={(s) => player.current?.playStretch(s.start, s.end)} onSubmit={() => void sync()} />
                 ) : hearError ? (
                   <div className="flex flex-col items-start gap-2 px-2 py-4 text-[13.5px] leading-relaxed">
                     <span className="flex items-start gap-1.5 text-tally">
@@ -505,7 +527,7 @@ export function LipsyncStudio() {
 
       <Takes takes={takes} current={shown?.id ?? null} onShow={showTake} onEdit={editFurther} onCancel={(g) => void cancel(g.id)} />
 
-      <VoiceDrawer open={voicesOpen} onClose={() => setVoicesOpen(false)} anchor={voiceAnchor} current={voiceCard?.id ?? null} onPick={(v) => setPrefs({ voice: v.id })} />
+      {drawerIn || voicesOpen ? <VoiceDrawer open={voicesOpen} onClose={() => setVoicesOpen(false)} anchor={voiceAnchor} current={voiceCard?.id ?? null} onPick={(v) => setPrefs({ voice: v.id })} /> : null}
     </div>
   );
 }
@@ -514,7 +536,8 @@ export function LipsyncStudio() {
 
 /** No clip yet: drop one (or browse), or pick a clip you made. */
 function Start({ onPick }: { onPick: (c: Clip) => void }) {
-  const items = useGenerations((s) => s.items);
+  // Your finished clips, followed on their own: a job running elsewhere doesn't redraw this.
+  const items = useGenerations(useShallow((s) => s.items.filter((g) => g.status === "done" && g.tool !== "voice" && g.outputs.some((o) => o.kind === "video"))));
   const input = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -772,7 +795,6 @@ function Transcript({
   setEdited,
   regions,
   rate,
-  time,
   onPlay,
   onSubmit,
 }: {
@@ -781,11 +803,17 @@ function Transcript({
   setEdited: (fn: (e: Record<number, string>) => Record<number, string>) => void;
   regions: LipRegion[];
   rate: number;
-  time: number;
   onPlay: (s: LipSentence) => void;
   onSubmit: () => void;
 }) {
   const list = useRef<HTMLOListElement>(null);
+  // The sentence(s) being said right now; this redraws only when that changes, not with every tick of the clip.
+  const saying = useClipTime((c) =>
+    analysis.sentences
+      .filter((s) => c.t >= s.start - 0.05 && c.t < s.end + 0.1)
+      .map((s) => s.id)
+      .join(","),
+  );
   // Each stretch's fit, shown under its last sentence.
   const fits = useMemo(() => {
     const out = new Map<number, Fit>();
@@ -803,7 +831,7 @@ function Transcript({
         const value = edited[s.id] ?? s.text;
         const changed = edited[s.id] !== undefined && !sameWords(edited[s.id], s.text);
         const fit = fits.get(s.id);
-        const now = time >= s.start - 0.05 && time < s.end + 0.1;
+        const now = saying.split(",").includes(String(s.id));
         return (
           <li
             key={s.id}
@@ -817,6 +845,7 @@ function Transcript({
                 type="button"
                 onClick={() => onPlay(s)}
                 title="Play this sentence"
+                aria-label={`Play from ${clock(s.start)}`}
                 className={cn("tabular press mt-[3px] shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[11px]", now ? "bg-paper text-[#16131b]" : "text-haze hover:bg-white/[0.08] hover:text-paper")}
               >
                 {clock(s.start)}

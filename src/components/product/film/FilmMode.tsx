@@ -46,7 +46,7 @@ import {
 } from "@/lib/product/film";
 import { filmPreviews, stillById, tilePreview } from "@/lib/product/film-previews";
 import { filmFit, type FilmAsk } from "@/lib/product/film-fit";
-import { Step } from "../Step";
+import { Step, bringIntoView } from "../Step";
 import { FilmOptionGrid } from "./FilmOptionGrid";
 import { FilmOutput, isFilmTake } from "./FilmOutput";
 import { PicturePicker, type FilmPicture } from "./PicturePicker";
@@ -82,7 +82,6 @@ const aspectFor = (ratio: number): AspectId => ASPECTS.reduce((best, a) => (Math
  */
 export function FilmMode({ incoming, onShoot }: { incoming: FilmPicture | null; onShoot: () => void }) {
   const submit = useGenerations((s) => s.submit);
-  const items = useGenerations((s) => s.items);
   const { models, defaults, loaded: modelsLoaded } = useModels();
   const cast = useCast();
   const [model, setModel] = useModelChoice("video", "animate");
@@ -120,7 +119,8 @@ export function FilmMode({ incoming, onShoot }: { incoming: FilmPicture | null; 
   const later = (fn: () => void, ms: number) => timers.current.push(window.setTimeout(fn, ms));
 
   // Your newest Product Studio pictures, again whenever a new one is made.
-  const imageTakes = items.filter((g) => g.tool === "product" && g.params?.kind === "image" && g.status === "done").length;
+  // A count and a flag from the takes, not the list: the film panel redraws when they change, not on every progress tick.
+  const imageTakes = useGenerations((s) => s.items.filter((g) => g.tool === "product" && g.params?.kind === "image" && g.status === "done").length);
   useEffect(() => {
     const ctrl = new AbortController();
     fetch("/api/product/takes?limit=10", { signal: ctrl.signal, cache: "no-store" })
@@ -196,7 +196,7 @@ export function FilmMode({ incoming, onShoot }: { incoming: FilmPicture | null; 
     const next = list.slice(list.indexOf(from) + 1).find((s) => !nextDone.includes(s)) ?? list.find((s) => !nextDone.includes(s)) ?? null;
     later(() => {
       setOpenStep(next);
-      if (next) later(() => stepRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "start" }), 360);
+      if (next) later(() => bringIntoView(stepRefs.current[next]), 360);
     }, 200);
   }
 
@@ -215,7 +215,7 @@ export function FilmMode({ incoming, onShoot }: { incoming: FilmPicture | null; 
     later(() => {
       const next = STYLE_STEPS[id][1] ?? null;
       setOpenStep(next);
-      if (next) later(() => stepRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "start" }), 360);
+      if (next) later(() => bringIntoView(stepRefs.current[next]), 360);
     }, 200);
   }
 
@@ -303,7 +303,7 @@ export function FilmMode({ incoming, onShoot }: { incoming: FilmPicture | null; 
     }
   }
 
-  const live = items.some((g) => isFilmTake(g) && (g.status === "queued" || g.status === "running"));
+  const live = useGenerations((s) => s.items.some((g) => isFilmTake(g) && (g.status === "queued" || g.status === "running")));
   const needsPeople = PEOPLE.includes(style) && (picture?.people === "none" || picture?.people === "hands");
   const fewPictures = style === "campaign" && selected.length < 2;
   const canFilm = Boolean(picture) && !busy && !noModel && !fewPictures && !(info.loading && !caps) && fit.missing.every((m) => !/Can't start|Silent: nobody/.test(m));
@@ -488,7 +488,7 @@ export function FilmMode({ incoming, onShoot }: { incoming: FilmPicture | null; 
         </div>
 
         {/* Sticks to the bottom of the window while you scroll the picks, so Film is always in reach. */}
-        <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat/90 p-3 backdrop-blur-xl">
+        <div className="sticky bottom-0 z-10 mt-auto space-y-2 rounded-b-panel border-t border-line bg-flat p-3 shadow-[0_-14px_28px_-18px_rgb(0_0_0/0.7)]">
           {!fit.ok && caps ? (
             <div className="flex items-start gap-2 rounded-[12px] bg-tungsten/10 px-3 py-2 text-[12px] leading-snug text-tungsten shadow-[inset_0_0_0_1px_rgb(242_181_75/0.22)]">
               <TriangleAlert size={14} className="mt-px shrink-0" />

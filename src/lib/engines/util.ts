@@ -6,7 +6,7 @@ import { EngineError, type EngineJob, type EngineOutput, type EngineReference } 
 
 /** A reference file as a data URL, downscaled so requests stay small (models read ~1K references anyway). */
 export async function toDataUrl(ref: EngineReference, maxEdge = 1536) {
-  const data = await fs.readFile(ref.path);
+  const data = await fs.readFile(/*turbopackIgnore: true*/ ref.path);
   const ext = path.extname(ref.path).slice(1).toLowerCase();
   const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
   const resized = await sharp(data).resize({ width: maxEdge, height: maxEdge, fit: "inside", withoutEnlargement: true }).toBuffer();

@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   if (body.local) {
     const found = await localLlm().catch((err: Error) => err.message);
     try {
-      const images = await Promise.all(many.map((p) => fs.readFile(p)));
+      const images = await Promise.all(many.map((p) => fs.readFile(/*turbopackIgnore: true*/ p)));
       const answer = await localText({ system: body.instructions ?? "Answer briefly.", prompt: body.text, images, signal: AbortSignal.timeout(120_000) });
       return Response.json({ answer, on: typeof found === "string" ? found : found && { machine: found.target.label, model: found.llm.name }, ms: Date.now() - began });
     } catch (err) {

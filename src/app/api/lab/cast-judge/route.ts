@@ -34,7 +34,7 @@ async function stack(files: string[]) {
   const key = createHash("sha1").update(files.join("|")).digest("hex").slice(0, 20);
   const out = path.join(/*turbopackIgnore: true*/ DATA_DIR, "cache", "cast", `judge-${key}.png`);
   try {
-    await fs.access(out);
+    await fs.access(/*turbopackIgnore: true*/ out);
     return out;
   } catch {
     const width = 1024;
@@ -45,7 +45,7 @@ async function stack(files: string[]) {
       top += r.info.height + 16;
       return layer;
     });
-    await fs.mkdir(path.dirname(out), { recursive: true });
+    await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(out), { recursive: true });
     await sharp({ create: { width, height: top - 16, channels: 3, background: "#202020" } }).composite(layers).png().toFile(out);
     return out;
   }

@@ -7,6 +7,7 @@ import { ChevronRight, ImagePlus, LoaderCircle, ScanSearch, Trash, X } from "luc
 import { Button } from "@/components/ui/Button";
 import { useMentions } from "@/components/cast/Mentions";
 import { cn } from "@/lib/cn";
+import { previewUrl } from "@/lib/media-url";
 import { inBox, pinTarget, smallestAt, type Attachment, type Box, type Found, type Pin, type Thing } from "./things";
 
 /**
@@ -251,7 +252,8 @@ function NotePopover({
 
   async function attach(f?: File) {
     if (!f?.type.startsWith("image/")) return;
-    const preview = URL.createObjectURL(f);
+    const local = URL.createObjectURL(f);
+    let preview = local;
     setImage({ url: "", preview, describing: true });
     try {
       const body = new FormData();
@@ -259,6 +261,9 @@ function NotePopover({
       const up = (await (await fetch("/api/uploads", { method: "POST", body })).json()) as { items?: { url: string }[]; error?: string };
       const url = up.items?.[0]?.url;
       if (!url) throw new Error(up.error ?? "Upload failed.");
+      // Uploaded: shown from Crackio's own light copy, and the browser's copy of the whole file is let go.
+      preview = previewUrl(url, 320);
+      URL.revokeObjectURL(local);
       setImage({ url, preview, describing: true });
       // A description goes along too, for models that take words only.
       const res = await fetch("/api/recast/describe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: url, note: text }) });

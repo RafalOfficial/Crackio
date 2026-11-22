@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import { ArrowUpRight, Check, ChevronDown, CornerDownLeft, Languages, LoaderCircle, Mic, Minus, Plus, SlidersHorizontal, User, Users, Wand2, X } from "lucide-react";
 import { Popover } from "@/components/ui/Popover";
 import { ScrollRow } from "@/components/ui/ScrollRow";
@@ -11,8 +14,8 @@ import { ScriptBox, ScriptPreview, type ScriptEditor } from "./ScriptBox";
 import { Orb, watch } from "./Orb";
 import { Aurora } from "./Aurora";
 import { TakeRow } from "./TakeRow";
-import { VoiceDrawer, type VoiceView } from "./VoiceDrawer";
-import { VoiceModelLibrary, VoiceModelMark } from "./VoiceModelLibrary";
+import type { VoiceView } from "./VoiceDrawer";
+import { VoiceModelMark } from "./ModelMark";
 import { VoiceSetupBar } from "./VoiceSetup";
 import { TalkBar } from "./TalkBar";
 import { useTalkState } from "./talk-store";
@@ -28,6 +31,11 @@ import { LFM3_BYTES, LFM3_NAME } from "@/lib/local/lfm3";
 import type { VoiceAsk, VoiceCard } from "@/lib/voice/types";
 import type { Generation } from "@/lib/generations/types";
 import { cn } from "@/lib/cn";
+
+// The two drawers carry the model library (its catalog, benchmarks and cards): that code comes once the page has
+// settled, not with it.
+const VoiceDrawer = dynamic(() => import("./VoiceDrawer").then((m) => m.VoiceDrawer), { ssr: false });
+const VoiceModelLibrary = dynamic(() => import("./VoiceModelLibrary").then((m) => m.VoiceModelLibrary), { ssr: false });
 
 /** What an empty script suggests, one after another, with sounds and whispers where they'd go. */
 const EXAMPLES = [
@@ -183,7 +191,8 @@ export function VoiceStudio() {
   const yours = useVoiceStore((s) => s.yours);
   const machines = useVoiceStore((s) => s.machines);
   const machinesLoaded = useVoiceStore((s) => s.machinesLoaded);
-  const items = useGenerations((s) => s.items);
+  // Only Voice's takes: another tool's job ticking along doesn't redraw the page.
+  const takes = useGenerations(useShallow((s) => s.items.filter((g) => g.tool === "voice")));
   const submit = useGenerations((s) => s.submit);
 
   // The choices you keep between visits.
@@ -211,7 +220,6 @@ export function VoiceStudio() {
   const [whoAnchor, setWhoAnchor] = useState<HTMLSpanElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [example, setExample] = useState(0);
   const [brainBusy, setBrainBusy] = useState(false);
   const [brainError, setBrainError] = useState<string | null>(null);
   const editor = useRef<ScriptEditor | null>(null);
@@ -219,6 +227,14 @@ export function VoiceStudio() {
   useEffect(() => {
     if (!useGenerationsStore.getState().loaded) void useGenerationsStore.getState().load();
     void useVoicePrefs.persist.rehydrate();
+  }, []);
+  // A take still playing stops when you leave: its sound isn't in the page, so hiding the page can't pause it.
+  useLayoutEffect(() => () => usePlayer.getState().stop(), []);
+  // The drawers' code arrives once the page has settled (or at once when one opens), and they stay mounted after.
+  const [drawersIn, setDrawersIn] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDrawersIn(true), 1500);
+    return () => window.clearTimeout(t);
   }, []);
 
   // ?voices=clone (or design) opens Voices on that tab: Clone's "use the secure address" lands back there.
@@ -248,13 +264,6 @@ export function VoiceStudio() {
     return () => window.clearTimeout(t);
   }, []);
 
-  // Examples take turns while the script is empty, as on Home.
-  useEffect(() => {
-    if (script) return;
-    const t = setInterval(() => setExample((e) => (e + 1) % EXAMPLES.length), 4200);
-    return () => clearInterval(t);
-  }, [script]);
-
   const all = useMemo(() => [...yours, ...ready], [yours, ready]);
   const find = (id: string) => all.find((v) => v.id === id) ?? null;
   const current = find(voice);
@@ -272,7 +281,6 @@ export function VoiceStudio() {
   const brainReady = !brains.length || brains.some((x) => x.brain?.ready);
   const brainJobs = machines.flatMap((x) => (x.brainSetup ? [x.brainSetup] : []));
   const brainJob = brainJobs.find((j) => j.state === "running") ?? brainJobs.find((j) => j.state === "error") ?? brainJobs[0] ?? null;
-  const takes = items.filter((g) => g.tool === "voice");
   const live = takes.filter((g) => g.status === "queued" || g.status === "running").length;
   const plain = !m.can.tags;
 
@@ -365,7 +373,8 @@ export function VoiceStudio() {
     }
   };
 
-  const seconds = scene ? lines.reduce((s, l) => s + secondsOf(l.text), 0) : secondsOf(script || EXAMPLES[example]);
+  // With an empty script, the example on show says it (ExampleSeconds), so the page doesn't redraw as they turn.
+  const seconds = scene ? lines.reduce((s, l) => s + secondsOf(l.text), 0) : script ? secondsOf(script) : null;
   const hues = (scene ? find(cast[0])?.hues : current?.hues) ?? FALLBACK;
   const name = scene ? null : (current?.name ?? "Mara");
   const mood = MOODS.find((x) => x.text === direction.trim());
@@ -505,7 +514,7 @@ export function VoiceStudio() {
           Safari once laid it out with a stale dev stylesheet that lacked them, and the hero folded to its content. */}
       <section className="relative isolate flex flex-col overflow-hidden rounded-panel bg-[#120f17]" style={HERO}>
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] rounded-[inherit] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]" />
-        <Backdrop hues={hues} />
+        <Backdrop hues={hues} slow={voicesFor !== null || modelsOpen} />
 
         <div className="absolute inset-x-0 top-0 z-[2] flex items-center justify-between gap-3 p-4 sm:p-6">
           <button
@@ -613,13 +622,10 @@ export function VoiceStudio() {
                     onReady={(api) => (editor.current = api)}
                     onSubmit={() => void speak()}
                     label="What they say"
-                    placeholder={
-                      <span key={example} className="voice-ph">
-                        <ScriptPreview text={EXAMPLES[example]} />
-                      </span>
-                    }
+                    placeholder={<RotatingExample />}
                     className="scroll-thin max-h-[150px] min-h-[60px] overflow-y-auto py-3 pl-3 pr-9 text-[16px] leading-relaxed text-paper"
                   />
+                  {script ? null : <ExampleClock />}
                   {script ? (
                     <button type="button" aria-label="Clear the script" title="Clear" onClick={() => setScript("")} className="press absolute right-1.5 top-2 grid size-7 place-items-center rounded-full text-haze hover:bg-white/[0.08] hover:text-paper">
                       <X size={14} />
@@ -695,7 +701,7 @@ export function VoiceStudio() {
             >
               {busy ? <LoaderCircle size={20} className="animate-spin" /> : <span className="font-display text-[22px] leading-none">Speak</span>}
               <span className="tabular hidden items-center gap-1 text-[11.5px] font-bold opacity-75 sm:flex">
-                ×{count} · ~{seconds}s <CornerDownLeft size={11} />
+                ×{count} · ~{seconds ?? <ExampleSeconds />}s <CornerDownLeft size={11} />
               </span>
             </button>
           </div>
@@ -770,22 +776,25 @@ export function VoiceStudio() {
 
       <Takes takes={takes} onAgain={(gen, note) => void speak({ gen, note })} />
 
-      <VoiceDrawer
-        open={voicesFor !== null}
-        onClose={() => (setVoicesFor(null), setVoicesView("all"))}
-        anchor={whoAnchor}
-        view={voicesView}
-        current={typeof voicesFor === "number" ? (cast[voicesFor] ?? null) : voice}
-        forWho={typeof voicesFor === "number" ? `speaker ${LETTERS[voicesFor]}` : null}
-        onPick={pick}
-      />
-      <VoiceModelLibrary open={modelsOpen} onClose={() => setModelsOpen(false)} anchor={modelAnchor} value={model} onChange={setModel} glass />
+      {drawersIn || voicesFor !== null ? (
+        <VoiceDrawer
+          glass
+          open={voicesFor !== null}
+          onClose={() => (setVoicesFor(null), setVoicesView("all"))}
+          anchor={whoAnchor}
+          view={voicesView}
+          current={typeof voicesFor === "number" ? (cast[voicesFor] ?? null) : voice}
+          forWho={typeof voicesFor === "number" ? `speaker ${LETTERS[voicesFor]}` : null}
+          onPick={pick}
+        />
+      ) : null}
+      {drawersIn || modelsOpen ? <VoiceModelLibrary open={modelsOpen} onClose={() => setModelsOpen(false)} anchor={modelAnchor} value={model} onChange={setModel} glass /> : null}
     </div>
   );
 }
 
 /** The voice's own light behind the page: a shader (Aurora) over a CSS fallback, a haze of clouds and grain on top. */
-function Backdrop({ hues }: { hues: [string, string] }) {
+function Backdrop({ hues, slow }: { hues: [string, string]; slow: boolean }) {
   const el = useRef<HTMLDivElement>(null);
   useEffect(() => (el.current ? watch(el.current) : undefined), []);
   return (
@@ -793,7 +802,7 @@ function Backdrop({ hues }: { hues: [string, string] }) {
       <i className="voice-glow voice-glow-a" />
       <i className="voice-glow voice-glow-b" />
       <i className="voice-glow voice-glow-c" />
-      <Aurora hues={hues} className="voice-aurora" />
+      <Aurora hues={hues} slow={slow} className="voice-aurora" />
       <i className="voice-haze" />
       <i className="voice-grain" />
     </div>
@@ -1029,4 +1038,32 @@ function groupByDay(gens: Generation[], now: number): [string, Generation[]][] {
     out.set(key, [...(out.get(key) ?? []), g]);
   }
   return [...out.entries()];
+}
+
+/**
+ * The example on show in an empty script, taking turns as on Home. It keeps its own little clock (ExampleClock, on
+ * only while the script is empty), so turning it redraws the placeholder and the Speak button's length, not the page.
+ */
+const useExample = create<{ i: number }>(() => ({ i: 0 }));
+
+function ExampleClock() {
+  useEffect(() => {
+    const t = setInterval(() => !document.hidden && useExample.setState((s) => ({ i: (s.i + 1) % EXAMPLES.length })), 4200);
+    return () => clearInterval(t);
+  }, []);
+  return null;
+}
+
+function RotatingExample() {
+  const i = useExample((s) => s.i);
+  return (
+    <span key={i} className="voice-ph">
+      <ScriptPreview text={EXAMPLES[i]} />
+    </span>
+  );
+}
+
+function ExampleSeconds() {
+  const i = useExample((s) => s.i);
+  return <>{secondsOf(EXAMPLES[i])}</>;
 }

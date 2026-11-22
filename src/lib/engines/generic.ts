@@ -37,7 +37,7 @@ type Prepared = { data: Buffer; mime: string; name: string };
  */
 export async function prepareImage(file: string, limits: MediaLimits = {}, maxEdge = 2048, cropTo?: number): Promise<Prepared> {
   // Upright first (EXIF), so crops and sizes below are in the picture's real orientation.
-  const upright = await sharp(await fs.readFile(file), { failOn: "none" }).rotate().toBuffer({ resolveWithObject: true });
+  const upright = await sharp(await fs.readFile(/*turbopackIgnore: true*/ file), { failOn: "none" }).rotate().toBuffer({ resolveWithObject: true });
   let img = sharp(upright.data);
   const meta = { hasAlpha: upright.info.channels === 4 };
   let w = upright.info.width;
@@ -107,11 +107,11 @@ export async function prepareVideo(file: string, limits: MediaLimits = {}, signa
   const fps = info.fps && limits.minFps && info.fps < limits.minFps ? limits.minFps : info.fps && limits.maxFps && info.fps > limits.maxFps ? limits.maxFps : null;
   const tooBig = limits.maxBytes ? info.bytes > limits.maxBytes : false;
   const mp4 = /\.mp4$/i.test(file);
-  if (!trim && scale === 1 && !fps && !tooBig && mp4) return { data: await fs.readFile(file), mime: "video/mp4", name: path.basename(file) };
+  if (!trim && scale === 1 && !fps && !tooBig && mp4) return { data: await fs.readFile(/*turbopackIgnore: true*/ file), mime: "video/mp4", name: path.basename(file) };
 
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-fit-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-fit-"));
   try {
-    const out = path.join(dir, "clip.mp4");
+    const out = path.join(/*turbopackIgnore: true*/ dir, "clip.mp4");
     const filters = [scale !== 1 ? `scale=${w}:${h}` : "", fps ? `fps=${fps}` : ""].filter(Boolean).join(",");
     const run = await runFfmpeg(
       [
@@ -127,9 +127,9 @@ export async function prepareVideo(file: string, limits: MediaLimits = {}, signa
       { signal },
     );
     if (run.code !== 0) throw new EngineError("Crackio couldn't prepare the clip for this model.");
-    return { data: await fs.readFile(out), mime: "video/mp4", name: "clip.mp4" };
+    return { data: await fs.readFile(/*turbopackIgnore: true*/ out), mime: "video/mp4", name: "clip.mp4" };
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
   }
 }
 

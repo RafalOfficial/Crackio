@@ -99,9 +99,16 @@ export function toolsInOrder(m: SetupMachine) {
   return KITS.map((k) => ({ kit: k, status: m.tools[k.id] })).sort((a, b) => ORDER[a.status.state] - ORDER[b.status.state]);
 }
 
-/** Tools that run well here and aren't set up: what "Set up all" gets. */
+/**
+ * Tools that run well here and aren't set up: what "Set up all" gets. A tool whose model would run slowly here is left
+ * for you to set up by itself (its part says "slow here"; the tool's own line only names what it gets).
+ */
 export function settable(m: SetupMachine): KitId[] {
-  return KITS.filter((k) => ["missing", "no-comfy"].includes(m.tools[k.id].state) && !/slow here/.test(m.tools[k.id].why)).map((k) => k.id);
+  const slow = (why: string) => /slow here/.test(why);
+  return KITS.filter((k) => {
+    const t = m.tools[k.id];
+    return ["missing", "no-comfy"].includes(t.state) && !slow(t.why) && !t.reqs.some((r) => !r.optional && r.state === "missing" && slow(r.why));
+  }).map((k) => k.id);
 }
 
 export function countReady(m: SetupMachine) {

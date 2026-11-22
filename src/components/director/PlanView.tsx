@@ -6,6 +6,7 @@ import { useDirector } from "@/lib/director/store";
 import { cameraPosition, focusPoint, horizontalFov } from "@/lib/director/camera";
 import { kelvinToRgb } from "@/lib/director/vocab";
 import { aspectById } from "@/lib/shot";
+import { previewUrl } from "@/lib/media-url";
 import { cn } from "@/lib/cn";
 
 type DragTarget = { kind: "element"; id: string } | { kind: "camera" } | { kind: "light" };
@@ -137,6 +138,9 @@ export function PlanView({ className }: { className?: string }) {
         const yaw = MathUtils.degToRad(el.yaw);
         const tip = { x: el.x + Math.sin(yaw) * (r + 0.2), z: el.z + Math.cos(yaw) * (r + 0.2) };
         const clip = `clip-${el.id}`;
+        // Someone riding (on a motorbike, a horse) stands on its spot: their name goes above, the ride's below
+        // (written over each other they read "MotKabike").
+        const rider = el.lift > 0.05 && scene.elements.some((o) => o.id !== el.id && (o.kind === "vehicle" || o.kind === "animal") && Math.hypot(o.x - el.x, o.z - el.z) < 0.6);
         return (
           <g key={el.id} onPointerDown={start({ kind: "element", id: el.id })} className="cursor-grab active:cursor-grabbing">
             <defs>
@@ -149,7 +153,7 @@ export function PlanView({ className }: { className?: string }) {
             <circle cx={el.x} cy={el.z} r={r + px * 2.5} fill={sel ? "#ff5b2e" : "#2f3239"} />
             {el.image ? (
               <image
-                href={el.image.url}
+                href={previewUrl(el.image.url, 160)}
                 x={el.x - r}
                 y={el.z - r * 1.15}
                 width={r * 2}
@@ -162,7 +166,7 @@ export function PlanView({ className }: { className?: string }) {
             )}
             <text
               x={el.x}
-              y={el.z + r + px * 14}
+              y={rider ? el.z - r - px * 8 : el.z + r + px * 14}
               textAnchor="middle"
               fontSize={px * 11}
               fontWeight={600}

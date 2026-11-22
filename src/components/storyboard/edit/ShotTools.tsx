@@ -1,19 +1,19 @@
 "use client";
 
 import { type ReactNode } from "react";
-import { ChevronDown, Copy, Film, Gauge, ImageIcon, Music2, Scissors, Sparkles, SunDim, Timer, Trash2, Volume2, VolumeX, ZoomIn } from "lucide-react";
+import { ChevronDown, Copy, Film, Gauge, ImageIcon, Music2, Scissors, Sparkles, SunDim, Timer, Trash2, Volume2, VolumeX, X, ZoomIn } from "lucide-react";
 import { useEditor } from "@/lib/storyboard/edit-store";
 import { lengthOf, MAX_STILL_SECONDS, speedOf, type EditClip } from "@/lib/storyboard/edit";
 import { patchClip } from "@/lib/storyboard/edit-ops";
 import { Popover } from "@/components/ui/Popover";
-import { ToolButton, ToolGroup, ToolPill } from "@/components/director/TitleBar";
+import { ToolButton, ToolPill } from "@/components/director/TitleBar";
 import { cut, fileOfClip } from "./Timeline";
 import { cn } from "@/lib/cn";
 
 /**
- * Everything the selected shot can do, in the timeline's bar (CapCut's way): how long a picture stays and whether it
- * pushes in, a clip's trim, speed and sound, fill or fit, fades, and for a picture the one that matters most, making
- * it move. Nothing selected, the bar shows the next step instead (Timeline).
+ * Everything the selected shot can do, on the bar that floats over the screen while it's selected (Monitor): how long a
+ * picture stays and whether it pushes in, a clip's trim, speed and sound, fill or fit, fades, and for a picture the one
+ * that matters most, making it move.
  */
 export function ShotTools({ clip, music, number }: { clip: EditClip; music: boolean; number: number | null }) {
   const change = useEditor((s) => s.change);
@@ -26,15 +26,14 @@ export function ShotTools({ clip, music, number }: { clip: EditClip; music: bool
 
   return (
     <>
-      <ToolGroup>
-        <span className="flex h-8 items-center gap-1.5 px-2 text-[12.5px] font-semibold text-paper" title={clip.name}>
-          {number ? <span className="tabular grid h-5 min-w-5 place-items-center rounded-[6px] bg-white/[0.12] px-1 font-mono text-[11px]">{number}</span> : null}
-          <Kind size={13} className="text-haze" />
-          <span className="tabular">{length.toFixed(1)}s</span>
-        </span>
-      </ToolGroup>
+      <span className="flex h-8 shrink-0 items-center gap-1.5 pl-2 pr-1 text-[12px] font-semibold text-paper" title={clip.name}>
+        {number ? <span className="tabular grid h-5 min-w-5 place-items-center rounded-[6px] bg-white/[0.12] px-1 text-[11px]">{number}</span> : null}
+        <Kind size={13} className="text-haze" />
+        <span className="tabular text-fog">{length.toFixed(1)}s</span>
+      </span>
+      <Divider />
 
-      <ToolGroup label="Shot settings">
+      <Group label="Shot settings">
         {clip.kind === "image" ? (
           <>
             <Menu icon={<Timer size={14} />} label="Length" title="How long the picture stays on screen">
@@ -99,21 +98,22 @@ export function ShotTools({ clip, music, number }: { clip: EditClip; music: bool
             <Fades value={clip.fadeOut ?? 0} onChange={(v) => set({ fadeOut: v || undefined })} />
           </Setting>
         </Menu>
-      </ToolGroup>
+      </Group>
 
       {clip.kind === "image" && !music ? (
         <button
           type="button"
           disabled={making}
           onClick={() => useEditor.getState().setPick({ file: fileOfClip(clip), clip: clip.id })}
-          className="press squircle inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[12px] bg-spike px-3 text-[12.5px] font-bold text-spike-ink hover:bg-spike-hi disabled:opacity-60"
+          className="press squircle mx-0.5 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[11px] bg-spike px-3 text-[12.5px] font-bold text-spike-ink hover:bg-spike-hi disabled:opacity-60"
           title="Turn this picture into a moving shot"
         >
           <Sparkles size={14} /> {making ? "Making it move…" : "Make it move"}
         </button>
       ) : null}
 
-      <ToolGroup label="Edit">
+      <Divider />
+      <Group label="Edit">
         <ToolButton label="Split at the playhead (S)" onClick={cut.split}>
           <Scissors size={15} />
         </ToolButton>
@@ -123,9 +123,25 @@ export function ShotTools({ clip, music, number }: { clip: EditClip; music: bool
         <ToolButton label="Delete (Del)" onClick={cut.remove}>
           <Trash2 size={15} />
         </ToolButton>
-      </ToolGroup>
+      </Group>
+      <ToolButton label="Done (Esc)" onClick={() => useEditor.getState().select(null)}>
+        <X size={15} />
+      </ToolButton>
     </>
   );
+}
+
+/** A run of the bar's buttons (plain: the bar itself is the surface). */
+function Group({ label, children }: { label?: string; children: ReactNode }) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" role={label ? "group" : undefined} aria-label={label}>
+      {children}
+    </div>
+  );
+}
+
+function Divider() {
+  return <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-white/[0.08]" />;
 }
 
 function Menu({ icon, label, title, children }: { icon: ReactNode; label: string; title: string; children: ReactNode }) {

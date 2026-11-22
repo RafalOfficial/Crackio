@@ -56,14 +56,14 @@ export async function makeLocation(words: string, model: string, signal: AbortSi
     result = await engine.run(job, ctx);
   } catch (err) {
     if (signal.aborted || !/edits pictures|add the one to change/i.test((err as Error).message)) throw err;
-    await fs.mkdir(DIR, { recursive: true });
-    const blank = path.join(DIR, `location-blank-${Date.now().toString(36)}.png`);
+    await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
+    const blank = path.join(/*turbopackIgnore: true*/ DIR, `location-blank-${Date.now().toString(36)}.png`);
     await sharp({ create: { width, height, channels: 3, background: { r: 128, g: 128, b: 128 } } }).png().toFile(blank);
     try {
       const over = `Replace this blank gray picture completely. ${prompt}`;
       result = await engine.run({ ...job, prompt: over, userPrompt: over, references: [{ path: blank, label: "blank canvas", role: "edit-target" }] }, ctx);
     } finally {
-      await fs.rm(blank, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ blank, { force: true });
     }
   }
   if (!result.outputs[0]) throw new EngineError("The model returned nothing.");
@@ -76,8 +76,8 @@ export async function makeLocation(words: string, model: string, signal: AbortSi
 /** Saved as big as it was made (uploads are capped at 2560 wide, which would undo a 4K place). */
 async function saveFull(data: Buffer, width: number, height: number) {
   const name = `${nanoid(12)}.jpg`;
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  await fs.writeFile(path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, name), await sharp(data).resize(width, height, { fit: "cover" }).jpeg({ quality: 93 }).toBuffer());
+  await fs.mkdir(/*turbopackIgnore: true*/ UPLOADS_DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, name), await sharp(data).resize(width, height, { fit: "cover" }).jpeg({ quality: 93 }).toBuffer());
   return { url: `/api/media/uploads/${name}`, width, height };
 }
 

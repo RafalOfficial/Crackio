@@ -1,9 +1,10 @@
 import "server-only";
 import { getSettings, updateSettings } from "../settings";
-import { rentedBoxes } from "../cloud-accounts";
+import { forgetRentedBoxes, rentedBoxes } from "../cloud-accounts";
 import { comfyTargets } from "../comfy-targets";
 import { removeMachine } from "../local-models";
 import { sshRun } from "../ssh";
+import { podAction, terminatePod } from "../runpod-pods";
 import { liveGpus } from "./live";
 import { setupJobs } from "./jobs";
 import { setupSnapshot } from "./status";
@@ -23,6 +24,7 @@ import type { AutoStop, CloudCredit } from "@/lib/setup/types";
  */
 
 const VAST = "https://console.vast.ai/api/v0";
+/** RunPod's credit is only in its GraphQL API (REST v2 has none); pods go through REST v2 (runpod-pods). */
 const RUNPOD_GQL = "https://api.runpod.io/graphql";
 
 type Money = {
@@ -84,6 +86,13 @@ async function boxActivity(login: { host: string; port: number; user: string }):
 }
 
 /** The last look at your accounts' credit (read every 2 minutes in the background; empty until the first answers). */
+/** The credit read now, not the copy of the last two minutes: for a question that can't wait (may a run start?). */
+export async function creditFresh(): Promise<CloudCredit[]> {
+  const value = await readCredit().catch(() => null);
+  if (value) money.credit = { at: Date.now(), value, reading: false };
+  return money.credit.value;
+}
+
 export function creditNow(): CloudCredit[] {
   if (!money.credit.reading && Date.now() - money.credit.at > 120_000) {
     money.credit.reading = true;
@@ -169,6 +178,8 @@ export async function setAutoStop(box: string, minutes: number | null, load?: nu
   });
   money.idle.delete(box);
   money.why.delete(box);
+  // A fresh first look: one left from an earlier rule counted every download since as "the last minute".
+  money.net.delete(box);
   watchIdle();
 }
 
@@ -183,14 +194,7 @@ export async function deleteBox(box: string) {
     if (!res.ok || body.success === false) throw new Error(body.msg ?? body.error ?? `vast.ai said ${res.status}.`);
   } else if (provider === "runpod") {
     if (!s.keys.runpod) throw new Error("Add your RunPod key under Settings → Accounts first.");
-    const res = await fetch(RUNPOD_GQL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.keys.runpod}` },
-      body: JSON.stringify({ query: `mutation { podTerminate(input: { podId: "${instance}" }) }` }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const body = (await res.json().catch(() => ({}))) as { errors?: { message?: string }[] };
-    if (!res.ok || body.errors?.length) throw new Error(body.errors?.[0]?.message ?? `RunPod said ${res.status}.`);
+    await terminatePod(s.keys.runpod, instance);
   } else {
     throw new Error("Crackio can only delete vast.ai and RunPod boxes.");
   }
@@ -199,6 +203,7 @@ export async function deleteBox(box: string) {
   await setAutoStop(box, null);
   for (const m of [money.idle, money.net, money.why, money.stopped]) m.delete(box);
   money.credit.at = 0;
+  forgetRentedBoxes();
 }
 
 /** Stops or starts a rented box at its cloud. */
@@ -217,10 +222,7 @@ export async function setBoxState(box: string, state: "stopped" | "running") {
     if (!res.ok || body.success === false) throw new Error(body.msg ?? body.error ?? `vast.ai said ${res.status}.`);
   } else if (provider === "runpod") {
     if (!s.keys.runpod) throw new Error("Add your RunPod key under Settings → Accounts first.");
-    const mutation = state === "stopped" ? `mutation { podStop(input: { podId: "${instance}" }) { id } }` : `mutation { podResume(input: { podId: "${instance}", gpuCount: 1 }) { id } }`;
-    const res = await fetch(RUNPOD_GQL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.keys.runpod}` }, body: JSON.stringify({ query: mutation }), signal: AbortSignal.timeout(15_000) });
-    const body = (await res.json().catch(() => ({}))) as { errors?: { message?: string }[] };
-    if (!res.ok || body.errors?.length) throw new Error(body.errors?.[0]?.message ?? `RunPod said ${res.status}.`);
+    await podAction(s.keys.runpod, instance, state === "stopped" ? "stop" : "start");
   } else {
     throw new Error("Crackio can only stop and start vast.ai and RunPod boxes.");
   }
@@ -228,6 +230,7 @@ export async function setBoxState(box: string, state: "stopped" | "running") {
   else money.stopped.set(box, Date.now());
   money.idle.delete(box);
   money.credit.at = 0;
+  forgetRentedBoxes();
 }
 
 /** Looks every minute at the boxes with an idle stop, and stops the ones idle for longer than asked. */
@@ -246,7 +249,18 @@ async function tend() {
   // Downloads through the helper (Get models, a pack) run without a set-up job.
   const snap = await setupSnapshot().catch(() => null);
   for (const box of boxes) {
-    if (money.stopped.has(box)) continue;
+    // Stopped by Crackio and still stopped: nothing to watch. One that answers again was started somewhere else (on
+    // the cloud's own site): it's running and billing, so its idle stop counts again. (It used to stay skipped, and a
+    // box started that way never stopped by itself.)
+    if (money.stopped.has(box)) {
+      const [p, i] = box.split(":");
+      const again = targets.find((x) => x.cloud?.provider === p && x.cloud.instance === i);
+      const up = again ? Boolean((await liveGpus([again.id]))[0]?.online) : false;
+      if (!up) continue;
+      money.stopped.delete(box);
+      money.idle.delete(box);
+      console.log(`[crackio] ${box} is running again (started outside Crackio): its idle stop counts again`);
+    }
     const rule = ruleOf(rules[box]);
     // Not idle, and why (Settings shows it): the idle clock starts again from the next quiet look.
     const notIdle = (why: string) => {

@@ -14,6 +14,7 @@ import { sayPictures } from "@/lib/prompt-pictures";
 import { previewSrcSet, previewUrl } from "@/lib/media-url";
 import { ASPECTS } from "@/lib/shot";
 import { cn } from "@/lib/cn";
+import { isSubmitEnter } from "@/lib/keys";
 
 /**
  * Adding a picture to a prompt: your latest generations first (no download and re-upload), then your computer, and for a
@@ -441,7 +442,7 @@ export function FrameMaker({
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {
             if (mentions.onKeyDown(e)) return;
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (isSubmitEnter(e)) {
               e.preventDefault();
               void make();
             }
@@ -504,10 +505,10 @@ export function FrameMaker({
           type="button"
           onClick={() => void make()}
           disabled={busy}
-          className="lip press squircle inline-flex h-10 shrink-0 items-center gap-2 rounded-[12px] bg-spike px-4 text-[13px] font-bold text-spike-ink [--lip:var(--color-spike-lip)] hover:bg-spike-hi disabled:opacity-70"
+          className="lip press squircle inline-flex h-10 shrink-0 items-center gap-2 rounded-[12px] bg-spike px-4 text-spike-ink [--lip:var(--color-spike-lip)] hover:bg-spike-hi disabled:opacity-70"
         >
           {busy ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />}
-          Generate
+          <span className="font-display text-[15px] leading-none">Generate</span>
         </button>
       </div>
       {error ? <p className="text-[12px] text-tally">{error}</p> : null}

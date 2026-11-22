@@ -2,6 +2,7 @@ import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { comfyTargets, type ComfyTarget } from "../comfy-targets";
+import { machineLook } from "../machine-probe";
 import { DATA_DIR } from "../paths";
 import { getSettings } from "../settings";
 import { lfm3TransformersOk } from "@/lib/local/lfm3";
@@ -92,7 +93,7 @@ const gs = globalThis as unknown as { __crackioVoiceSeen?: Promise<Seen> };
 
 async function remember(list: VoiceMachine[]): Promise<Seen> {
   const seen = await (gs.__crackioVoiceSeen ??= fs
-    .readFile(SEEN_FILE, "utf8")
+    .readFile(/*turbopackIgnore: true*/ SEEN_FILE, "utf8")
     .then((t) => JSON.parse(t) as Seen)
     .catch(() => ({}) as Seen));
   let changed = false;
@@ -105,9 +106,9 @@ async function remember(list: VoiceMachine[]): Promise<Seen> {
   }
   if (changed) {
     const tmp = `${SEEN_FILE}.${process.pid}-${Date.now()}.tmp`;
-    await fs.mkdir(path.dirname(SEEN_FILE), { recursive: true });
-    await fs.writeFile(tmp, JSON.stringify(seen));
-    await fs.rename(tmp, SEEN_FILE).catch(() => fs.rm(tmp, { force: true }));
+    await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(SEEN_FILE), { recursive: true });
+    await fs.writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(seen));
+    await fs.rename(/*turbopackIgnore: true*/ tmp, SEEN_FILE).catch(() => fs.rm(/*turbopackIgnore: true*/ tmp, { force: true }));
   }
   return seen;
 }
@@ -123,12 +124,17 @@ export function voiceMachines(fresh = false): Promise<VoiceMachine[]> {
     const runOn = (await getSettings()).runOn ?? null;
     const out = await Promise.all(
       targets.map(async (t): Promise<VoiceMachine> => {
-        const [info, voice, downloads, lfm3] = await Promise.all([
-          ask<Info>(t, "/crackio/info"),
-          ask<VoiceStatus>(t, "/crackio/voice"),
-          ask<Download[]>(t, "/crackio/downloads"),
-          ask<Lfm3Status>(t, "/crackio/lfm3/setup"),
-        ]);
+        // A machine that isn't answering (a rented GPU switched off) is known at once from the shared look
+        // (server/machine-probe, re-asked in the background), so these four questions never wait out its timeout.
+        const look = await machineLook(t);
+        const [info, voice, downloads, lfm3] = look.stats
+          ? await Promise.all([
+              ask<Info>(t, "/crackio/info"),
+              ask<VoiceStatus>(t, "/crackio/voice"),
+              ask<Download[]>(t, "/crackio/downloads"),
+              ask<Lfm3Status>(t, "/crackio/lfm3/setup"),
+            ])
+          : [null, null, null, null];
         const gpu = info?.gpus?.[0] ?? null;
         const ramGb = info?.ram_total ? info.ram_total / 1024 ** 3 : null;
         // A Mac's GPU shares its memory: a model can use about two thirds of it (three quarters on the big ones).

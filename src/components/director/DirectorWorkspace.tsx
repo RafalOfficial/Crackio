@@ -1,22 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { MathUtils } from "three";
-import { ImagePlus, UserRound } from "lucide-react";
-import { useDirector } from "@/lib/director/store";
+import { Clapperboard, ImagePlus, UserRound } from "lucide-react";
+import { useDirector, usePlayhead } from "@/lib/director/store";
 import { useHandoff } from "@/lib/hooks/use-handoff";
 import { useGenerationsStore } from "@/lib/hooks/use-generations";
 import { room } from "@/lib/director/room";
+import { useStageView } from "./stage/view";
+import { captureShot } from "./stage/capture";
 import { ASPECTS, aspectById, type AspectId } from "@/lib/shot";
 import { ScenePanel } from "./ScenePanel";
 import { ShotPanel } from "./ShotPanel";
 import { Viewport } from "./Viewport";
 import { PromptBar } from "./PromptBar";
-import { useDirectorTakes } from "./Takes";
-import { closeTake, openTake, useTakeView } from "./take-view";
+import { toolTakesNow } from "@/components/tools/use-tool-takes";
+import { closeTake, openTake, useTakeView, useTakesFrom } from "./take-view";
 import { useWalkKeys } from "./walk";
-import { addFilesToCast, addToCast, castViews, learnWhatItIs, setPlaceFile } from "./intake";
+import { addFilesToCast, addToCast, castViews, dragsVideo, learnWhatItIs, setPlaceFile, setPlaceVideoFile } from "./intake";
 import { liftFromPlace, useLift } from "./lift";
 import { usePlaceModel } from "./place-model";
 import { useShotModel } from "./shot-model";
@@ -52,7 +54,7 @@ const MIN_WORDS = 96;
 /**
  * The middle: the camera's screen (a title bar over exactly the frame you'll get) centered in the room above the prompt
  * bar, which sits at the bottom of the page like Home's. The screen is sized to its picture, so no blank band sits
- * around it (the user).
+ * around it.
  */
 function CameraColumn() {
   const room = useRef<HTMLDivElement>(null);
@@ -60,7 +62,7 @@ function CameraColumn() {
   const a = aspectById(aspect);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [wordsMax, setWordsMax] = useState<number | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = room.current;
     if (!el) return;
     const fit = () => {
@@ -74,7 +76,7 @@ function CameraColumn() {
       const height = Math.floor(width / ratio) + TITLE_BAR;
       setSize({ width, height });
       // Typed lines grow the prompt box into the room the screen doesn't use: the screen rises with it, and the box
-      // stops growing when the screen's top is level with the side panels' (the user), so the screen never shrinks.
+      // stops growing when the screen's top is level with the side panels', so the screen never shrinks.
       // Where the screen already fills the height, a few lines still fit.
       const words = document.getElementById("director-notes");
       if (words) setWordsMax(Math.max(MIN_WORDS, words.offsetHeight + el.clientHeight - height));
@@ -100,9 +102,13 @@ function CameraColumn() {
   );
 }
 
-/** Drop photos on the camera view: on the left half as the location, on the right half into the shot. */
-function DropZone({ size, children }: { size: { width: number; height: number } | null; children: React.ReactNode }) {
-  const [over, setOver] = useState<"place" | "cast" | null>(null);
+/**
+ * Drop photos on the camera view: on the left half as the location, on the right half into the shot. `fill`: as big as
+ * its stage at every width (Director v2, whose stage sets its own size): under `lg` it hugged a frame 260 px tall, and
+ * on a phone the whole 3D stage was a strip along the top of the screen.
+ */
+export function DropZone({ size, fill = false, children }: { size: { width: number; height: number } | null; fill?: boolean; children: React.ReactNode }) {
+  const [over, setOver] = useState<"place" | "cast" | "video" | null>(null);
   const [dragging, setDragging] = useState(false);
   const depth = useRef(0);
   const box = useRef<HTMLDivElement>(null);
@@ -115,7 +121,7 @@ function DropZone({ size, children }: { size: { width: number; height: number } 
       ref={box}
       // On phones the panel hugs the frame (toolbar + picture) instead of leaving empty bands.
       style={{ "--frame-h": `calc((100vw - 40px) / ${a.w / a.h} + ${TITLE_BAR}px)`, ...(size ?? {}) } as React.CSSProperties}
-      className={cn("relative h-[min(64vh,var(--frame-h))] w-full min-h-[260px] rounded-panel", size ? "lg:min-h-0" : "lg:h-full")}
+      className={cn("relative w-full rounded-panel", fill ? "h-full" : ["h-[min(64vh,var(--frame-h))] min-h-[260px]", size ? "lg:min-h-0" : "lg:h-full"])}
       onDragEnter={(e) => {
         if (!isFiles(e)) return;
         depth.current++;
@@ -132,13 +138,16 @@ function DropZone({ size, children }: { size: { width: number; height: number } 
         if (!isFiles(e)) return;
         e.preventDefault();
         const r = box.current!.getBoundingClientRect();
-        setOver(e.clientX < r.left + r.width / 2 ? "place" : "cast");
+        // A video is the whole place (Director video mode): one target, the whole stage.
+        setOver(dragsVideo(e.dataTransfer) ? "video" : e.clientX < r.left + r.width / 2 ? "place" : "cast");
       }}
       onDrop={(e) => {
         if (!isFiles(e)) return;
         e.preventDefault();
+        const video = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("video/"));
         const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
-        if (over === "place" && files[0]) void setPlaceFile(files[0]);
+        if (video) void setPlaceVideoFile(video).catch(() => undefined);
+        else if (over === "place" && files[0]) void setPlaceFile(files[0]);
         else if (files.length) void addFilesToCast(files);
         depth.current = 0;
         setDragging(false);
@@ -153,10 +162,16 @@ function DropZone({ size, children }: { size: { width: number; height: number } 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
-            className="pointer-events-none absolute inset-2 z-30 grid grid-cols-2 gap-2 rounded-[18px] bg-stage/80 p-2 backdrop-blur-sm"
+            className={cn("pointer-events-none absolute inset-2 z-30 grid gap-2 rounded-[18px] bg-stage/80 p-2 backdrop-blur-sm", over === "video" ? "grid-cols-1" : "grid-cols-2")}
           >
-            <DropTarget active={over === "place"} icon={<ImagePlus size={22} />} title="Use as the location" sub="It becomes the 3D set" />
-            <DropTarget active={over === "cast"} icon={<UserRound size={22} />} title="Add to the shot" sub="People, pets, products" />
+            {over === "video" ? (
+              <DropTarget active icon={<Clapperboard size={22} />} title="Film this video again" sub="Move the camera through it, then film it from there" />
+            ) : (
+              <>
+                <DropTarget active={over === "place"} icon={<ImagePlus size={22} />} title="Use as the location" sub="It becomes the 3D set" />
+                <DropTarget active={over === "cast"} icon={<UserRound size={22} />} title="Add to the shot" sub="People, pets, products" />
+              </>
+            )}
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -182,7 +197,7 @@ function DropTarget({ active, icon, title, sub }: { active: boolean; icon: React
 }
 
 /** In development, scripts (benchmarks, tests) stage scenes through the same store and intake the page uses. */
-function useScriptHandle() {
+export function useScriptHandle() {
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
     (window as unknown as { __crackioDirector?: unknown }).__crackioDirector = {
@@ -196,6 +211,9 @@ function useScriptHandle() {
       world: useWorld,
       generations: useGenerationsStore,
       room,
+      playhead: usePlayhead,
+      // Tests grab the shot's passes (the kept shot's camera view) without shooting.
+      capture: captureShot,
     };
   }, []);
 }
@@ -204,7 +222,7 @@ function useScriptHandle() {
  * Cast from before Crackio read pictures (or whose reading predates knowing which side the photo shows) gets read
  * once, so its stand-in faces the way its photo card shows it.
  */
-function useReadCast() {
+export function useReadCast() {
   const pending = useDirector((s) => s.scene.elements.filter((e) => e.image && e.read?.around === undefined).map((e) => e.id).join(","));
   useEffect(() => {
     for (const id of pending.split(",").filter(Boolean)) {
@@ -218,12 +236,18 @@ function useReadCast() {
   const ownChosen = usePlaceModel((s) => Boolean(s.model && s.model !== "auto"));
   const shotChosen = useShotModel((s) => s.model !== "auto");
   const chosen = ownChosen || shotChosen;
+  // Director v2 lifts only when you ask (Cast & place → "Lift them out"): done by itself, the model sometimes drew the
+  // astronaut back instead of erasing him, and he stood on set twice (v2's A40 test).
+  const v2 = useStageView((s) => s.v2);
   useEffect(() => {
-    if (unlifted && chosen) void liftFromPlace();
-  }, [unlifted, chosen]);
+    if (unlifted && chosen && !v2) void liftFromPlace();
+  }, [unlifted, chosen, v2]);
   // Then the place all around (its 360 world), from the photo without its things (or as it is, when lifting failed).
+  // Director v2 builds it only when you ask (Cast & place → "Build the world around it"): built by itself it held the
+  // GPU for 2–6 minutes after every new photo, and a shot taken meanwhile waited behind it: minutes lost when all you
+  // want is one quick picture. A shot from the photo's 3D set doesn't need it.
   const liftFailed = useLift((s) => Boolean(s.error));
-  const unbuilt = useDirector((s) => (s.scene.place.image?.view && (s.scene.place.lifted || liftFailed) && !s.scene.place.world ? s.scene.place.image.url : ""));
+  const unbuilt = useDirector((s) => (!v2 && s.scene.place.image?.view && (s.scene.place.lifted || liftFailed) && !s.scene.place.world ? s.scene.place.image.url : ""));
   useEffect(() => {
     if (unbuilt && chosen) void buildWorld();
   }, [unbuilt, chosen]);
@@ -240,7 +264,7 @@ function useReadCast() {
 }
 
 /** Words and photos sent from another page (e.g. Home's "Stage in Director") land on set. */
-function useHandoffIntoScene() {
+export function useHandoffIntoScene() {
   useEffect(() => {
     const draft = useHandoff.getState().take();
     if (!draft) return;
@@ -251,13 +275,14 @@ function useHandoffIntoScene() {
   }, []);
 }
 
-function useShortcuts() {
-  const takes = useDirectorTakes();
-  const takesRef = useRef(takes);
-  useEffect(() => {
-    takesRef.current = takes;
-  }, [takes]);
+/** Every Director take as the takes library shows it, newest first (read when a key is pressed). */
+function takesNow() {
+  const project = useTakesFrom.getState().project;
+  const all = toolTakesNow("director");
+  return project ? all.filter((g) => g.params?.project === project) : all;
+}
 
+export function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
@@ -266,7 +291,7 @@ function useShortcuts() {
       // In the before/after viewer, arrows step through takes.
       const viewing = useTakeView.getState().viewing;
       if (viewing) {
-        const list = takesRef.current;
+        const list = takesNow();
         const i = list.findIndex((g) => g.id === viewing);
         if (e.key === "Escape") return closeTake();
         if (e.key === "ArrowLeft" && list[i + 1]) {

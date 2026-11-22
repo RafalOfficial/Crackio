@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { comfyKey, comfyModel } from "@/lib/providers/comfy-models";
+import { comfyKey, comfyModel, comfyServed, noteComfyServed } from "@/lib/providers/comfy-models";
+import { bumpEpoch } from "@/lib/server/epoch";
 import { encodeDuration, fitDuration, fitResolution, nearestAspect, type Caps } from "@/lib/models/caps";
 import { formatMoney, type Cost, type QuoteSettings } from "@/lib/models/pricing";
 import { aspectById } from "@/lib/shot";
@@ -32,6 +33,14 @@ function flatFor(caps: Caps, s: QuoteSettings): Record<string, unknown> {
     const a = aspectById(s.aspect);
     const pick = caps.aspect.choices.find((c) => c.value === s.aspectValue) ?? (s.start ? caps.aspect.choices.find((c) => c.ratio === null) : undefined) ?? nearestAspect(caps.aspect.choices, a.w / a.h);
     if (pick) f[caps.aspect.field] = pick.value;
+  }
+  // A model that takes its shape and size as one value ("1920x1080": LTX 2.5 Pro). Left out, Comfy answered "resolution
+  // is missing" and the screen had no price for the model at all.
+  if (caps.size) {
+    const a = aspectById(s.aspect);
+    const real = caps.size.presets.filter((c) => c.ratio !== null);
+    const pick = caps.size.presets.find((c) => c.value === s.aspectValue) ?? caps.size.presets.find((c) => c.value === caps.size?.default) ?? nearestAspect(real, a.w / a.h) ?? caps.size.presets[0];
+    if (pick) f[caps.size.field] = pick.value;
   }
   if (caps.audio && s.output === "video") {
     const on = s.sound ?? caps.audio.default;
@@ -76,6 +85,10 @@ export async function comfyQuote(model: string, family: string, s: QuoteSettings
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(10_000),
     });
+    // Router lists some models before it runs them: its answer here is how Crackio learns which (comfyServed).
+    if (res.status === 403 && ((await res.clone().json().catch(() => null)) as { error_type?: string } | null)?.error_type === "not_enabled") {
+      if (await noteComfyServed(model, false)) bumpEpoch();
+    } else if (res.ok && (await noteComfyServed(model, true))) bumpEpoch();
     if (res.ok) {
       const j = (await res.json()) as { source?: string; amount?: string; min_amount?: string; max_amount?: string };
       if (j.source === "exact" && j.amount) cost = { amount: Number(j.amount), detail: "Comfy's quote", approximate: false };
@@ -91,4 +104,25 @@ export async function comfyQuote(model: string, family: string, s: QuoteSettings
   if (cost && !Number.isFinite(cost.amount)) cost = null;
   cache.set(id, { at: Date.now(), cost });
   return scale(cost);
+}
+
+let probing = false;
+
+/**
+ * Whether Comfy Router runs each of these models, learnt from a price check of its usual request (free: nothing runs).
+ * One at a time, each model at most every 12 hours. A model Router lists but doesn't run yet is then left out of the
+ * ready ones, where a job with it failed with "does not run this model yet".
+ */
+export async function probeServed(models: { model: string; family: string; kind: "image" | "video" }[]) {
+  if (probing) return;
+  probing = true;
+  try {
+    const { asked } = await comfyServed();
+    for (const m of models) {
+      if (asked(m.model)) continue;
+      await comfyQuote(m.model, m.family, { output: m.kind, aspect: "16:9", count: 1 }).catch(() => null);
+    }
+  } finally {
+    probing = false;
+  }
 }

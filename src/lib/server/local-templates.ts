@@ -43,11 +43,11 @@ const g = globalThis as unknown as {
 
 /** The templates' metadata, read again when index.json changes. */
 export function templateIndex(): TemplateMeta[] {
-  const file = path.join(DIR, "index.json");
-  const mtime = fs.statSync(file).mtimeMs;
+  const file = path.join(/*turbopackIgnore: true*/ DIR, "index.json");
+  const mtime = fs.statSync(/*turbopackIgnore: true*/ file).mtimeMs;
   const hit = g.__crackioTemplateIndexAt;
   if (hit && hit.mtime === mtime) return hit.index;
-  const index = JSON.parse(fs.readFileSync(file, "utf8")) as TemplateMeta[];
+  const index = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")) as TemplateMeta[];
   g.__crackioTemplateIndexAt = { mtime, index };
   if (hit) models = null;
   return index;
@@ -58,7 +58,7 @@ export function templateGraph(name: string): ApiGraph {
   let graph = graphs.get(name);
   if (!graph) {
     if (!/^[\w.\-]+$/.test(name)) throw new Error("Bad template name.");
-    graph = JSON.parse(fs.readFileSync(path.join(DIR, "api", `${name}.json`), "utf8")) as ApiGraph;
+    graph = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ DIR, "api", `${name}.json`), "utf8")) as ApiGraph;
     graphs.set(name, graph);
   }
   return graph;
@@ -72,6 +72,20 @@ let models: LocalModel[] | null = null;
  * The size a template renders at, in megapixels (its own width times height), or null when it doesn't say: a video model
  * made for 480p gets slower, heavier and no sharper when asked for 720p.
  */
+/**
+ * Open video models made for 720p as well as the 480p their template is set to, from their makers (Wan 2.2 A14B: 480p
+ * and 720p). They're offered both and keep 480p as their usual size: 720p is over twice the work.
+ */
+const MADE_FOR_720P = new Set(["tpl-wan2.2-14b-video"]);
+export const madeFor720p = (modelId: string) => MADE_FOR_720P.has(modelId);
+
+/**
+ * Models made for five seconds, by their nodes (Wan, Kandinsky 5, HunyuanVideo 1.5 and what's built on it): asked for
+ * more, the motion plays again from the start. Seen on Wan 2.2 14B, Nov 2026: a 10 s clip was back in its opening pose
+ * at 5 s. LTX models go on, and so does a template that sets its own limit.
+ */
+const FIVE_SECONDS = /^(Wan|Kandinsky5|HunyuanVideo15|EmptyHunyuanVideo15)/;
+
 export function nativeMp(name: string): number | null {
   const io = templateIO(name);
   const g = templateGraph(name);
@@ -415,10 +429,12 @@ function capsOf(m: LocalModel): Caps {
   if (m.unit === "clip") {
     // Up to the size the model was made for: a 480p model isn't offered 720p.
     const native = Math.max(...[...modes].map((mode) => nativeMp(first(mode)!) ?? 0.9));
-    const sizes = native < 0.6 ? ["480p"] : ["480p", "720p"];
+    const sizes = native < 0.6 && !madeFor720p(m.id) ? ["480p"] : ["480p", "720p"];
     // As long as the model goes: a template that stops at 81 frames of 16 fps makes 5 s, whatever is asked.
     const ios = [...modes].map((mode) => templateIO(first(mode)!));
-    const capped = ios.map((io) => (io.maxFrames && io.fps ? Math.floor((io.maxFrames - 1) / io.fps) : 10));
+    const names = [...modes].map((mode) => first(mode)!);
+    const short = (name: string) => Object.values(templateGraph(name)).some((n) => FIVE_SECONDS.test(n.class_type));
+    const capped = ios.map((io, i) => (io.maxFrames && io.fps ? Math.floor((io.maxFrames - 1) / io.fps) : short(names[i]) ? 5 : 10));
     const longest = Math.max(1, Math.min(10, ...capped));
     return {
       ...NONE,
@@ -429,8 +445,10 @@ function capsOf(m: LocalModel): Caps {
       // One composite reference sheet (Cast puts everyone's sheet in one picture).
       refs: modes.has("r2v") ? { field: "reference", required: false, array: false, min: 0, max: 1 } : null,
       duration: { field: "duration", mode: "range", min: 1, max: longest, integer: true, encode: "number", auto: false, default: Math.min(5, longest) },
-      resolution: { field: "resolution", choices: sizes.map((v) => ({ value: v, label: v })), default: sizes.at(-1)! },
-      aspect: modes.has("t2v") || modes.has("r2v") ? { field: "aspect", choices: shapes(["16:9", "9:16", "1:1", "4:3", "3:4"]), default: "16:9" } : null,
+      resolution: { field: "resolution", choices: sizes.map((v) => ({ value: v, label: v })), default: native < 0.6 ? "480p" : "720p" },
+      // A model that starts from a picture takes a shape too: its clip keeps the frame's shape until one is picked, and
+      // a picked one crops the frame (comfy-local-recipes `cropShape`). Until Nov 2026 these had no shape to pick.
+      aspect: { field: "aspect", choices: shapes(["16:9", "9:16", "1:1", "4:3", "3:4"]), default: "16:9" },
       quality,
       tuning,
     };
@@ -453,9 +471,18 @@ function capsOf(m: LocalModel): Caps {
 
 export type TemplateDef = { def: ModelDef; caps: Caps; model: LocalModel };
 
+const defsOf = new WeakMap<LocalModel[], TemplateDef[]>();
+
 /** Every template-based model as a model definition (`local:tpl:…`), for the pickers once it's installed. */
 export function templateDefs(): TemplateDef[] {
-  return templateModels().map((m) => {
+  const models = templateModels();
+  let defs = defsOf.get(models);
+  if (!defs) defsOf.set(models, (defs = makeTemplateDefs(models)));
+  return defs;
+}
+
+function makeTemplateDefs(models: LocalModel[]): TemplateDef[] {
+  return models.map((m) => {
     const caps = capsOf(m);
     const kind = m.tasks.includes("upscale") ? "upscale" : m.unit === "clip" ? "video" : "image";
     const def: ModelDef = {

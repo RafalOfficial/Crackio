@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useInsertionEffect, useMemo, useRef } from "react";
 import { useFrame, useThree, type ThreeElements } from "@react-three/fiber";
 import {
   CapsuleGeometry,
@@ -450,8 +450,7 @@ type Handlers = Pick<ThreeElements["mesh"], "onPointerDown" | "onPointerMove" | 
 
 export function StandIn({ el, color, light, visible, handlers }: { el: SceneElement; color: string; light: Light; visible: boolean; handlers: Handlers }) {
   // The shot’s words pose their arms too ("Lena is taking a selfie"): standin poseOf.
-  const notes = useDirector((st) => st.scene.notes);
-  const pose = poseOf(el, notes);
+  const pose = useDirector((st) => poseOf(el, st.scene.notes));
   const size = standInSize(el);
   const { parts, scale } = useMemo(() => {
     const scale = v(size.height, size.height, size.height);
@@ -462,7 +461,7 @@ export function StandIn({ el, color, light, visible, handlers }: { el: SceneElem
   }, [el.kind, el.name, pose, size.height, size.width, size.length]);
 
   const materials = useMemo(() => parts.map((p) => material(p.color ?? color, p.color ? 0 : (p.shade ?? 0))), [parts, color]);
-  useEffect(() => () => materials.forEach((m) => m.dispose()), [materials]);
+  useInsertionEffect(() => () => materials.forEach((m) => m.dispose()), [materials]);
   // Uniforms change in place through the meshes (three.js materials are mutable, React state isn't).
   const group = useRef<Group>(null);
   const invalidate = useThree((s) => s.invalidate);
@@ -543,7 +542,7 @@ const photoFragment = /* glsl */ `
 /**
  * The stand-in's body wearing the subject's own pictures, the front one on its front and the back one on its back:
  * shown while it's moved or turned, so which way it faces is plain (alone, its drawing jumped from side to side every
- * 90 degrees: the user). In the live view only (the helper layer), never in a shot.
+ * 90 degrees). In the live view only (the helper layer), never in a shot.
  */
 export function PhotoBody({
   el,
@@ -564,8 +563,7 @@ export function PhotoBody({
     return () => onShown?.(false);
   }, [onShown]);
   // The shot’s words pose their arms too ("Lena is taking a selfie"): standin poseOf.
-  const notes = useDirector((st) => st.scene.notes);
-  const pose = poseOf(el, notes);
+  const pose = useDirector((st) => poseOf(el, st.scene.notes));
   const size = standInSize(el);
   const { parts, scale } = useMemo(() => {
     const scale = v(size.height, size.height, size.height);
@@ -593,7 +591,7 @@ export function PhotoBody({
       }),
     [front, back],
   );
-  useEffect(() => () => material.dispose(), [material]);
+  useInsertionEffect(() => () => material.dispose(), [material]);
   const group = useRef<Group>(null);
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => {

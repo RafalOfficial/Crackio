@@ -17,7 +17,7 @@ const DRIFT = 14;
  */
 export async function keepOutside(sourcePath: string, outputs: EngineOutput[], boxes: Box[]): Promise<EngineOutput[]> {
   if (!boxes.length) return outputs;
-  const original = await fs.readFile(sourcePath);
+  const original = await fs.readFile(/*turbopackIgnore: true*/ sourcePath);
   const src = await sharp(original, { failOn: "none" }).rotate().toBuffer({ resolveWithObject: true });
   const ratio = src.info.width / src.info.height;
 

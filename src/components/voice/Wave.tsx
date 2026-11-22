@@ -26,11 +26,16 @@ export function Wave({
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const size = useRef({ w: 0, h: 0 });
+  // What to draw, kept current for the one observer below: playback moves `progress` every frame, and recreating the
+  // ResizeObserver with each move (60 times a second) was most of a playing take's cost.
+  const input = useRef({ peaks, progress, color, bar, gap });
+  const paint = useRef<() => void>(() => {});
 
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
     const draw = () => {
+      const { peaks, progress, color, bar, gap } = input.current;
       const { w, h } = size.current;
       if (!w || !h) return;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -56,13 +61,22 @@ export function Wave({
         ctx.fill();
       }
     };
+    paint.current = draw;
     const ro = new ResizeObserver(([e]) => {
       size.current = { w: e.contentRect.width, h: e.contentRect.height };
       draw();
     });
     ro.observe(c);
     draw();
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      paint.current = () => {};
+    };
+  }, []);
+
+  useEffect(() => {
+    input.current = { peaks, progress, color, bar, gap };
+    paint.current();
   }, [peaks, progress, color, bar, gap]);
 
   return (

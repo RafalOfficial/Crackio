@@ -15,6 +15,8 @@ const Start = z.object({
   include: z.array(z.string().max(60)).max(20).optional(),
   /** Models picked in Settings, by requirement ("video.model": LTX-2.5, INT8), instead of Crackio's picks. */
   choices: z.record(z.string().max(60), z.object({ model: z.string().min(1).max(80), variant: z.string().min(1).max(60) })).optional(),
+  /** Just these requirements of the tools ("image.enhance"), and nothing else they need: an add-on by itself. */
+  only: z.array(z.string().max(60)).min(1).max(20).optional(),
 });
 
 /** Sets tools up on a machine: everything they need that isn't there, picked for its hardware or by you (`choices`). */
@@ -23,7 +25,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid request" }, { status: 400 });
   const kits = parsed.data.kits.filter(isKitId);
   try {
-    const job = await startSetup(await setupSnapshot(true), { machine: parsed.data.machine, kits, include: parsed.data.include, choices: parsed.data.choices });
+    const job = await startSetup(await setupSnapshot(true), { machine: parsed.data.machine, kits, include: parsed.data.include, choices: parsed.data.choices, only: parsed.data.only });
     return Response.json({ job });
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: err instanceof SetupError ? err.status : 500 });

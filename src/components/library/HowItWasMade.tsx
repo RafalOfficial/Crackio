@@ -16,23 +16,33 @@ import { shortGpuName } from "@/lib/local/fit";
  * recipes were kept, or made without ComfyUI, shows nothing.
  */
 export function HowItWasMade({ gen }: { gen: Generation }) {
-  const [kept, setKept] = useState<{ id: string; recipe: JobRecipe | null } | null>(null);
+  const [kept, setKept] = useState<{ id: string; recipe: JobRecipe | null } | null>(() => (recipes.has(gen.id) ? { id: gen.id, recipe: recipes.get(gen.id)! } : null));
   useEffect(() => {
     if (gen.status !== "done") return;
-    let off = false;
-    fetch(`/api/generations/${encodeURIComponent(gen.id)}/recipe`, { cache: "no-store" })
-      .then(async (res) => (res.ok ? ((await res.json()) as { recipe: JobRecipe }).recipe : null))
-      .catch(() => null)
-      .then((recipe) => {
-        if (!off) setKept({ id: gen.id, recipe });
-      });
-    return () => {
-      off = true;
-    };
+    // A finished take's recipe never changes: asked once, then shown straight away every time you step back to it.
+    if (recipes.has(gen.id)) return setKept({ id: gen.id, recipe: recipes.get(gen.id)! });
+    const ctrl = new AbortController();
+    fetch(`/api/generations/${encodeURIComponent(gen.id)}/recipe`, { cache: "no-store", signal: ctrl.signal })
+      .then(async (res) => {
+        const recipe = res.ok ? ((await res.json()) as { recipe: JobRecipe }).recipe : null;
+        if (res.ok || res.status === 404) remember(gen.id, recipe);
+        return recipe;
+      })
+      .then((recipe) => setKept({ id: gen.id, recipe }))
+      // Stepped on before it came (cancelled), or it didn't load: nothing shown, asked again next time.
+      .catch(() => undefined);
+    return () => ctrl.abort();
   }, [gen.id, gen.status]);
   const recipe = kept?.id === gen.id ? kept.recipe : null;
   if (!recipe?.steps.length) return null;
   return <Recipe recipe={recipe} key={recipe.id} />;
+}
+
+/** Recipes already read, by take (the newest 200). */
+const recipes = new Map<string, JobRecipe | null>();
+function remember(id: string, recipe: JobRecipe | null) {
+  recipes.set(id, recipe);
+  if (recipes.size > 200) recipes.delete(recipes.keys().next().value!);
 }
 
 function Recipe({ recipe }: { recipe: JobRecipe }) {

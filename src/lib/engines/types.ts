@@ -71,6 +71,19 @@ export type EngineJob = {
     controlEnd?: number;
     /** Qwen Angles: its AnyAngle LoRA's strength (0 to 1.5, 1 when missing). */
     lora?: number;
+    /** Qwen Angles for the Director: the take in the view's framing (not the photo's), drawn as the challenge winner did. */
+    frame?: boolean;
+    /** Qwen Angles for the Director: the challenge winner's 3D World instead (their Panorama Studio's state: the Camera). */
+    studio?: Record<string, unknown>;
+    /** With `studio`: the photo's horizontal field of view (degrees) for MoGe-3, so its world lines up with the Director's set. */
+    mogeFov?: number;
+    /** FLUX 3 Klein edits: the picture drawn at its own size, pixel for pixel (Director Small extend's gray canvas). */
+    keepReference?: boolean;
+    /**
+     * Local pictures: never enlarge. Past the largest size the model draws by itself, the picture stays at that size
+     * instead of being redrawn or enlarged to the size asked (the Advanced section's switch).
+     */
+    nativeOnly?: boolean;
   };
   /** Where an inpainting model paints: white changes, black stays (the main picture's size or shape). */
   mask?: EngineReference;

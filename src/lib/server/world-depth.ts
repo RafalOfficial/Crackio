@@ -190,14 +190,14 @@ export async function worldDepth(worldUrl: string, eye: number): Promise<{ depth
   const file = urlToPath(worldUrl);
   if (!file) throw new Error("Crackio can't find the place's world.");
   const height = Math.max(0.3, Math.min(30, eye || 1.6));
-  const key = createHash("sha1").update(await fs.readFile(file)).update(JSON.stringify([height, VERSION])).digest("hex");
-  const cache = path.join(DIR, `${key}.json`);
-  const hit = await fs.readFile(cache, "utf8").catch(() => null);
+  const key = createHash("sha1").update(await fs.readFile(/*turbopackIgnore: true*/ file)).update(JSON.stringify([height, VERSION])).digest("hex");
+  const cache = path.join(/*turbopackIgnore: true*/ DIR, `${key}.json`);
+  const hit = await fs.readFile(/*turbopackIgnore: true*/ cache, "utf8").catch(() => null);
   if (hit) {
     const kept = JSON.parse(hit) as { depth: WorldDepth; light: WorldLight };
-    if (urlToPath(kept.depth.url) && (await fs.stat(urlToPath(kept.depth.url)!).catch(() => null))) return kept;
+    if (urlToPath(kept.depth.url) && (await fs.stat(/*turbopackIgnore: true*/ urlToPath(kept.depth.url)!).catch(() => null))) return kept;
   }
-  await fs.mkdir(DIR, { recursive: true });
+  await fs.mkdir(/*turbopackIgnore: true*/ DIR, { recursive: true });
 
   const meta = await sharp(file).metadata();
   const span = 2 * Math.PI * ((meta.height ?? 1) / (meta.width ?? 2));
@@ -220,7 +220,7 @@ export async function worldDepth(worldUrl: string, eye: number): Promise<{ depth
         img[i + 2] = rgb[2];
       }
     }
-    const tmp = path.join(DIR, `view-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.png`);
+    const tmp = path.join(/*turbopackIgnore: true*/ DIR, `view-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.png`);
     await sharp(img, { raw: { width: S, height: S, channels: 3 } }).png().toFile(tmp);
     try {
       const d = await estimateDepth(tmp);
@@ -229,7 +229,7 @@ export async function worldDepth(worldUrl: string, eye: number): Promise<{ depth
       for (let i = 0; i < D.length; i++) D[i] = raw.readUInt16LE(i * 2) / 65535;
       views.push({ ...b, D, w: d.width, h: d.height, a: 0, b: 0, ok: false, weight: spec.weight });
     } finally {
-      await fs.rm(tmp, { force: true });
+      await fs.rm(/*turbopackIgnore: true*/ tmp, { force: true });
     }
   }
 
@@ -592,8 +592,8 @@ export async function worldDepth(worldUrl: string, eye: number): Promise<{ depth
     px[i * 4 + 3] = 255;
   }
   const name = `${nanoid(12)}.png`;
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  await fs.writeFile(path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, name), await sharp(px, { raw: { width: W, height: H, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer());
+  await fs.mkdir(/*turbopackIgnore: true*/ UPLOADS_DIR, { recursive: true });
+  await fs.writeFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ UPLOADS_DIR, name), await sharp(px, { raw: { width: W, height: H, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer());
 
   let upper = 0;
   let skyUp = 0;
@@ -605,7 +605,7 @@ export async function worldDepth(worldUrl: string, eye: number): Promise<{ depth
   const indoor = ceiling !== null || skyUp < upper * 0.08;
   const depth: WorldDepth = { url: `/api/media/uploads/${name}`, width: W, height: H, rMin: R_MIN, eye: height, ceiling, indoor, version: VERSION };
   const light = await lightOf(erp, cls, dirs, W, H, indoor);
-  await fs.writeFile(cache, JSON.stringify({ depth, light }));
+  await fs.writeFile(/*turbopackIgnore: true*/ cache, JSON.stringify({ depth, light }));
   return { depth, light };
 }
 

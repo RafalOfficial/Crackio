@@ -16,11 +16,11 @@ export type Punch = { from: number; to: number; zoom: number; x: number; y: numb
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
 async function temp<T>(fn: (dir: string) => Promise<T>) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crackio-film-"));
+  const dir = await fs.mkdtemp(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ os.tmpdir(), "crackio-film-"));
   try {
     return await fn(dir);
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
   }
 }
 
@@ -32,8 +32,8 @@ const ENCODE = ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt"
  */
 export async function keepShape(data: Buffer, ratio: number): Promise<{ data: Buffer; width: number; height: number }> {
   return temp(async (dir) => {
-    const src = path.join(dir, "in.mp4");
-    await fs.writeFile(src, data);
+    const src = path.join(/*turbopackIgnore: true*/ dir, "in.mp4");
+    await fs.writeFile(/*turbopackIgnore: true*/ src, data);
     const info = await probe(src);
     const w = info.width ?? 0;
     const h = info.height ?? 0;
@@ -41,10 +41,10 @@ export async function keepShape(data: Buffer, ratio: number): Promise<{ data: Bu
     // Keep the long edge; the other edge follows the picture's shape.
     const width = ratio >= w / h ? w : even(h * ratio);
     const height = ratio >= w / h ? even(w / ratio) : h;
-    const out = path.join(dir, "out.mp4");
+    const out = path.join(/*turbopackIgnore: true*/ dir, "out.mp4");
     const run = await runFfmpeg(["-y", "-i", src, "-vf", `scale=${width}:${height}:flags=lanczos,setsar=1`, ...ENCODE, "-c:a", "copy", out]);
     if (run.code !== 0) return { data, width: w, height: h };
-    return { data: await fs.readFile(out), width, height };
+    return { data: await fs.readFile(/*turbopackIgnore: true*/ out), width, height };
   });
 }
 
@@ -55,8 +55,8 @@ export async function keepShape(data: Buffer, ratio: number): Promise<{ data: Bu
 export async function punchIns(data: Buffer, punches: Punch[]): Promise<Buffer> {
   if (!punches.length) return data;
   return temp(async (dir) => {
-    const src = path.join(dir, "in.mp4");
-    await fs.writeFile(src, data);
+    const src = path.join(/*turbopackIgnore: true*/ dir, "in.mp4");
+    await fs.writeFile(/*turbopackIgnore: true*/ src, data);
     const info = await probe(src);
     const W = info.width ?? 0;
     const H = info.height ?? 0;
@@ -72,13 +72,13 @@ export async function punchIns(data: Buffer, punches: Punch[]): Promise<Buffer> 
     const cy = `if(gt(${inside},0),${punches.map((p) => `${span(p)}*${p.y.toFixed(3)}`).join("+")},0.5)`;
     // One output frame per input frame (d=1), the window kept inside the picture.
     const filter = `zoompan=z='1+${z}':x='max(0,min(iw-iw/zoom,iw*(${cx})-iw/zoom/2))':y='max(0,min(ih-ih/zoom,ih*(${cy})-ih/zoom/2))':d=1:s=${W}x${H}:fps=${Math.round(info.fps ?? 24)},setsar=1`;
-    const out = path.join(dir, "out.mp4");
+    const out = path.join(/*turbopackIgnore: true*/ dir, "out.mp4");
     const run = await runFfmpeg(["-y", "-i", src, "-vf", filter, ...ENCODE, "-c:a", "copy", out]);
     if (run.code !== 0) {
       console.warn(`[film] punch-ins failed: ${run.stderr.split("\n").filter(Boolean).slice(-2).join(" ")}`);
       return data;
     }
-    return fs.readFile(out);
+    return fs.readFile(/*turbopackIgnore: true*/ out);
   });
 }
 
@@ -89,8 +89,8 @@ export async function joinParts(parts: { data: Buffer; in?: number; out?: number
     const inputs: string[] = [];
     const chains: string[] = [];
     for (let i = 0; i < parts.length; i++) {
-      const file = path.join(dir, `p${i}.mp4`);
-      await fs.writeFile(file, parts[i].data);
+      const file = path.join(/*turbopackIgnore: true*/ dir, `p${i}.mp4`);
+      await fs.writeFile(/*turbopackIgnore: true*/ file, parts[i].data);
       const info = await probe(file);
       const from = Math.max(0, parts[i].in ?? 0);
       const to = Math.min(info.duration ?? 9999, parts[i].out ?? info.duration ?? 9999);
@@ -105,34 +105,45 @@ export async function joinParts(parts: { data: Buffer; in?: number; out?: number
     }
     const n = parts.length;
     const graph = `${chains.join(";")};${Array.from({ length: n }, (_, i) => `[v${i}][a${i}]`).join("")}concat=n=${n}:v=1:a=1[v][a]`;
-    const out = path.join(dir, "joined.mp4");
+    const out = path.join(/*turbopackIgnore: true*/ dir, "joined.mp4");
     const run = await runFfmpeg(["-y", ...inputs, "-filter_complex", graph, "-map", "[v]", "-map", "[a]", ...ENCODE, "-c:a", "aac", "-b:a", "192k", out]);
     if (run.code !== 0) throw new Error(`Couldn't join the parts: ${run.stderr.split("\n").filter(Boolean).slice(-2).join(" ")}`);
-    return fs.readFile(out);
+    return fs.readFile(/*turbopackIgnore: true*/ out);
   });
 }
 
 /** A clip's last good frame as a PNG file (the next part starts from it). */
 export async function lastFrame(data: Buffer, dest: string, at?: number): Promise<string> {
   return temp(async (dir) => {
-    const src = path.join(dir, "in.mp4");
-    await fs.writeFile(src, data);
+    const src = path.join(/*turbopackIgnore: true*/ dir, "in.mp4");
+    await fs.writeFile(/*turbopackIgnore: true*/ src, data);
     const info = await probe(src);
     const t = Math.max(0, Math.min(at ?? (info.duration ?? 1) - 0.06, (info.duration ?? 1) - 0.06));
     const grab = (s: number) => runFfmpeg(["-hide_banner", "-loglevel", "error", "-ss", s.toFixed(3), "-i", src, "-frames:v", "1", "-f", "image2pipe", "-c:v", "png", "-"], { timeoutMs: 30_000 });
     let r = await grab(t);
     if (!r.stdout.length && t > 0.2) r = await grab(t - 0.2);
     if (!r.stdout.length) throw new Error("Couldn't read the clip's last frame.");
-    await fs.writeFile(dest, r.stdout);
+    await fs.writeFile(/*turbopackIgnore: true*/ dest, r.stdout);
     return dest;
   });
 }
 
+// Each clip held in memory is measured once: the cut asks for the same clip's length several times, and every ask
+// wrote the whole clip to disk to probe it.
+const measured = new WeakMap<Buffer, Promise<number>>();
+
 /** Seconds of a clip held in memory. */
-export async function lengthOf(data: Buffer): Promise<number> {
-  return temp(async (dir) => {
-    const src = path.join(dir, "in.mp4");
-    await fs.writeFile(src, data);
-    return (await probe(src)).duration ?? 0;
-  });
+export function lengthOf(data: Buffer): Promise<number> {
+  let known = measured.get(data);
+  if (!known) {
+    known = temp(async (dir) => {
+      const src = path.join(/*turbopackIgnore: true*/ dir, "in.mp4");
+      await fs.writeFile(/*turbopackIgnore: true*/ src, data);
+      return (await probe(src)).duration ?? 0;
+    });
+    measured.set(data, known);
+    // A failed look isn't kept: the next ask tries again.
+    known.catch(() => measured.delete(data));
+  }
+  return known;
 }

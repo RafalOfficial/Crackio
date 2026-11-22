@@ -38,10 +38,13 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
   defaults: {},
   refresh: async () => {
     try {
-      const res = await fetch("/api/models", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+      // A busy server can take longer than 15 s to list them: wait for the list rather than give up on it.
+      const res = await fetch("/api/models", { cache: "no-store", signal: AbortSignal.timeout(90_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { models: ModelAvailability[]; defaults: ModelsState["defaults"] };
+      if (!Array.isArray(data?.models)) throw new Error("Crackio sent no model list");
       fetchedAt = Date.now();
+      retries = 0;
       try {
         const json = JSON.stringify({ models: data.models, defaults: data.defaults ?? {} });
         if (localStorage.getItem(KEPT) !== json) localStorage.setItem(KEPT, json);
@@ -53,10 +56,14 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
       if (was.loaded && !was.error && JSON.stringify(was.models) === JSON.stringify(data.models) && JSON.stringify(was.defaults) === JSON.stringify(data.defaults ?? {})) return;
       set({ models: data.models, defaults: data.defaults ?? {}, loaded: true, error: null });
     } catch (err) {
-      set({ loaded: true, error: (err as Error).message });
-      // No list at all (a busy server took more than 15 s): asked again soon, not only when a picker opens, or every
-      // picker says "Choose a model" over the models that are there.
-      if (!get().models.length && retries < 6) setTimeout(() => void look(), 3_000 * ++retries);
+      // A failed look never empties the pickers: the list this visit already has (or the one kept in this browser)
+      // stays. With no list at all yet, "loaded" stays false, so pickers say "Loading" and Home's Generate stays usable
+      // instead of claiming there's no model, and Crackio asks again soon, not only when a picker opens.
+      set({ error: (err as Error).message });
+      if (!get().models.length) {
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => void look(), Math.min(30_000, 2_000 * 2 ** retries++));
+      }
     }
   },
   setDefault: async (kind, id) => {
@@ -72,6 +79,7 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
 let started = false;
 let looking: Promise<void> | null = null;
 let retries = 0;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
 const look = () =>
   (looking ??= useModelsStore

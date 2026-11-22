@@ -59,7 +59,7 @@ async function post(body: Record<string, unknown>) {
   return res?.ok ? null : (out.error ?? "Crackio didn't answer.");
 }
 
-/** The box key a rented machine goes by: "vast:58824818", or null when Crackio doesn't know its cloud. */
+/** The box key a rented machine goes by: "vast:12345678", or null when Crackio doesn't know its cloud. */
 export const boxOf = (m: SetupMachine) => (m.cloud?.instance && (m.cloud.provider === "vast" || m.cloud.provider === "runpod") ? `${m.cloud.provider}:${m.cloud.instance}` : null);
 
 /** Start a stopped rented box again. */
